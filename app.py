@@ -70,24 +70,32 @@ class RecommendResponse(BaseModel):
 def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
     """Search using JioSaavn API."""
     encoded = urllib.parse.quote(query)
-    url = f"https://saavn.dev/api/search/songs?query={encoded}&limit={limit}"
+    url = (
+        f"https://www.jiosaavn.com/api.php"
+        f"?__call=search.getResults"
+        f"&_format=json"
+        f"&_marker=0"
+        f"&api_version=4"
+        f"&ctx=web6dot0"
+        f"&query={encoded}"
+        f"&n={limit}"
+        f"&p=1"
+    )
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0"
+        })
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
         songs = []
-        for item in data.get("data", {}).get("results", []):
-            # Get highest quality image
-            images = item.get("image", [])
-            artwork = images[-1].get("url", "") if images else ""
-
+        for item in data.get("results", []):
+            image = item.get("image", "").replace("150x150", "500x500")
             songs.append(Song(
                 id=item.get("id", ""),
-                title=item.get("name", ""),
-                artist=", ".join(
-                    a.get("name", "") for a in item.get("artists", {}).get("primary", [])
-                ),
-                artwork_url=artwork,
-                duration=int(item.get("duration", 0)) * 1000,
+                title=item.get("title", ""),
+                artist=item.get("more_info", {}).get("singers", ""),
+                artwork_url=image,
+                duration=int(item.get("more_info", {}).get("duration", 0)) * 1000,
             ))
         return songs
     except Exception as e:
@@ -96,18 +104,42 @@ def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
 
 def jiosaavn_stream(song_id: str) -> str:
     """Get direct stream URL from JioSaavn."""
-    url = f"https://saavn.dev/api/songs/{song_id}"
+    url = (
+        f"https://www.jiosaavn.com/api.php"
+        f"?__call=song.getDetails"
+        f"&cc=in"
+        f"&_marker=0%3F_marker%3D0"
+        f"&_format=json"
+        f"&pids={song_id}"
+    )
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0"
+        })
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        results = data.get("data", [])
-        if not results:
-            raise ValueError("No data")
-        download_urls = results[0].get("downloadUrl", [])
-        if not download_urls:
-            raise ValueError("No download URLs")
-        # Get highest quality (last in list)
-        return download_urls[-1].get("url", "")
+        song_data = data.get(song_id, {})
+        # Decrypt the encrypted media URL
+        enc_url = song_data.get("more_info", {}).get("encrypted_media_url", "")
+        if not enc_url:
+            raise ValueError("No media URL found")
+        # Get direct stream URL
+        stream_url = (
+            f"https://www.jiosaavn.com/api.php"
+            f"?__call=song.generateAuthToken"
+            f"&url={urllib.parse.quote(enc_url)}"
+            f"&bitrate=320"
+            f"&api_version=4"
+            f"&_format=json"
+            f"&ctx=web6dot0"
+            f"&_marker=0"
+        )
+        req2 = urllib.request.Request(stream_url, headers={
+            "User-Agent": "Mozilla/5.0"
+        })
+        with urllib.request.urlopen(req2, timeout=10) as r:
+            auth_data = json.loads(r.read())
+        return auth_data.get("auth_url", "")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Stream failed: {e}")
 
