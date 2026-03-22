@@ -245,7 +245,35 @@ async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
     if song_info:
         query = f"{song_info['title']} {song_info['artist']}"
     else:
-        query = "top hits 2025"
+        # Fetch song details from JioSaavn API
+        try:
+            url = (
+                f"https://www.jiosaavn.com/api.php"
+                f"?__call=song.getDetails"
+                f"&cc=in"
+                f"&_marker=0"
+                f"&_format=json"
+                f"&pids={song_id}"
+            )
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://www.jiosaavn.com/",
+            })
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            
+            song_data = data.get(song_id, {})
+            title = song_data.get("title", "")
+            singers = song_data.get("more_info", {}).get("singers", "")
+            
+            if title and singers:
+                query = f"{title} {singers}"
+            elif title:
+                query = title
+            else:
+                query = "top hits 2025"
+        except Exception:
+            query = "top hits 2025"
 
     songs = await asyncio.to_thread(jiosaavn_search, query, limit + 1)
     songs = [s for s in songs if s.id != song_id][:limit]
