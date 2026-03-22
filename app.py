@@ -103,40 +103,40 @@ def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
         return []
 
 def jiosaavn_stream(song_id: str) -> str:
-    """Get direct stream URL from JioSaavn using song ID."""
-    url = (
+    # Step 1: Get song details including encrypted_media_url
+    url1 = (
         f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.generateAuthToken"
-        f"&bitrate=320"
-        f"&api_version=4"
-        f"&_format=json"
-        f"&ctx=web6dot0"
+        f"?__call=song.getDetails"
+        f"&cc=in"
         f"&_marker=0"
+        f"&_format=json"
         f"&pids={song_id}"
     )
     try:
-        req = urllib.request.Request(url, headers={
+        req1 = urllib.request.Request(url1, headers={
             "User-Agent": "Mozilla/5.0",
-            "Accept": "*/*",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-        
-        auth_url = data.get("auth_url", "")
-        if auth_url:
-            return auth_url
-            
-        # Fallback: try getting from song details
+        with urllib.request.urlopen(req1, timeout=10) as r:
+            data1 = json.loads(r.read())
+
+        # Extract encrypted_media_url
+        song_data = data1.get(song_id, {})
+        enc_url = song_data.get("more_info", {}).get("encrypted_media_url", "")
+        if not enc_url:
+            raise ValueError(f"No encrypted_media_url. Response: {str(data1)[:200]}")
+
+        # Step 2: Generate auth token using encrypted URL
+        enc_encoded = urllib.parse.quote(enc_url, safe="")
         url2 = (
             f"https://www.jiosaavn.com/api.php"
-            f"?__call=webapi.get"
-            f"&token={song_id}"
-            f"&type=song"
-            f"&_format=json"
-            f"&_marker=0"
+            f"?__call=song.generateAuthToken"
+            f"&url={enc_encoded}"
+            f"&bitrate=320"
             f"&api_version=4"
+            f"&_format=json"
             f"&ctx=web6dot0"
+            f"&_marker=0"
         )
         req2 = urllib.request.Request(url2, headers={
             "User-Agent": "Mozilla/5.0",
@@ -144,15 +144,12 @@ def jiosaavn_stream(song_id: str) -> str:
         })
         with urllib.request.urlopen(req2, timeout=10) as r:
             data2 = json.loads(r.read())
-        
-        songs = data2.get("songs", [])
-        if songs:
-            download_urls = songs[0].get("more_info", {}).get("encrypted_media_url", "")
-            if download_urls:
-                return download_urls
-                
-        raise ValueError("No media URL found in any endpoint")
-        
+
+        auth_url = data2.get("auth_url", "")
+        if not auth_url:
+            raise ValueError(f"No auth_url. Response: {str(data2)[:200]}")
+        return auth_url
+
     except HTTPException:
         raise
     except Exception as e:
@@ -312,24 +309,22 @@ async def debug_jiosaavn():
 
 @app.get("/api/debug/stream")
 async def debug_stream(song_id: str = Query(...)):
-    url = (
+    url1 = (
         f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.generateAuthToken"
-        f"&bitrate=320"
-        f"&api_version=4"
-        f"&_format=json"
-        f"&ctx=web6dot0"
+        f"?__call=song.getDetails"
+        f"&cc=in"
         f"&_marker=0"
+        f"&_format=json"
         f"&pids={song_id}"
     )
     try:
-        req = urllib.request.Request(url, headers={
+        req1 = urllib.request.Request(url1, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req1, timeout=10) as r:
             raw = r.read().decode("utf-8")
-        return {"raw": raw[:1000]}
+        return {"step1_raw": raw[:1000]}
     except Exception as e:
         return {"error": str(e)}
 
