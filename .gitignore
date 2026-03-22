@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+song_cache/
+data/
+.env
+.DS_Store
+*.hprof
