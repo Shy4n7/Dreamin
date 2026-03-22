@@ -11,12 +11,9 @@ import json
 import urllib.request
 import urllib.parse
 import os
-import subprocess
 import time
 from pathlib import Path
 from typing import Optional
-import urllib.request
-import urllib.parse
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -98,89 +95,65 @@ def itunes_search(query: str, limit: int = 15) -> list[Song]:
         print(f"[itunes_search] error: {e}")
         return []
 
-# ── yt-dlp helpers ─────────────────────────────────────────────────────────────
+# ── Invidious streaming ────────────────────────────────────────────────────────
+
+INVIDIOUS_INSTANCES = [
+    "https://invidious.nerdvpn.de",
+    "https://invidious.privacydev.net",
+    "https://iv.melmac.space",
+]
+
+def get_stream_via_invidious(title: str, artist: str) -> str:
+    """Search Invidious for the song and return the best audio stream URL."""
+    query = urllib.parse.quote(f"{title} {artist}")
+
+    for instance in INVIDIOUS_INSTANCES:
+        try:
+            # Search for the video
+            search_url = f"{instance}/api/v1/search?q={query}&type=video"
+            with urllib.request.urlopen(search_url, timeout=10) as r:
+                results = json.loads(r.read())
+
+            if not results:
+                continue
+
+            video_id = results[0].get("videoId")
+            if not video_id:
+                continue
+
+            # Get streams for this video
+            streams_url = f"{instance}/api/v1/videos/{video_id}"
+            with urllib.request.urlopen(streams_url, timeout=10) as r:
+                video_data = json.loads(r.read())
+
+            # Get best audio stream
+            audio_formats = video_data.get("adaptiveFormats", [])
+            audio_only = [
+                f for f in audio_formats
+                if f.get("type", "").startswith("audio")
+            ]
+
+            if audio_only:
+                # Sort by bitrate, pick best
+                audio_only.sort(
+                    key=lambda x: x.get("bitrate", 0),
+                    reverse=True
+                )
+                return audio_only[0]["url"]
+
+        except Exception as e:
+            print(f"[invidious] {instance} failed: {e}")
+            continue
+
+    raise HTTPException(
+        status_code=502,
+        detail="All stream sources failed"
+    )
+
+# ── Play history (used for recommendations) ─────────────────────────────────────
 
 def song_id(query: str) -> str:
     return hashlib.md5(query.encode()).hexdigest()[:16]
-
-def ytdlp_search(query: str, limit: int = 10) -> list[Song]:
-    """Search YouTube via yt-dlp and return Song list."""
-    cmd = [
-        "yt-dlp",
-        f"ytsearch{limit}:{query}",
-        "--flat-playlist",
-        "--print", "%(id)s|%(title)s|%(uploader)s|%(duration)s|%(thumbnail)s",
-        "--no-warnings",
-        "--quiet",
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-        songs = []
-        for line in result.stdout.strip().splitlines():
-            parts = line.split("|")
-            if len(parts) < 5:
-                continue
-            vid_id, title, uploader, duration_str, thumb = parts[:5]
-            duration_ms = int(float(duration_str or "0") * 1000)
-            songs.append(Song(
-                id=vid_id,
-                title=title,
-                artist=uploader,
-                artwork_url=thumb,
-                duration=duration_ms,
-            ))
-        return songs
-    except Exception as e:
-        print(f"[ytdlp_search] error: {e}")
-        return []
-
-def itunes_search(query: str, limit: int = 15) -> list[Song]:
-    """Search using iTunes API — fast, reliable, no API key needed."""
-    params = urllib.parse.urlencode({
-        "term": query,
-        "limit": limit,
-        "entity": "song"
-    })
-    url = f"https://itunes.apple.com/search?{params}"
-    try:
-        with urllib.request.urlopen(url, timeout=10) as r:
-            data = json.loads(r.read())
-        songs = []
-        for item in data.get("results", []):
-            songs.append(Song(
-                id=str(item.get("trackId", "")),
-                title=item.get("trackName", ""),
-                artist=item.get("artistName", ""),
-                artwork_url=item.get("artworkUrl100", "").replace(
-                    "100x100", "500x500"
-                ),
-                duration=item.get("trackTimeMillis", 0),
-            ))
-        return songs
-    except Exception as e:
-        print(f"[itunes_search] error: {e}")
-        return []
-
-def ytdlp_stream_url(video_id: str) -> str:
-    """Extract a direct audio stream URL for a YouTube video ID."""
-    cmd = [
-        "yt-dlp",
-        f"https://www.youtube.com/watch?v={video_id}",
-        "-f", "bestaudio[ext=webm]/bestaudio/best",
-        "--get-url",
-        "--no-warnings",
-        "--quiet",
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        url = result.stdout.strip()
-        if not url:
-            raise ValueError("Empty stream URL from yt-dlp")
-        return url
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not resolve stream: {e}")
-
-# ── Play history (used for recommendations) ─────────────────────────────────────
 
 def record_play(song_id: str, title: str, artist: str):
     history: list = load_json(PLAY_HISTORY_FILE, [])
@@ -247,11 +220,13 @@ async def play(
     previous_song_id: Optional[str] = Query(default=None),
 ):
     """
-    Get the streamable audio URL for a song.
+    Get the streamable audio URL for a song via Invidious.
     Records to play history for recommendation engine.
     """
     await asyncio.to_thread(record_play, id, title, artist)
-    stream_url = await asyncio.to_thread(ytdlp_stream_url, id)
+    stream_url = await asyncio.to_thread(
+        get_stream_via_invidious, title, artist
+    )
     return PlayResponse(stream_url=stream_url)
 
 
@@ -259,18 +234,17 @@ async def play(
 async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
     """
     Queue suggestions based on the currently playing song.
-    Searches YouTube for 'mix' of the current song.
+    Uses iTunes search to find related tracks.
     """
-    # We'd ideally look up the song title from history
     history: list = load_json(PLAY_HISTORY_FILE, [])
     song_info = next((h for h in history if h.get("id") == song_id), None)
 
     if song_info:
-        query = f"{song_info['title']} {song_info['artist']} mix"
+        query = f"{song_info['title']} {song_info['artist']}"
     else:
-        query = "top hits 2025 mix"
+        query = "top hits 2025"
 
-    songs = await asyncio.to_thread(ytdlp_search, query, limit + 1)
+    songs = await asyncio.to_thread(itunes_search, query, limit + 1)
     # Exclude the current song itself
     songs = [s for s in songs if s.id != song_id][:limit]
     return UpNextResponse(songs=songs)
@@ -293,7 +267,7 @@ async def recommend(song_id: str = Query(...)):
 
     songs: list[Song] = []
     for q in queries[:3]:
-        songs.extend(await asyncio.to_thread(ytdlp_search, q, 6))
+        songs.extend(await asyncio.to_thread(itunes_search, q, 6))
 
     # Deduplicate, remove currently playing
     seen, unique = {song_id}, []
