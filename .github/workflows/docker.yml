@@ -19,6 +19,6 @@ jobs:
       - name: Build and Push
         uses: docker/build-push-action@v5
         with:
-          context: ./Server
+          context: .
           push: true
           tags: shyan7/dreamin-server:latest
