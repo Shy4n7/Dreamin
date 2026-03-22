@@ -323,8 +323,37 @@ async def debug_stream(song_id: str = Query(...)):
             "Referer": "https://www.jiosaavn.com/",
         })
         with urllib.request.urlopen(req1, timeout=10) as r:
-            raw = r.read().decode("utf-8")
-        return {"step1_raw": raw[:1000]}
+            data = json.loads(r.read())
+        
+        song_data = data.get(song_id, {})
+        enc_url = song_data.get("more_info", {}).get("encrypted_media_url", "")
+        enc_drm = song_data.get("more_info", {}).get("encrypted_drm_media_url", "")
+        
+        # Now try step 2 with the encrypted URL
+        if enc_url:
+            enc_encoded = urllib.parse.quote(enc_url, safe="")
+            url2 = (
+                f"https://www.jiosaavn.com/api.php"
+                f"?__call=song.generateAuthToken"
+                f"&url={enc_encoded}"
+                f"&bitrate=320"
+                f"&api_version=4"
+                f"&_format=json"
+                f"&ctx=web6dot0"
+                f"&_marker=0"
+            )
+            req2 = urllib.request.Request(url2, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://www.jiosaavn.com/",
+            })
+            with urllib.request.urlopen(req2, timeout=10) as r:
+                data2 = json.loads(r.read())
+            return {
+                "enc_url": enc_url,
+                "enc_drm": enc_drm,
+                "step2_response": data2
+            }
+        return {"error": "no enc_url found", "keys": list(song_data.keys())}
     except Exception as e:
         return {"error": str(e)}
 
