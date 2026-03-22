@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 *.iml
 .gradle
 /local.properties
@@ -15,3 +16,13 @@ new_app/build
 app/build
 Server/build
 .kotlin/
+=======
+__pycache__/
+*.pyc
+*.pyo
+song_cache/
+data/
+.env
+.DS_Store
+*.hprof
+>>>>>>> 50306f16d5a8d8c335f8ceaa7a5111205c47ded9

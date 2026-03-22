@@ -1,6 +1,6 @@
-# 🎵 Resonance — Personal Android Music App
+# 🎵 Dreamin — Personal Android Music App
 
-> Kotlin + Jetpack Compose frontend · Same Daydreamin FastAPI backend · ExoPlayer + MediaSession for lock screen controls
+> Kotlin + Jetpack Compose frontend · FastAPI backend · ExoPlayer + MediaSession for lock screen controls
 
 ---
 
@@ -44,7 +44,7 @@ app/src/main/
 
 ---
 
-## Setup
+## Android App Setup
 
 ### 1. Kotlin / Android project
 - Create a new Android project in Android Studio
@@ -53,50 +53,51 @@ app/src/main/
 - Language: Kotlin
 - Build config: Kotlin DSL
 
-### 2. Paste the build.gradle.kts
-Replace your `app/build.gradle.kts` with the one provided.
-
-### 3. Set your server IP
-In `NetworkService.kt`, change the `BASE_URL`:
+### 2. Connect Android app
+In `NetworkService.kt`, set your server IP:
 ```kotlin
 // Android Emulator:
-var BASE_URL = "http://10.0.2.2:499/"
+var BASE_URL = "http://10.0.2.2:8080/"
 
 // Real phone on same WiFi as your PC:
-var BASE_URL = "http://192.168.x.x:499/"   // ← your PC's IP
+var BASE_URL = "http://192.168.x.x:8080/"   // ← your PC's IP
 ```
 
-To find your PC's IP on Windows: `ipconfig`
-To find on Mac/Linux: `ifconfig | grep "inet " | grep -v 127.0.0.1`
-
-### 4. Start the FastAPI server (Daydreamin)
-```bash
-cd Server
-source venv/bin/activate
-python app.py
-```
-
-### 5. Build & Run
+### 3. Build & Run
 Hit ▶️ in Android Studio.
 
 ---
 
-## Features
+## Server Setup
 
-| Feature | Implementation |
-|---|---|
-| Search songs | `/api/mobile/search` → Retrofit |
-| Trending charts on launch | `/api/mobile/chart` → Retrofit |
-| Audio streaming | ExoPlayer streams the URL from `/api/mobile/play` |
-| Background playback | `MusicService` (foreground service) |
-| Lock screen controls | Media3 MediaSession (auto-generated) |
-| Notification (play/pause/skip) | Media3 MediaSessionService (auto-generated) |
-| Queue / Up Next | `/api/mobile/up_next` + local list |
-| Recommendations | `/api/mobile/recommend` |
-| Dynamic background | Album art blurred behind UI |
-| Progress seek bar | `Slider` → `controller.seekTo()` |
-| Headphone unplug pause | `setHandleAudioBecomingNoisy(true)` |
-| Audio focus | Handled by ExoPlayer automatically |
+FastAPI backend for the Dreamin Android music app.
+
+### Run locally
+
+```bash
+cd Server
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8080 --reload
+```
+
+### Run with Docker
+
+```bash
+cd Server
+docker build -t dreamin-server .
+docker run -p 8080:8080 dreamin-server
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/mobile/health` | Health check |
+| GET | `/api/mobile/search?q=` | Search songs |
+| GET | `/api/mobile/chart` | Trending chart (cached 6h) |
+| GET | `/api/mobile/play?id=&artist=&title=` | Get stream URL |
+| GET | `/api/mobile/up_next?song_id=` | Queue suggestions |
+| GET | `/api/mobile/recommend?song_id=` | Personalised recommendations |
 
 ---
 
@@ -120,33 +121,6 @@ The ViewModel exposes a single `PlayerUiState` via `StateFlow`. The UI collects 
 `MediaController` connects the ViewModel to `MusicService` over a session.
 This means even if the Activity is destroyed (user swipes away), the Service keeps playing,
 and re-connecting when the app re-opens gives instant state sync.
-
----
-
-## Customization
-
-### Change server URL at runtime
-You can expose a settings screen and update `NetworkService.BASE_URL` from SharedPreferences.
-
-### Add lyrics
-Add to `MusicApi`:
-```kotlin
-@GET("api/mobile/lyrics")
-suspend fun getLyrics(
-    @Query("artist") artist: String,
-    @Query("title") title: String
-): LyricsResponse
-```
-
-### Dynamic album art color extraction
-Use `androidx.palette:palette-ktx`. In your Composable:
-```kotlin
-LaunchedEffect(song.artworkUrl) {
-    val bitmap = // load with Coil's ImageLoader as Bitmap
-    val palette = Palette.from(bitmap).generate()
-    vm.updateDominantColor(palette.getDarkVibrantColor(0xFF1A1A2E.toInt()))
-}
-```
 
 ---
 
