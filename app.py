@@ -77,7 +77,7 @@ def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
         f"&_marker=0"
         f"&api_version=4"
         f"&ctx=web6dot0"
-        f"&query={encoded}"
+        f"&q={encoded}"
         f"&n={limit}"
         f"&p=1"
     )
