@@ -10,7 +10,6 @@ import hashlib
 import json
 import urllib.request
 import urllib.parse
-import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -66,94 +65,53 @@ class UpNextResponse(BaseModel):
 class RecommendResponse(BaseModel):
     recommendations: list[Song] = []
 
-# ── iTunes search ──────────────────────────────────────────────────────────────
+# ── JioSaavn ───────────────────────────────────────────────────────────────────
 
-def itunes_search(query: str, limit: int = 15) -> list[Song]:
-    """Search using iTunes API — fast, reliable, no API key needed."""
-    params = urllib.parse.urlencode({
-        "term": query,
-        "limit": limit,
-        "entity": "song"
-    })
-    url = f"https://itunes.apple.com/search?{params}"
+def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
+    """Search using JioSaavn API."""
+    encoded = urllib.parse.quote(query)
+    url = f"https://saavn.dev/api/search/songs?query={encoded}&limit={limit}"
     try:
         with urllib.request.urlopen(url, timeout=10) as r:
             data = json.loads(r.read())
         songs = []
-        for item in data.get("results", []):
+        for item in data.get("data", {}).get("results", []):
+            # Get highest quality image
+            images = item.get("image", [])
+            artwork = images[-1].get("url", "") if images else ""
+
             songs.append(Song(
-                id=str(item.get("trackId", "")),
-                title=item.get("trackName", ""),
-                artist=item.get("artistName", ""),
-                artwork_url=item.get("artworkUrl100", "").replace(
-                    "100x100", "500x500"
+                id=item.get("id", ""),
+                title=item.get("name", ""),
+                artist=", ".join(
+                    a.get("name", "") for a in item.get("artists", {}).get("primary", [])
                 ),
-                duration=item.get("trackTimeMillis", 0),
+                artwork_url=artwork,
+                duration=int(item.get("duration", 0)) * 1000,
             ))
         return songs
     except Exception as e:
-        print(f"[itunes_search] error: {e}")
+        print(f"[jiosaavn_search] error: {e}")
         return []
 
-# ── Invidious streaming ────────────────────────────────────────────────────────
-
-INVIDIOUS_INSTANCES = [
-    "https://invidious.nerdvpn.de",
-    "https://invidious.privacydev.net",
-    "https://iv.melmac.space",
-]
-
-def get_stream_via_invidious(title: str, artist: str) -> str:
-    """Search Invidious for the song and return the best audio stream URL."""
-    query = urllib.parse.quote(f"{title} {artist}")
-
-    for instance in INVIDIOUS_INSTANCES:
-        try:
-            # Search for the video
-            search_url = f"{instance}/api/v1/search?q={query}&type=video"
-            with urllib.request.urlopen(search_url, timeout=10) as r:
-                results = json.loads(r.read())
-
-            if not results:
-                continue
-
-            video_id = results[0].get("videoId")
-            if not video_id:
-                continue
-
-            # Get streams for this video
-            streams_url = f"{instance}/api/v1/videos/{video_id}"
-            with urllib.request.urlopen(streams_url, timeout=10) as r:
-                video_data = json.loads(r.read())
-
-            # Get best audio stream
-            audio_formats = video_data.get("adaptiveFormats", [])
-            audio_only = [
-                f for f in audio_formats
-                if f.get("type", "").startswith("audio")
-            ]
-
-            if audio_only:
-                # Sort by bitrate, pick best
-                audio_only.sort(
-                    key=lambda x: x.get("bitrate", 0),
-                    reverse=True
-                )
-                return audio_only[0]["url"]
-
-        except Exception as e:
-            print(f"[invidious] {instance} failed: {e}")
-            continue
-
-    raise HTTPException(
-        status_code=502,
-        detail="All stream sources failed"
-    )
+def jiosaavn_stream(song_id: str) -> str:
+    """Get direct stream URL from JioSaavn."""
+    url = f"https://saavn.dev/api/songs/{song_id}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        results = data.get("data", [])
+        if not results:
+            raise ValueError("No data")
+        download_urls = results[0].get("downloadUrl", [])
+        if not download_urls:
+            raise ValueError("No download URLs")
+        # Get highest quality (last in list)
+        return download_urls[-1].get("url", "")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Stream failed: {e}")
 
 # ── Play history (used for recommendations) ─────────────────────────────────────
-
-def song_id(query: str) -> str:
-    return hashlib.md5(query.encode()).hexdigest()[:16]
 
 def record_play(song_id: str, title: str, artist: str):
     history: list = load_json(PLAY_HISTORY_FILE, [])
@@ -194,7 +152,7 @@ async def health():
 
 @app.get("/api/mobile/search", response_model=SearchResponse)
 async def search(q: str = Query(..., min_length=1)):
-    results = await asyncio.to_thread(itunes_search, q, 15)
+    results = await asyncio.to_thread(jiosaavn_search, q, 15)
     return SearchResponse(results=results)
 
 
@@ -204,10 +162,16 @@ async def chart():
     if cache and time.time() - cache.get("ts", 0) < 6 * 3600:
         songs = [Song(**s) for s in cache.get("songs", [])]
         return ChartResponse(songs=songs)
-    songs = await asyncio.to_thread(itunes_search, "top hits 2025", 30)
+
+    hindi, tamil = await asyncio.gather(
+        asyncio.to_thread(jiosaavn_search, "top hindi songs 2025", 15),
+        asyncio.to_thread(jiosaavn_search, "top tamil songs 2025", 15),
+    )
+    songs = hindi + tamil
+
     save_json(CHART_CACHE_FILE, {
         "ts": time.time(),
-        "songs": [s.model_dump() for s in songs]
+        "songs": [s.model_dump() for s in songs],
     })
     return ChartResponse(songs=songs)
 
@@ -220,22 +184,17 @@ async def play(
     previous_song_id: Optional[str] = Query(default=None),
 ):
     """
-    Get the streamable audio URL for a song via Invidious.
-    Records to play history for recommendation engine.
+    Get the direct MP3 stream URL from JioSaavn.
+    Records to play history for the recommendation engine.
     """
     await asyncio.to_thread(record_play, id, title, artist)
-    stream_url = await asyncio.to_thread(
-        get_stream_via_invidious, title, artist
-    )
+    stream_url = await asyncio.to_thread(jiosaavn_stream, id)
     return PlayResponse(stream_url=stream_url)
 
 
 @app.get("/api/mobile/up_next", response_model=UpNextResponse)
 async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
-    """
-    Queue suggestions based on the currently playing song.
-    Uses iTunes search to find related tracks.
-    """
+    """Queue suggestions based on the currently playing song."""
     history: list = load_json(PLAY_HISTORY_FILE, [])
     song_info = next((h for h in history if h.get("id") == song_id), None)
 
@@ -244,8 +203,7 @@ async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
     else:
         query = "top hits 2025"
 
-    songs = await asyncio.to_thread(itunes_search, query, limit + 1)
-    # Exclude the current song itself
+    songs = await asyncio.to_thread(jiosaavn_search, query, limit + 1)
     songs = [s for s in songs if s.id != song_id][:limit]
     return UpNextResponse(songs=songs)
 
@@ -267,7 +225,7 @@ async def recommend(song_id: str = Query(...)):
 
     songs: list[Song] = []
     for q in queries[:3]:
-        songs.extend(await asyncio.to_thread(itunes_search, q, 6))
+        songs.extend(await asyncio.to_thread(jiosaavn_search, q, 6))
 
     # Deduplicate, remove currently playing
     seen, unique = {song_id}, []
@@ -277,6 +235,7 @@ async def recommend(song_id: str = Query(...)):
             unique.append(s)
 
     return RecommendResponse(recommendations=unique[:20])
+
 
 if __name__ == "__main__":
     import uvicorn
