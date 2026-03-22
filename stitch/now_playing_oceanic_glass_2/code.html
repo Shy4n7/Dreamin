@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13",
+                        "background-dark": "#0a192f",
+                        "ocean-teal": "#134e4a",
+                        "ocean-navy": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .glass-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .glass-row {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-button {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .oceanic-gradient {
+            background: radial-gradient(circle at top right, #134e4a, #0f172a 70%);
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display bg-ocean-navy text-white overflow-hidden">
+<div class="relative flex h-screen w-full flex-col oceanic-gradient overflow-hidden">
+<header class="z-20 p-4">
+<div class="glass-card w-full rounded-[2rem] p-4 flex flex-col shadow-2xl">
+<div class="flex items-center justify-between mb-4">
+<button class="text-slate-300">
+<span class="material-symbols-outlined">expand_more</span>
+</button>
+<div class="text-center">
+<p class="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-bold">Now Playing</p>
+</div>
+<button class="text-slate-300">
+<span class="material-symbols-outlined text-xl">more_vert</span>
+</button>
+</div>
+<div class="flex gap-4 items-center">
+<div class="size-20 shrink-0 rounded-xl overflow-hidden shadow-lg border border-white/10">
+<img alt="Oceanic Glass" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPS)11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div class="flex-1 min-w-0">
+<h1 class="text-white text-lg font-bold truncate">Oceanic Glass</h1>
+<p class="text-slate-400 text-sm truncate">Deep Sea Echoes</p>
+<div class="mt-2 w-full">
+<div class="relative w-full h-1 bg-white/10 rounded-full">
+<div class="absolute top-0 left-0 h-full w-[45%] bg-white rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mt-4 px-2">
+<button class="text-slate-400">
+<span class="material-symbols-outlined text-xl">shuffle</span>
+</button>
+<div class="flex items-center gap-6">
+<button class="text-white">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1">skip_previous</span>
+</button>
+<button class="size-10 flex items-center justify-center bg-white rounded-full text-ocean-navy shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1">play_arrow</span>
+</button>
+<button class="text-white">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1">skip_next</span>
+</button>
+</div>
+<button class="text-slate-400">
+<span class="material-symbols-outlined text-xl">repeat</span>
+</button>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col overflow-hidden px-4 pb-4">
+<div class="flex items-center justify-between mb-3 px-2">
+<h3 class="text-slate-100 font-bold text-lg">Up Next</h3>
+<span class="text-xs font-semibold text-slate-400 uppercase tracking-widest">24 Tracks</span>
+</div>
+<div class="flex-1 overflow-y-auto space-y-2 pr-1">
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Tidal Shift</p>
+<p class="text-slate-400 text-[11px]">Coral Dreamers</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">3:45</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+</div>
+</div>
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Abyssal Drift</p>
+<p class="text-slate-400 text-[11px]">Submerged</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">4:12</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+</div>
+</div>
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Neon Reefs</p>
+<p class="text-slate-400 text-[11px]">Electric Sea</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">3:20</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+</div>
+</div>
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Surface Light</p>
+<p class="text-slate-400 text-[11px]">Coastal Tones</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">5:01</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+</div>
+</div>
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Silent Marina</p>
+<p class="text-slate-400 text-[11px]">Dockside Ambient</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">2:58</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">add</span>
+</button>
+</div>
+</div>
+<div class="glass-row p-3 rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+<img alt="Queue Item" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3JadFIAdwSiJOTM9F-Cr32BG4YjK5doBgujCFXwhxmenNHOZMlyK4l5S2COUbjIwqZYbADtnv36JlI5q24oNZNWZRN0RJyQkmXH9IFY8eXbSyKRfo647qRqhYeGT_D4dM42w24xIinNoW1vvWZcebrcKqvPCmheMe8rdRSvdMST7IAuUcgjUDqqgyoEDivmQzLprKf2oSduBFOPxDwoTzUhXkHjVrVmepxGajrn8J7kjPSM11rxXZV_2v53Fa26AFj7BJKwxPyXw"/>
+</div>
+<div>
+<p class="text-white text-sm font-semibold">Midnight Current</p>
+<p class="text-slate-400 text-[11px]">Dark Water</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-slate-500 font-medium mr-2">4:44</span>
+<button class="size-7 flex items-center justify-center rounded-full glass-button text-slate-300">
+<span class="material-symbols-outlined text-base">remove</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<nav class="glass-card mt-auto border-t-0 border-x-0 rounded-t-[2.5rem] px-8 pb-8 pt-4">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<a class="flex flex-col items-center gap-1 text-white" href="#">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1">home</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">search</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Search</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">library_music</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Library</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-2xl">person</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Profile</span>
+</a>
+</div>
+</nav>
+<div class="absolute -bottom-24 -left-24 size-96 bg-ocean-teal/20 blur-[120px] rounded-full -z-10"></div>
+<div class="absolute -top-24 -right-24 size-96 bg-primary/10 blur-[120px] rounded-full -z-10"></div>
+</div>
+
+</body></html>
