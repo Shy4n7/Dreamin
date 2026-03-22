@@ -103,7 +103,6 @@ def jiosaavn_search(query: str, limit: int = 15) -> list[Song]:
         return []
 
 def jiosaavn_stream(song_id: str) -> str:
-    # Step 1: Get song details including encrypted_media_url
     url1 = (
         f"https://www.jiosaavn.com/api.php"
         f"?__call=song.getDetails"
@@ -120,13 +119,14 @@ def jiosaavn_stream(song_id: str) -> str:
         with urllib.request.urlopen(req1, timeout=10) as r:
             data1 = json.loads(r.read())
 
-        # Extract encrypted_media_url
         song_data = data1.get(song_id, {})
-        enc_url = song_data.get("more_info", {}).get("encrypted_media_url", "")
+        
+        # encrypted_media_url is at TOP LEVEL, not inside more_info
+        enc_url = song_data.get("encrypted_media_url", "")
         if not enc_url:
-            raise ValueError(f"No encrypted_media_url. Response: {str(data1)[:200]}")
+            raise ValueError(f"No encrypted_media_url found")
 
-        # Step 2: Generate auth token using encrypted URL
+        # Step 2: Generate auth token
         enc_encoded = urllib.parse.quote(enc_url, safe="")
         url2 = (
             f"https://www.jiosaavn.com/api.php"
@@ -147,7 +147,7 @@ def jiosaavn_stream(song_id: str) -> str:
 
         auth_url = data2.get("auth_url", "")
         if not auth_url:
-            raise ValueError(f"No auth_url. Response: {str(data2)[:200]}")
+            raise ValueError(f"No auth_url. Response: {str(data2)[:300]}")
         return auth_url
 
     except HTTPException:
@@ -326,8 +326,8 @@ async def debug_stream(song_id: str = Query(...)):
             data = json.loads(r.read())
         
         song_data = data.get(song_id, {})
-        enc_url = song_data.get("more_info", {}).get("encrypted_media_url", "")
-        enc_drm = song_data.get("more_info", {}).get("encrypted_drm_media_url", "")
+        enc_url = song_data.get("encrypted_media_url", "")
+        enc_drm = song_data.get("encrypted_drm_media_url", "")
         
         # Now try step 2 with the encrypted URL
         if enc_url:
