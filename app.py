@@ -269,6 +269,32 @@ async def recommend(song_id: str = Query(...)):
     return RecommendResponse(recommendations=unique[:20])
 
 
+@app.get("/api/debug/jiosaavn")
+async def debug_jiosaavn():
+    import urllib.request
+    import json
+    url = (
+        "https://www.jiosaavn.com/api.php"
+        "?__call=search.getResults"
+        "&_format=json"
+        "&_marker=0"
+        "&api_version=4"
+        "&ctx=web6dot0"
+        "&query=taylor+swift"
+        "&n=3"
+        "&p=1"
+    )
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0"
+        })
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.read()
+            return {"status": "ok", "raw": raw.decode("utf-8")[:500]}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
