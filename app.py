@@ -8,11 +8,15 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import urllib.request
+import urllib.parse
 import os
 import subprocess
 import time
 from pathlib import Path
 from typing import Optional
+import urllib.request
+import urllib.parse
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,6 +69,35 @@ class UpNextResponse(BaseModel):
 class RecommendResponse(BaseModel):
     recommendations: list[Song] = []
 
+# ── iTunes search ──────────────────────────────────────────────────────────────
+
+def itunes_search(query: str, limit: int = 15) -> list[Song]:
+    """Search using iTunes API — fast, reliable, no API key needed."""
+    params = urllib.parse.urlencode({
+        "term": query,
+        "limit": limit,
+        "entity": "song"
+    })
+    url = f"https://itunes.apple.com/search?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        songs = []
+        for item in data.get("results", []):
+            songs.append(Song(
+                id=str(item.get("trackId", "")),
+                title=item.get("trackName", ""),
+                artist=item.get("artistName", ""),
+                artwork_url=item.get("artworkUrl100", "").replace(
+                    "100x100", "500x500"
+                ),
+                duration=item.get("trackTimeMillis", 0),
+            ))
+        return songs
+    except Exception as e:
+        print(f"[itunes_search] error: {e}")
+        return []
+
 # ── yt-dlp helpers ─────────────────────────────────────────────────────────────
 
 def song_id(query: str) -> str:
@@ -99,6 +132,33 @@ def ytdlp_search(query: str, limit: int = 10) -> list[Song]:
         return songs
     except Exception as e:
         print(f"[ytdlp_search] error: {e}")
+        return []
+
+def itunes_search(query: str, limit: int = 15) -> list[Song]:
+    """Search using iTunes API — fast, reliable, no API key needed."""
+    params = urllib.parse.urlencode({
+        "term": query,
+        "limit": limit,
+        "entity": "song"
+    })
+    url = f"https://itunes.apple.com/search?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        songs = []
+        for item in data.get("results", []):
+            songs.append(Song(
+                id=str(item.get("trackId", "")),
+                title=item.get("trackName", ""),
+                artist=item.get("artistName", ""),
+                artwork_url=item.get("artworkUrl100", "").replace(
+                    "100x100", "500x500"
+                ),
+                duration=item.get("trackTimeMillis", 0),
+            ))
+        return songs
+    except Exception as e:
+        print(f"[itunes_search] error: {e}")
         return []
 
 def ytdlp_stream_url(video_id: str) -> str:
@@ -161,40 +221,22 @@ async def health():
 
 @app.get("/api/mobile/search", response_model=SearchResponse)
 async def search(q: str = Query(..., min_length=1)):
-    """Search songs — used by the Android search bar."""
-    results = await asyncio.to_thread(ytdlp_search, q, 15)
+    results = await asyncio.to_thread(itunes_search, q, 15)
     return SearchResponse(results=results)
 
 
 @app.get("/api/mobile/chart", response_model=ChartResponse)
 async def chart():
-    """
-    Trending chart — shown on the home screen.
-    Refreshes every 6 hours; cached in data/chart_cache.json.
-    """
     cache = load_json(CHART_CACHE_FILE, {})
     if cache and time.time() - cache.get("ts", 0) < 6 * 3600:
         songs = [Song(**s) for s in cache.get("songs", [])]
         return ChartResponse(songs=songs)
-
-    queries = [
-        "top hits 2025",
-        "trending songs 2025",
-        "bollywood hits 2025",
-    ]
-    songs: list[Song] = []
-    for q in queries:
-        songs.extend(await asyncio.to_thread(ytdlp_search, q, 8))
-
-    # Deduplicate by ID
-    seen, unique = set(), []
-    for s in songs:
-        if s.id not in seen:
-            seen.add(s.id)
-            unique.append(s)
-
-    save_json(CHART_CACHE_FILE, {"ts": time.time(), "songs": [s.model_dump() for s in unique]})
-    return ChartResponse(songs=unique[:30])
+    songs = await asyncio.to_thread(itunes_search, "top hits 2025", 30)
+    save_json(CHART_CACHE_FILE, {
+        "ts": time.time(),
+        "songs": [s.model_dump() for s in songs]
+    })
+    return ChartResponse(songs=songs)
 
 
 @app.get("/api/mobile/play", response_model=PlayResponse)
@@ -261,3 +303,7 @@ async def recommend(song_id: str = Query(...)):
             unique.append(s)
 
     return RecommendResponse(recommendations=unique[:20])
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
