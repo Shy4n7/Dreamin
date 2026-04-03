@@ -331,48 +331,66 @@ async def play(
 
 
 @app.get("/api/mobile/up_next", response_model=UpNextResponse)
-async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
+async def up_next(
+    song_id: str = Query(...),
+    exclude: str = Query(default=""),
+    limit: int = Query(default=10),
+):
     """
-    Smart queue allocation: same language → same artist vibe → same genre.
-    Fetches full song metadata to drive language/genre-aware query building.
+    Radio-style queue allocation — Spotify/Apple Music approach:
+    1. Build a large candidate pool (~5x limit) from genre, artist, language angles
+    2. Interleave candidates by source so no single query dominates
+    3. Exclude already-queued songs passed from the client
+    4. Return diverse, non-repeating results
     """
     history: list = load_json(PLAY_HISTORY_FILE, [])
     history_entry = next((h for h in reversed(history) if h.get("id") == song_id), None)
 
-    artist = history_entry.get("artist", "") if history_entry else ""
-    title  = history_entry.get("title", "")  if history_entry else ""
+    artist      = history_entry.get("artist", "") if history_entry else ""
     stored_lang = history_entry.get("language", "") if history_entry else ""
 
-    # Always fetch full details for language/genre metadata
     song_data = await asyncio.to_thread(jiosaavn_song_details, song_id)
 
     if not artist:
         artist = html.unescape(song_data.get("more_info", {}).get("primary_artists", ""))
-    if not title:
-        title = clean_title(song_data.get("title", ""))
 
     language = song_data.get("language", stored_lang).lower().strip()
     if not language:
-        language = detect_language(artist, title, history)
+        language = detect_language(artist, "", history)
 
     ra = recent_artists(5)
     queries = build_queue_queries(song_data, artist, language, ra)
 
-    # Fetch a small batch per query so every query contributes different songs
-    seen_ids: set[str] = {song_id}
-    results: list[Song] = []
-    per_query = max(3, limit // max(len(queries), 1) + 1)
+    # Parse client-side exclusion list (already-queued song IDs)
+    client_exclude: set[str] = set(filter(None, exclude.split(",")))
 
-    for q in queries:
-        if len(results) >= limit:
-            break
-        batch = await asyncio.to_thread(jiosaavn_search, q, per_query + 2)
-        for s in batch:
-            if s.id not in seen_ids and len(results) < limit:
-                seen_ids.add(s.id)
-                results.append(s)
+    # Excluded = current song + client queue + recent play history IDs
+    history_ids  = {h["id"] for h in history[-50:]}
+    excluded_ids = client_exclude | history_ids | {song_id}
 
-    return UpNextResponse(songs=results)
+    # Fetch candidates in parallel — 2 songs per query slot for a large pool
+    pool_per_query = max(4, (limit * 2) // max(len(queries), 1))
+    fetch_tasks = [
+        asyncio.to_thread(jiosaavn_search, q, pool_per_query)
+        for q in queries
+    ]
+    batches: list[list[Song]] = await asyncio.gather(*fetch_tasks)
+
+    # Interleave results round-robin across sources (prevents one source dominating)
+    # This mirrors how Spotify builds radio — diversity across angles first
+    seen_ids: set[str] = set(excluded_ids)
+    candidates: list[Song] = []
+    max_rounds = max(len(b) for b in batches) if batches else 0
+
+    for i in range(max_rounds):
+        for batch in batches:
+            if i < len(batch):
+                s = batch[i]
+                if s.id not in seen_ids and s.title:
+                    seen_ids.add(s.id)
+                    candidates.append(s)
+
+    return UpNextResponse(songs=candidates[:limit])
 
 
 @app.get("/api/mobile/recommend", response_model=RecommendResponse)
