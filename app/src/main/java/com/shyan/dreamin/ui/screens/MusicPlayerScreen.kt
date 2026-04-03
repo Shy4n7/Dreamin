@@ -2778,6 +2778,7 @@ private fun PlaylistDetailScreen(
     onRemoveSong: (String) -> Unit,
     onRename: (String) -> Unit
 ) {
+    BackHandler { onBack() }
     val colors = LocalDreaminColors.current
     var showRenameDialog by remember { mutableStateOf(false) }
     val songCount = remember(songs.size) { songs.size }
