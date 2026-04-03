@@ -1011,6 +1011,34 @@ fun ShimmerSongRow() {
 }
 
 @Composable
+private fun ShimmerSongList(count: Int) {
+    // Single InfiniteTransition shared across all rows — one animation loop, not N
+    val brush = shimmerBrush()
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        repeat(count) {
+            ShimmerSongRowWithBrush(brush)
+        }
+    }
+}
+
+@Composable
+private fun ShimmerSongRowWithBrush(brush: Brush) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(brush))
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxWidth(0.65f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(brush))
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxWidth(0.4f).height(11.dp).clip(RoundedCornerShape(4.dp)).background(brush))
+        }
+        Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(brush))
+    }
+}
+
+@Composable
 fun HorizontalSongCard(
     song: Song,
     isPlaying: Boolean,
@@ -1228,8 +1256,8 @@ fun HomeContent(
         }
 
         if (recentlyPlayed.isNotEmpty()) {
-            item { SectionTitle("Recently Played") }
-            item {
+            item(key = "section_recent") { SectionTitle("Recently Played") }
+            item(key = "row_recent") {
                 HorizontalSongCardsRow(
                     songs = recentlyPlayed,
                     currentSongId = currentSong?.id,
@@ -1238,10 +1266,9 @@ fun HomeContent(
             }
         }
 
-
         if (topSongs.isNotEmpty()) {
-            item { SectionTitle("Your Top Songs") }
-            item {
+            item(key = "section_top") { SectionTitle("Your Top Songs") }
+            item(key = "row_top") {
                 HorizontalSongCardsRow(
                     songs = topSongs,
                     currentSongId = currentSong?.id,
@@ -1252,10 +1279,10 @@ fun HomeContent(
 
         
         if (trending.isNotEmpty()) {
-            item {
+            item(key = "section_trending") {
                 SectionTitle("Trending Now")
             }
-            items(trending.take(10)) { song ->
+            items(trending.take(10), key = { it.id }) { song ->
                 SongRow(
                     song = song,
                     isPlaying = currentSong?.id == song.id,
@@ -1269,13 +1296,13 @@ fun HomeContent(
 
 
         if (recommendations.isNotEmpty()) {
-            item {
+            item(key = "section_recs") {
                 SectionTitle(
                     if (recommendationSeedTitle != null) "More like $recommendationSeedTitle"
                     else "Recommended For You"
                 )
             }
-            items(recommendations.take(8)) { song ->
+            items(recommendations.take(8), key = { "rec_${it.id}" }) { song ->
                 SongRow(
                     song = song,
                     isPlaying = currentSong?.id == song.id,
@@ -1290,8 +1317,10 @@ fun HomeContent(
         
         if (trending.isEmpty() && recommendations.isEmpty()) {
             if (isLoading) {
-                
-                items(7) { ShimmerSongRow() }
+                // Hoist shimmer brush so all 7 rows share one InfiniteTransition
+                item(key = "shimmer_list") {
+                    ShimmerSongList(count = 7)
+                }
             } else {
                 
                 item {
@@ -1352,59 +1381,50 @@ fun SongRow(
     onAddToPlaylist: (Long) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
-    val swipeAnim = remember { Animatable(0f) }
+    // Use plain MutableState<Float> — no coroutine launched per drag frame
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = 100f
     val scope = rememberCoroutineScope()
     var showPlaylistPicker by remember { mutableStateOf(false) }
     val swipeHintColor = colors.primary.copy(alpha = 0.2f)
     val swipeIconColor = colors.primary
 
-    Box(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .drawBehind {
-                    val offset = swipeAnim.value
-                    if (offset > 0f) {
-                        drawRect(swipeHintColor)
-                    }
-                },
-            contentAlignment = Alignment.CenterStart
-        ) {
-            val swipeValue = swipeAnim.value
-            if (swipeValue > swipeThreshold * 0.5f) {
-                Icon(
-                    Icons.Default.AddCircle,
-                    contentDescription = "Add to queue",
-                    tint = swipeIconColor,
-                    modifier = Modifier.padding(start = 20.dp)
-                )
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Background hint — only drawn when actually swiping
+        if (swipeOffset > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(swipeHintColor),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (swipeOffset > swipeThreshold * 0.5f) {
+                    Icon(
+                        Icons.Default.AddCircle,
+                        contentDescription = "Add to queue",
+                        tint = swipeIconColor,
+                        modifier = Modifier.padding(start = 20.dp)
+                    )
+                }
             }
         }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset { IntOffset(swipeAnim.value.toInt(), 0) }
+                // graphicsLayer translation skips layout — no measure/place pass per frame
+                .graphicsLayer { translationX = swipeOffset }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
-                            if (swipeAnim.value > swipeThreshold) onAddToQueue()
-                            scope.launch {
-                                swipeAnim.animateTo(
-                                    0f,
-                                    spring(stiffness = Spring.StiffnessMedium)
-                                )
-                            }
+                            val captured = swipeOffset
+                            swipeOffset = 0f
+                            if (captured > swipeThreshold) onAddToQueue()
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            scope.launch {
-                                swipeAnim.snapTo((swipeAnim.value + dragAmount).coerceIn(0f, 200f))
-                            }
+                            swipeOffset = (swipeOffset + dragAmount).coerceIn(0f, 200f)
                         }
                     )
                 }
@@ -3082,32 +3102,33 @@ private fun HomeHeader(
     onClearRecentSearches: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
-    val tp = titleProgress()
-    val greetingAlpha = (1f - tp * 2f).coerceIn(0f, 1f)
 
     Column {
-        Column(modifier = Modifier.padding(top = androidx.compose.ui.unit.lerp(8.dp, 4.dp, tp))) {
+        // Title row — fixed layout, no scroll-driven recomposition
+        // graphicsLayer alpha change is in the draw phase, not composition
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 "DREAMIN",
-                fontSize = androidx.compose.ui.unit.lerp(32.sp, 20.sp, tp),
+                fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = colors.primary,
-                letterSpacing = androidx.compose.ui.unit.lerp(2.sp, 1.sp, tp),
+                letterSpacing = 2.sp,
                 modifier = Modifier.clickable { onToggleTheme() }
             )
-            if (greetingAlpha > 0f) {
-                Text(
-                    "$timeOfDay, $userName",
-                    fontSize = 14.sp,
-                    color = colors.onSurfaceVariant.copy(alpha = greetingAlpha),
-                    modifier = Modifier.combinedClickable(
-                        onClick = {},
-                        onLongClick = onLongPressName
-                    )
-                )
-            }
         }
-        Spacer(modifier = Modifier.height(androidx.compose.ui.unit.lerp(8.dp, 4.dp, tp)))
+        // Greeting fades as user scrolls — graphicsLayer defers alpha to draw phase
+        Text(
+            "$timeOfDay, $userName",
+            fontSize = 14.sp,
+            color = colors.onSurfaceVariant,
+            modifier = Modifier
+                .graphicsLayer { alpha = (1f - titleProgress() * 2.5f).coerceIn(0f, 1f) }
+                .combinedClickable(onClick = {}, onLongClick = onLongPressName)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         DreaminSearchBar(
             query = searchQuery,
             onQueryChange = onSearchChange,
@@ -3125,21 +3146,17 @@ private fun HorizontalSongCardsRow(
     currentSongId: String?,
     onSongClick: (Song) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(end = 8.dp)
     ) {
-        Spacer(modifier = Modifier.width(0.dp))
-        songs.forEach { song ->
+        items(songs, key = { it.id }) { song ->
             HorizontalSongCard(
                 song = song,
                 isPlaying = currentSongId == song.id,
                 onClick = { onSongClick(song) }
             )
         }
-        Spacer(modifier = Modifier.width(8.dp))
     }
 }
 
