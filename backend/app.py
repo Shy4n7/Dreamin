@@ -143,49 +143,56 @@ def detect_language(artist: str, title: str, history: list[dict]) -> str:
     return ""
 
 
-def build_queue_queries(song_details: dict, artist: str, language: str) -> list[str]:
+def build_queue_queries(song_details: dict, artist: str, language: str, recent_artists_list: list[str]) -> list[str]:
     """
     Build a prioritised list of search queries for queue allocation.
-    Never uses song title — only artist, genre, and language.
-    Order: genre+language → artist+language → featured+language → language fallbacks.
+    Never uses song title. Uses genre, language, artist, music director.
+    Each query targets a different angle so batches contribute different songs.
     """
     queries: list[str] = []
 
+    more      = song_details.get("more_info", {})
     raw_lang  = song_details.get("language", language).lower().strip()
-    raw_genre = html.unescape(song_details.get("more_info", {}).get("genres", "") or "")
-    primary   = html.unescape(song_details.get("more_info", {}).get("primary_artists", "") or artist)
-    featured  = html.unescape(song_details.get("more_info", {}).get("featured_artists", "") or "")
+    raw_genre = html.unescape(more.get("genres", "") or "")
+    primary   = html.unescape(more.get("primary_artists", "") or artist)
+    featured  = html.unescape(more.get("featured_artists", "") or "")
+    music_dir = html.unescape(more.get("music", "") or "")
 
     primary_first  = primary.split(",")[0].strip()
     featured_first = featured.split(",")[0].strip() if featured else ""
+    music_first    = music_dir.split(",")[0].strip() if music_dir else ""
 
-    # 1. Genre + language — most specific vibe match
+    # 1. Genre + language (tightest vibe)
     if raw_genre and raw_lang:
-        queries.append(f"best {raw_genre} {raw_lang} songs")
-    elif raw_genre:
+        queries.append(f"{raw_genre} {raw_lang} songs")
+
+    # 2. Artist + language
+    if primary_first and raw_lang:
+        queries.append(f"{primary_first} {raw_lang} hits")
+
+    # 3. Music director + language (different songs, same sonic feel)
+    if music_first and music_first != primary_first and raw_lang:
+        queries.append(f"{music_first} {raw_lang} songs")
+
+    # 4. Featured artist + language
+    if featured_first and featured_first != primary_first and raw_lang:
+        queries.append(f"{featured_first} {raw_lang} songs")
+
+    # 5. Recent artists from history + language (personalised variety)
+    for a in recent_artists_list[:3]:
+        if a != primary_first and raw_lang:
+            queries.append(f"{a} {raw_lang} songs")
+        elif a != primary_first:
+            queries.append(f"{a} songs")
+
+    # 6. Genre alone (broader)
+    if raw_genre:
         queries.append(f"best {raw_genre} songs")
 
-    # 2. Artist + language — same artist, stays in language
-    if primary_first and raw_lang:
-        queries.append(f"{primary_first} {raw_lang} songs")
-    elif primary_first:
-        queries.append(f"{primary_first} songs")
-
-    # 3. Featured artist + language (introduces variety while keeping language)
-    if featured_first and featured_first != primary_first:
-        if raw_lang:
-            queries.append(f"{featured_first} {raw_lang} songs")
-        else:
-            queries.append(f"{featured_first} songs")
-
-    # 4. Genre alone (broader but still genre-consistent)
-    if raw_genre:
-        queries.append(f"top {raw_genre} hits")
-
-    # 5. Language-level fallbacks — keeps the session in same language
+    # 7. Language fallbacks
     if raw_lang:
-        queries.append(f"popular {raw_lang} songs 2024")
-        queries.append(f"top {raw_lang} hits")
+        queries.append(f"top {raw_lang} songs 2024")
+        queries.append(f"popular {raw_lang} hits")
 
     return queries
 
@@ -348,16 +355,18 @@ async def up_next(song_id: str = Query(...), limit: int = Query(default=10)):
     if not language:
         language = detect_language(artist, title, history)
 
-    queries = build_queue_queries(song_data, artist, language)
+    ra = recent_artists(5)
+    queries = build_queue_queries(song_data, artist, language, ra)
 
-    # Gather results from top queries, deduplicate, exclude current song
+    # Fetch a small batch per query so every query contributes different songs
     seen_ids: set[str] = {song_id}
     results: list[Song] = []
+    per_query = max(3, limit // max(len(queries), 1) + 1)
 
     for q in queries:
         if len(results) >= limit:
             break
-        batch = await asyncio.to_thread(jiosaavn_search, q, limit)
+        batch = await asyncio.to_thread(jiosaavn_search, q, per_query + 2)
         for s in batch:
             if s.id not in seen_ids and len(results) < limit:
                 seen_ids.add(s.id)
