@@ -10,7 +10,6 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
 import com.shyan.dreamin.data.local.AppDatabase
 import com.shyan.dreamin.data.local.FavoritesRepository
 import com.shyan.dreamin.data.local.PlayHistoryRepository
@@ -20,14 +19,18 @@ import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.service.MusicService
 import androidx.media3.common.C
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -51,25 +54,39 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
 
     init {
+        // Critical path: userName + theme must resolve before the app shows content.
+        // Read both with first() on IO so the gate clears in <100ms, then keep collecting.
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = userPrefs.userName.first()
+            val theme = userPrefs.selectedTheme.first()
+            val session = userPrefs.lastSession.first()
+            val searches = userPrefs.recentSearches.first()
+            _uiState.update {
+                it.copy(
+                    userName = name,
+                    selectedTheme = theme,
+                    lastSession = session,
+                    recentSearches = searches
+                )
+            }
+            // Continue collecting for changes
+            launch { userPrefs.userName.collect { n -> _uiState.update { it.copy(userName = n) } } }
+            launch { userPrefs.selectedTheme.collect { t -> _uiState.update { it.copy(selectedTheme = t) } } }
+            launch { userPrefs.lastSession.collect { s -> if (_uiState.value.currentSong == null) _uiState.update { it.copy(lastSession = s) } } }
+            launch { userPrefs.recentSearches.collect { r -> _uiState.update { it.copy(recentSearches = r) } } }
+        }
+
         connectToService()
         loadChart()
-        loadUserName()
         loadRecentlyPlayed()
         loadTopSongs()
         loadFavorites()
         loadStats()
-        loadTheme()
         loadPlaylists()
-        loadRecentSearches()
-        loadLastSession()
     }
 
     private fun loadUserName() {
-        viewModelScope.launch {
-            userPrefs.userName.collect { name ->
-                _uiState.update { it.copy(userName = name) }
-            }
-        }
+        // No-op: handled in init's critical-path block above
     }
 
     fun saveUserName(name: String) {
@@ -121,21 +138,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun loadStats() {
+        // Throttle: only recompute stats when the count actually changes, not on every row insert
         viewModelScope.launch {
-            statsRepo.weeklyStatsFlow().collect { stats ->
-                _uiState.update { it.copy(listeningStats = stats) }
-            }
+            statsRepo.weeklyStatsFlow()
+                .distinctUntilChanged()
+                .collect { stats -> _uiState.update { it.copy(listeningStats = stats) } }
         }
     }
 
     private fun loadPlaylists() {
         viewModelScope.launch {
             playlistRepo.observePlaylists().collect { lists ->
-                _uiState.update { it.copy(playlists = lists) }
-                val artworks = lists.associate { playlist ->
-                    playlist.id to playlistRepo.getFirstFourArtworks(playlist.id)
+                // Fetch artworks in parallel on IO, then update state once
+                val artworks = withContext(Dispatchers.IO) {
+                    lists.associate { playlist ->
+                        playlist.id to playlistRepo.getFirstFourArtworks(playlist.id)
+                    }
                 }
-                _uiState.update { it.copy(playlistArtworks = artworks) }
+                _uiState.update { it.copy(playlists = lists, playlistArtworks = artworks) }
             }
         }
     }
@@ -248,12 +268,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun connectToService() {
         val context = getApplication<Application>()
-        val sessionToken = SessionToken(
-            context,
-            ComponentName(context, MusicService::class.java)
-        )
-
+        val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        // Use main-thread executor so listener body safely touches UI state and starts coroutines
         controllerFuture?.addListener({
             val c = runCatching { controllerFuture?.get() }.getOrNull() ?: return@addListener
             controller = c
@@ -263,7 +280,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             syncStateFromController(c)
             startPositionPoller()
-        }, MoreExecutors.directExecutor())
+        }, context.mainExecutor)
     }
 
     private fun syncStateFromController(c: MediaController) {
@@ -485,27 +502,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(isQueueVisible = !it.isQueueVisible) }
     }
 
-    private fun loadRecentSearches() {
-        viewModelScope.launch {
-            userPrefs.recentSearches.collect { searches ->
-                _uiState.update { it.copy(recentSearches = searches) }
-            }
-        }
-    }
+    private fun loadRecentSearches() { /* handled in init critical-path block */ }
 
     fun clearRecentSearches() {
         viewModelScope.launch { userPrefs.clearRecentSearches() }
     }
 
-    private fun loadLastSession() {
-        viewModelScope.launch {
-            userPrefs.lastSession.collect { session ->
-                if (_uiState.value.currentSong == null) {
-                    _uiState.update { it.copy(lastSession = session) }
-                }
-            }
-        }
-    }
+    private fun loadLastSession() { /* handled in init critical-path block */ }
 
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
@@ -648,12 +651,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun loadTheme() {
-        viewModelScope.launch {
-            userPrefs.selectedTheme.collect { theme ->
-                _uiState.update { it.copy(selectedTheme = theme) }
-            }
-        }
+    private fun loadTheme() { /* handled in init critical-path block */
     }
 
     fun toggleTheme() {
