@@ -213,16 +213,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playSong(shuffled.first(), fromPlaylist = true)
     }
 
-    // Play a song from a non-playlist list (home/trending) — sets queue but allows fetchUpNext
+    // Play a song from a non-playlist list (home/trending)
+    // Seeds the queue with songs after the tapped one; fetchUpNext appends more
     fun playSongFromList(song: Song, songs: List<Song>) {
-        _uiState.update { it.copy(queue = songs, playlistQueueActive = false) }
+        val idx = songs.indexOfFirst { it.id == song.id }
+        val tail = if (idx >= 0) songs.drop(idx + 1) else emptyList()
+        _uiState.update { it.copy(queue = tail, playlistQueueActive = false) }
         playSong(song)
     }
 
     fun shuffleAndPlayList(songs: List<Song>) {
         if (songs.isEmpty()) return
         val shuffled = songs.shuffled()
-        _uiState.update { it.copy(queue = shuffled, playlistQueueActive = false) }
+        _uiState.update { it.copy(queue = shuffled.drop(1), playlistQueueActive = false) }
         playSong(shuffled.first())
     }
 
@@ -339,14 +342,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             var saveCounter = 0
             while (isActive) {
-                delay(250)
+                delay(100)
                 val c = controller ?: continue
                 if (!c.isPlaying) continue
                 val pos = c.currentPosition.coerceAtLeast(0L)
                 val dur = c.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-                _uiState.update { it.copy(currentPositionMs = pos, durationMs = dur) }
+                // Only update state if values actually changed to avoid redundant recompositions
+                val current = _uiState.value
+                if (pos != current.currentPositionMs || dur != current.durationMs) {
+                    _uiState.update { it.copy(currentPositionMs = pos, durationMs = dur) }
+                }
                 saveCounter++
-                if (saveCounter >= 40) {
+                if (saveCounter >= 100) { // ~10 seconds
                     saveCounter = 0
                     _uiState.value.currentSong?.let { song ->
                         userPrefs.saveLastSession(song, pos)
@@ -357,15 +364,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playSong(song: Song, fromPlaylist: Boolean = false) {
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    currentSong = song,
-                    playbackState = PlaybackState.Loading,
-                    playlistQueueActive = if (fromPlaylist) it.playlistQueueActive else false
-                )
-            }
+        // Optimistic UI: update song + state immediately so artwork/title swap is instant
+        _uiState.update {
+            it.copy(
+                currentSong = song,
+                playbackState = PlaybackState.Loading,
+                currentPositionMs = 0L,
+                durationMs = 0L,
+                currentSongIsFavorite = it.favorites.any { s -> s.id == song.id },
+                playlistQueueActive = if (fromPlaylist) it.playlistQueueActive else false
+            )
+        }
 
+        viewModelScope.launch {
             try {
                 val response = api.getStreamUrl(
                     id = song.id,
@@ -374,11 +385,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 )
 
                 val streamUrl = response.proxyUrl ?: response.streamUrl
-                    ?: throw IllegalStateException("Server returned no stream URL for '${song.title}'")
+                    ?: throw IllegalStateException("No stream URL for '${song.title}'")
+
                 historyRepo.recordPlay(song)
-                _uiState.update { state ->
-                    state.copy(currentSongIsFavorite = state.favorites.any { s -> s.id == song.id })
-                }
 
                 val mediaItem = MediaItem.Builder()
                     .setMediaId(song.id)
