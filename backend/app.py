@@ -8,7 +8,10 @@ from __future__ import annotations
 import asyncio
 import html
 import json
+import os
 import re
+import tempfile
+import threading
 import urllib.request
 import urllib.parse
 import time
@@ -27,17 +30,52 @@ DATA_DIR.mkdir(exist_ok=True)
 
 PLAY_HISTORY_FILE = DATA_DIR / "play_history.json"
 
+# ── In-memory caches ────────────────────────────────────────────────────────
+
+# up_next cache: song_id → {"ts": float, "songs": list[dict]}
+_upnext_cache: dict[str, dict] = {}
+_UPNEXT_TTL = 3600  # 1 hour
+
+# song details cache: song_id → dict  (populated by /play, reused by /up_next)
+_song_details_cache: dict[str, dict] = {}
+_DETAILS_TTL = 7200  # 2 hours; keyed by song_id, value = {"ts": float, "data": dict}
+
+# chart background refresh lock per language
+_chart_refresh_lock: dict[str, asyncio.Lock] = {}
+_CHART_TTL = 6 * 3600  # 6 hours; background refresh starts at 80% of TTL
+
+# play history write lock (prevents race conditions with concurrent requests)
+_history_lock = threading.Lock()
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_json(path: Path, default):
     if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return default
     return default
 
-def save_json(path: Path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
+def save_json_atomic(path: Path, data):
+    """Write JSON atomically via temp-file + rename to prevent corruption."""
+    dir_ = path.parent
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=dir_, delete=False, suffix=".tmp"
+    ) as tmp:
+        json.dump(data, tmp, ensure_ascii=False, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
+
+
+def save_json(path: Path, data):
+    save_json_atomic(path, data)
+
+
+# ── Pydantic models ──────────────────────────────────────────────────────────
 
 class Song(BaseModel):
     id: str
@@ -62,6 +100,8 @@ class UpNextResponse(BaseModel):
 class RecommendResponse(BaseModel):
     recommendations: list[Song] = []
 
+
+# ── Title / metadata helpers ─────────────────────────────────────────────────
 
 def clean_title(raw: str) -> str:
     title = html.unescape(raw)
@@ -97,8 +137,8 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
         return []
 
 
-def jiosaavn_song_details(song_id: str) -> dict:
-    """Fetch full song metadata from JioSaavn including language, genre, artists."""
+def _fetch_song_details_raw(song_id: str) -> dict:
+    """Network fetch — bypasses cache."""
     url = (
         f"https://www.jiosaavn.com/api.php"
         f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={song_id}"
@@ -115,12 +155,21 @@ def jiosaavn_song_details(song_id: str) -> dict:
         return {}
 
 
+def jiosaavn_song_details(song_id: str) -> dict:
+    """
+    Return song details from in-memory cache if fresh, otherwise fetch.
+    Cache is populated by /play so /up_next avoids redundant network calls
+    when the user recently played the song.
+    """
+    entry = _song_details_cache.get(song_id)
+    if entry and time.time() - entry["ts"] < _DETAILS_TTL:
+        return entry["data"]
+    data = _fetch_song_details_raw(song_id)
+    _song_details_cache[song_id] = {"ts": time.time(), "data": data}
+    return data
+
+
 def detect_language(artist: str, title: str, history: list[dict]) -> str:
-    """
-    Infer language from play history pattern.
-    Returns a language string usable in JioSaavn queries.
-    """
-    # Count languages from recent play history (stored entries may have language tag)
     lang_counts: dict[str, int] = {}
     for entry in history[-30:]:
         lang = entry.get("language", "")
@@ -130,7 +179,6 @@ def detect_language(artist: str, title: str, history: list[dict]) -> str:
     if lang_counts:
         return max(lang_counts, key=lambda k: lang_counts[k])
 
-    # Heuristic: script-based detection from artist/title chars
     text = artist + title
     if re.search(r'[\u0B80-\u0BFF]', text):
         return "tamil"
@@ -143,12 +191,9 @@ def detect_language(artist: str, title: str, history: list[dict]) -> str:
     return ""
 
 
-def build_queue_queries(song_details: dict, artist: str, language: str, recent_artists_list: list[str]) -> list[str]:
-    """
-    Build a prioritised list of search queries for queue allocation.
-    Never uses song title. Uses genre, language, artist, music director.
-    Each query targets a different angle so batches contribute different songs.
-    """
+def build_queue_queries(
+    song_details: dict, artist: str, language: str, recent_artists_list: list[str]
+) -> list[str]:
     queries: list[str] = []
 
     more      = song_details.get("more_info", {})
@@ -162,34 +207,27 @@ def build_queue_queries(song_details: dict, artist: str, language: str, recent_a
     featured_first = featured.split(",")[0].strip() if featured else ""
     music_first    = music_dir.split(",")[0].strip() if music_dir else ""
 
-    # 1. Genre + language (tightest vibe)
     if raw_genre and raw_lang:
         queries.append(f"{raw_genre} {raw_lang} songs")
 
-    # 2. Artist + language
     if primary_first and raw_lang:
         queries.append(f"{primary_first} {raw_lang} hits")
 
-    # 3. Music director + language (different songs, same sonic feel)
     if music_first and music_first != primary_first and raw_lang:
         queries.append(f"{music_first} {raw_lang} songs")
 
-    # 4. Featured artist + language
     if featured_first and featured_first != primary_first and raw_lang:
         queries.append(f"{featured_first} {raw_lang} songs")
 
-    # 5. Recent artists from history + language (personalised variety)
     for a in recent_artists_list[:3]:
         if a != primary_first and raw_lang:
             queries.append(f"{a} {raw_lang} songs")
         elif a != primary_first:
             queries.append(f"{a} songs")
 
-    # 6. Genre alone (broader)
     if raw_genre:
         queries.append(f"best {raw_genre} songs")
 
-    # 7. Language fallbacks
     if raw_lang:
         queries.append(f"top {raw_lang} songs 2024")
         queries.append(f"popular {raw_lang} hits")
@@ -241,16 +279,17 @@ def jiosaavn_stream(song_id: str) -> str:
 
 
 def record_play(song_id: str, title: str, artist: str, language: str = ""):
-    history: list = load_json(PLAY_HISTORY_FILE, [])
-    history.append({
-        "id": song_id,
-        "title": title,
-        "artist": artist,
-        "language": language,
-        "ts": time.time(),
-    })
-    history = history[-200:]
-    save_json(PLAY_HISTORY_FILE, history)
+    with _history_lock:
+        history: list = load_json(PLAY_HISTORY_FILE, [])
+        history.append({
+            "id": song_id,
+            "title": title,
+            "artist": artist,
+            "language": language,
+            "ts": time.time(),
+        })
+        history = history[-200:]
+        save_json_atomic(PLAY_HISTORY_FILE, history)
 
 
 def recent_artists(limit: int = 5) -> list[str]:
@@ -265,6 +304,8 @@ def recent_artists(limit: int = 5) -> list[str]:
             break
     return artists
 
+
+# ── FastAPI app ──────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Dreamin API", version="1.0.0")
 
@@ -299,20 +340,54 @@ LANGUAGE_QUERIES: dict[str, str] = {
     "malayalam": "top malayalam songs 2025",
 }
 
+
+async def _refresh_chart_cache(lang: str, query: str, cache_file: Path):
+    """Background task: fetch fresh chart data and write to disk cache."""
+    try:
+        songs = await asyncio.to_thread(jiosaavn_search, query, 30)
+        if songs:
+            save_json_atomic(cache_file, {"ts": time.time(), "songs": [s.model_dump() for s in songs]})
+    except Exception as e:
+        print(f"[chart_refresh] background refresh failed for {lang}: {e}")
+
+
 @app.get("/api/mobile/chart", response_model=ChartResponse)
 async def chart(language: str = Query(default="tamil")):
     lang = language.lower()
     cache_file = DATA_DIR / f"chart_cache_{lang}.json"
     cache = load_json(cache_file, {})
-    if cache and time.time() - cache.get("ts", 0) < 6 * 3600:
+    now = time.time()
+    age = now - cache.get("ts", 0)
+
+    if cache and age < _CHART_TTL:
         songs = [Song(**s) for s in cache.get("songs", [])]
+
+        # Background refresh when cache is 80% expired — user still gets instant response
+        if age > _CHART_TTL * 0.8:
+            if lang not in _chart_refresh_lock:
+                _chart_refresh_lock[lang] = asyncio.Lock()
+            lock = _chart_refresh_lock[lang]
+            if not lock.locked():
+                query = LANGUAGE_QUERIES.get(lang, f"top {lang} songs 2025")
+                asyncio.create_task(
+                    _run_with_lock(lock, _refresh_chart_cache(lang, query, cache_file))
+                )
+
         return ChartResponse(songs=songs)
 
+    # Cache expired or missing — fetch synchronously this time
     query = LANGUAGE_QUERIES.get(lang, f"top {lang} songs 2025")
     songs = await asyncio.to_thread(jiosaavn_search, query, 30)
-
-    save_json(cache_file, {"ts": time.time(), "songs": [s.model_dump() for s in songs]})
+    save_json_atomic(cache_file, {"ts": now, "songs": [s.model_dump() for s in songs]})
     return ChartResponse(songs=songs)
+
+
+async def _run_with_lock(lock: asyncio.Lock, coro):
+    """Run a coroutine under a lock — used to serialise background refreshes."""
+    if lock.locked():
+        return
+    async with lock:
+        await coro
 
 
 @app.get("/api/mobile/play", response_model=PlayResponse)
@@ -321,10 +396,11 @@ async def play(
     artist: str = Query(...),
     title: str = Query(...),
 ):
-    # Fetch song details to capture language for history
-    song_data = await asyncio.to_thread(jiosaavn_song_details, id)
-    language = song_data.get("language", "").lower().strip()
+    # Fetch song details and cache them — /up_next will reuse without extra network call
+    song_data = await asyncio.to_thread(_fetch_song_details_raw, id)
+    _song_details_cache[id] = {"ts": time.time(), "data": song_data}
 
+    language = song_data.get("language", "").lower().strip()
     await asyncio.to_thread(record_play, id, title, artist, language)
     stream_url = await asyncio.to_thread(jiosaavn_stream, id)
     return PlayResponse(stream_url=stream_url)
@@ -338,18 +414,28 @@ async def up_next(
 ):
     """
     Radio-style queue allocation — Spotify/Apple Music approach:
-    1. Build a large candidate pool (~5x limit) from genre, artist, language angles
-    2. Interleave candidates by source so no single query dominates
-    3. Exclude already-queued songs passed from the client
-    4. Return diverse, non-repeating results
+    1. Return cached results if fresh (avoids 8+ parallel JioSaavn requests)
+    2. Build a large candidate pool from genre, artist, language angles
+    3. Interleave candidates round-robin so no source dominates
+    4. Exclude already-queued songs passed from the client
     """
+    # ── 1. Check up_next cache ───────────────────────────────────────────────
+    cached = _upnext_cache.get(song_id)
+    if cached and time.time() - cached["ts"] < _UPNEXT_TTL:
+        client_exclude: set[str] = set(filter(None, exclude.split(",")))
+        songs = [Song(**s) for s in cached["songs"] if s["id"] not in client_exclude]
+        if songs:
+            return UpNextResponse(songs=songs[:limit])
+
+    # ── 2. Resolve artist / language ────────────────────────────────────────
     history: list = load_json(PLAY_HISTORY_FILE, [])
     history_entry = next((h for h in reversed(history) if h.get("id") == song_id), None)
 
     artist      = history_entry.get("artist", "") if history_entry else ""
     stored_lang = history_entry.get("language", "") if history_entry else ""
 
-    song_data = await asyncio.to_thread(jiosaavn_song_details, song_id)
+    # Reuse cached details from /play if available — avoids redundant network fetch
+    song_data = jiosaavn_song_details(song_id)
 
     if not artist:
         artist = html.unescape(song_data.get("more_info", {}).get("primary_artists", ""))
@@ -361,14 +447,12 @@ async def up_next(
     ra = recent_artists(5)
     queries = build_queue_queries(song_data, artist, language, ra)
 
-    # Parse client-side exclusion list (already-queued song IDs)
-    client_exclude: set[str] = set(filter(None, exclude.split(",")))
+    # ── 3. Build exclusion set ───────────────────────────────────────────────
+    client_exclude = set(filter(None, exclude.split(",")))
+    history_ids    = {h["id"] for h in history[-50:]}
+    excluded_ids   = client_exclude | history_ids | {song_id}
 
-    # Excluded = current song + client queue + recent play history IDs
-    history_ids  = {h["id"] for h in history[-50:]}
-    excluded_ids = client_exclude | history_ids | {song_id}
-
-    # Fetch candidates in parallel — 2 songs per query slot for a large pool
+    # ── 4. Fetch candidates in parallel ─────────────────────────────────────
     pool_per_query = max(4, (limit * 2) // max(len(queries), 1))
     fetch_tasks = [
         asyncio.to_thread(jiosaavn_search, q, pool_per_query)
@@ -376,11 +460,10 @@ async def up_next(
     ]
     batches: list[list[Song]] = await asyncio.gather(*fetch_tasks)
 
-    # Interleave results round-robin across sources (prevents one source dominating)
-    # This mirrors how Spotify builds radio — diversity across angles first
+    # ── 5. Round-robin interleave ────────────────────────────────────────────
     seen_ids: set[str] = set(excluded_ids)
     candidates: list[Song] = []
-    max_rounds = max(len(b) for b in batches) if batches else 0
+    max_rounds = max((len(b) for b in batches), default=0)
 
     for i in range(max_rounds):
         for batch in batches:
@@ -390,15 +473,19 @@ async def up_next(
                     seen_ids.add(s.id)
                     candidates.append(s)
 
-    return UpNextResponse(songs=candidates[:limit])
+    # ── 6. Cache the full candidate list (before client exclusion) ───────────
+    # Store all candidates so repeat calls with different exclude sets are served from cache
+    _upnext_cache[song_id] = {
+        "ts": time.time(),
+        "songs": [s.model_dump() for s in candidates],
+    }
+
+    final = [s for s in candidates if s.id not in client_exclude]
+    return UpNextResponse(songs=final[:limit])
 
 
 @app.get("/api/mobile/recommend", response_model=RecommendResponse)
 async def recommend(song_id: str = Query(...)):
-    """
-    Personalised recommendations: language-aware, vibe-consistent.
-    Uses play history language pattern + artist to build diverse but cohesive results.
-    """
     history: list = load_json(PLAY_HISTORY_FILE, [])
     history_entry = next((h for h in reversed(history) if h.get("id") == song_id), None)
 
@@ -406,7 +493,7 @@ async def recommend(song_id: str = Query(...)):
     title  = history_entry.get("title", "")  if history_entry else ""
     stored_lang = history_entry.get("language", "") if history_entry else ""
 
-    song_data = await asyncio.to_thread(jiosaavn_song_details, song_id)
+    song_data = jiosaavn_song_details(song_id)
     language = song_data.get("language", stored_lang).lower().strip()
     if not language:
         language = detect_language(artist, title, history)
@@ -419,22 +506,18 @@ async def recommend(song_id: str = Query(...)):
 
     queries: list[str] = []
 
-    # Same artist, same language
     if primary_first and language:
         queries.append(f"{primary_first} {language} songs")
 
-    # Recent artists in same language
     for a in recent_artists(3):
         if language:
             queries.append(f"{a} {language} songs")
         else:
             queries.append(f"{a} popular songs")
 
-    # Genre-based if available
     if raw_genre and language:
         queries.append(f"{raw_genre} {language} songs")
 
-    # Language fallback
     if language:
         queries.append(f"top {language} songs 2024")
 
