@@ -37,6 +37,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    // Position/duration update every 100ms — kept separate so HomeScreen never recomposes for it
+    private val _progress = MutableStateFlow(PlaybackProgress())
+    val progressFlow: StateFlow<PlaybackProgress> = _progress.asStateFlow()
+
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
 
@@ -300,15 +304,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             c.playbackState == Player.STATE_READY -> PlaybackState.Paused
             else -> return // Not playing anything meaningful
         }
+        val pos = c.currentPosition.coerceAtLeast(0L)
         val duration = c.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-        _uiState.update {
-            it.copy(
-                currentSong = song,
-                playbackState = playbackState,
-                currentPositionMs = c.currentPosition.coerceAtLeast(0L),
-                durationMs = duration
-            )
-        }
+        _uiState.update { it.copy(currentSong = song, playbackState = playbackState) }
+        _progress.value = PlaybackProgress(pos, duration)
     }
 
     private val playerListener = object : Player.Listener {
@@ -364,13 +363,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (!c.isPlaying) continue
                 val pos = c.currentPosition.coerceAtLeast(0L)
                 val dur = c.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-                // Only update state if values actually changed to avoid redundant recompositions
-                val current = _uiState.value
+                val current = _progress.value
                 if (pos != current.currentPositionMs || dur != current.durationMs) {
-                    _uiState.update { it.copy(currentPositionMs = pos, durationMs = dur) }
+                    _progress.value = PlaybackProgress(pos, dur)
                 }
                 saveCounter++
-                if (saveCounter >= 100) { // ~10 seconds
+                if (saveCounter >= 100) {
                     saveCounter = 0
                     _uiState.value.currentSong?.let { song ->
                         userPrefs.saveLastSession(song, pos)
@@ -386,12 +384,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             it.copy(
                 currentSong = song,
                 playbackState = PlaybackState.Loading,
-                currentPositionMs = 0L,
-                durationMs = 0L,
                 currentSongIsFavorite = it.favorites.any { s -> s.id == song.id },
                 playlistQueueActive = if (fromPlaylist) it.playlistQueueActive else false
             )
         }
+        _progress.value = PlaybackProgress(0L, 0L)
 
         viewModelScope.launch {
             try {

@@ -275,6 +275,7 @@ private fun MainAppScaffold(
     onCloseNowPlaying: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val progress by vm.progressFlow.collectAsStateWithLifecycle()
     val navScreens = Screen.entries
     val pagerState = rememberPagerState(
         initialPage = navScreens.indexOf(currentScreen).coerceAtLeast(0),
@@ -329,8 +330,8 @@ private fun MainAppScaffold(
                         MiniPlayer(
                             song              = state.currentSong,
                             playbackState     = state.playbackState,
-                            currentPositionMs = state.currentPositionMs,
-                            durationMs        = state.durationMs,
+                            currentPositionMs = progress.currentPositionMs,
+                            durationMs        = progress.durationMs,
                             onPlayPause       = vm::togglePlayPause,
                             onNext            = vm::playNext,
                             onPrevious        = vm::playPrevious,
@@ -400,6 +401,8 @@ private fun MainAppScaffold(
         ) {
             NowPlayingScreen(
                 state              = state,
+                currentPositionMs  = progress.currentPositionMs,
+                durationMs         = progress.durationMs,
                 onPlayPause        = vm::togglePlayPause,
                 onNext             = vm::playNext,
                 onPrevious         = vm::playPrevious,
@@ -1381,10 +1384,8 @@ fun SongRow(
     onAddToPlaylist: (Long) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
-    // Use plain MutableState<Float> — no coroutine launched per drag frame
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = 100f
-    val scope = rememberCoroutineScope()
     var showPlaylistPicker by remember { mutableStateOf(false) }
     val swipeHintColor = colors.primary.copy(alpha = 0.2f)
     val swipeIconColor = colors.primary
@@ -1565,6 +1566,8 @@ private fun NowPlayingProgressSlider(
 @Composable
 fun NowPlayingScreen(
     state: PlayerUiState,
+    currentPositionMs: Long,
+    durationMs: Long,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -1786,8 +1789,8 @@ fun NowPlayingScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             NowPlayingProgressSlider(
-                currentPositionMs = state.currentPositionMs,
-                durationMs = state.durationMs,
+                currentPositionMs = currentPositionMs,
+                durationMs = durationMs,
                 onSeek = onSeek
             )
 
