@@ -1,4 +1,4 @@
-﻿package com.shyan.dreamin.viewmodel
+package com.shyan.dreamin.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
@@ -14,7 +14,6 @@ import com.shyan.dreamin.data.local.AppDatabase
 import com.shyan.dreamin.data.local.FavoritesRepository
 import com.shyan.dreamin.data.local.PlayHistoryRepository
 import com.shyan.dreamin.data.local.StatsRepository
-import com.shyan.dreamin.data.model.DreaminTheme
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.service.MusicService
@@ -31,6 +30,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -55,29 +56,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var isListenerAttached = false
     private var searchJob: Job? = null
     private var sleepTimerJob: Job? = null
+    private var openPlaylistJob: Job? = null
+    private var colorExtractJob: Job? = null
 
 
     init {
+        // Fire-and-forget warmup so the server is ready before onboarding completes
+        viewModelScope.launch(Dispatchers.IO) { runCatching { api.health() } }
+
         // Critical path: userName + theme must resolve before the app shows content.
         // Read both with first() on IO so the gate clears in <100ms, then keep collecting.
         viewModelScope.launch(Dispatchers.IO) {
             val name = userPrefs.userName.first()
-            val theme = userPrefs.selectedTheme.first()
             val session = userPrefs.lastSession.first()
             val searches = userPrefs.recentSearches.first()
             _uiState.update {
                 it.copy(
                     userName = name,
-                    selectedTheme = theme,
                     lastSession = session,
                     recentSearches = searches
                 )
             }
             // Continue collecting for changes
-            launch { userPrefs.userName.collect { n -> _uiState.update { it.copy(userName = n) } } }
-            launch { userPrefs.selectedTheme.collect { t -> _uiState.update { it.copy(selectedTheme = t) } } }
-            launch { userPrefs.lastSession.collect { s -> if (_uiState.value.currentSong == null) _uiState.update { it.copy(lastSession = s) } } }
-            launch { userPrefs.recentSearches.collect { r -> _uiState.update { it.copy(recentSearches = r) } } }
+            launch { userPrefs.userName.distinctUntilChanged().collect { n -> _uiState.update { it.copy(userName = n) } } }
+            launch { userPrefs.lastSession.distinctUntilChanged().collect { s -> if (_uiState.value.currentSong == null) _uiState.update { it.copy(lastSession = s) } } }
+            launch { userPrefs.recentSearches.distinctUntilChanged().collect { r -> _uiState.update { it.copy(recentSearches = r) } } }
         }
 
         connectToService()
@@ -94,14 +97,22 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun saveUserName(name: String) {
+        val trimmed = name.trim()
         viewModelScope.launch {
-            userPrefs.saveUserName(name.trim())
+            userPrefs.saveUserName(trimmed)
+            runCatching {
+                val deviceId = android.provider.Settings.Secure.getString(
+                    getApplication<android.app.Application>().contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID
+                ) ?: ""
+                api.registerUser(com.shyan.dreamin.data.model.RegisterRequest(name = trimmed, device_id = deviceId))
+            }
         }
     }
 
     private fun loadRecentlyPlayed() {
         viewModelScope.launch {
-            historyRepo.getRecentlyPlayed().collect { songs ->
+            historyRepo.getRecentlyPlayed().distinctUntilChanged().collect { songs ->
                 _uiState.update { it.copy(recentlyPlayed = songs) }
             }
         }
@@ -109,7 +120,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadTopSongs() {
         viewModelScope.launch {
-            historyRepo.getTopSongs().collect { songs ->
+            historyRepo.getTopSongs().distinctUntilChanged().collect { songs ->
                 _uiState.update { it.copy(topSongs = songs) }
             }
         }
@@ -132,12 +143,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun toggleFavorite() {
         val song = _uiState.value.currentSong ?: return
+        toggleFavoriteFor(song)
+    }
+
+    fun toggleFavoriteFor(song: Song) {
+        val isFav = _uiState.value.favorites.any { it.id == song.id }
         viewModelScope.launch {
-            if (_uiState.value.currentSongIsFavorite) {
-                favoritesRepo.removeFavorite(song.id)
-            } else {
-                favoritesRepo.addFavorite(song)
-            }
+            if (isFav) favoritesRepo.removeFavorite(song.id)
+            else favoritesRepo.addFavorite(song)
         }
     }
 
@@ -193,7 +206,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun openPlaylist(playlistId: Long) {
         _uiState.update { it.copy(openPlaylistId = playlistId) }
-        viewModelScope.launch {
+        openPlaylistJob?.cancel()
+        openPlaylistJob = viewModelScope.launch {
             playlistRepo.observeSongs(playlistId).collect { songs ->
                 _uiState.update { it.copy(openPlaylistSongs = songs) }
             }
@@ -284,7 +298,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             syncStateFromController(c)
             startPositionPoller()
-        }, context.mainExecutor)
+        }, ContextCompat.getMainExecutor(context))
     }
 
     private fun syncStateFromController(c: MediaController) {
@@ -312,12 +326,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_READY && pendingResumePositionMs > 0L) {
+                val pos = pendingResumePositionMs
+                pendingResumePositionMs = 0L
+                controller?.seekTo(pos)
+            }
             val playbackState = when {
                 state == Player.STATE_BUFFERING -> PlaybackState.Loading
                 state == Player.STATE_READY && controller?.isPlaying == true -> PlaybackState.Playing
                 state == Player.STATE_READY -> PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
-                    playNext()
+                    viewModelScope.launch { playNext() }
                     PlaybackState.Idle
                 }
                 else -> PlaybackState.Idle
@@ -347,10 +366,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             artist = meta?.artist?.toString() ?: "",
                             artworkUrl = meta?.artworkUri?.toString() ?: ""
                         )
-                    } else state.currentSong,
-                    durationMs = duration
+                    } else state.currentSong
                 )
             }
+            _progress.value = PlaybackProgress(0L, duration)
         }
     }
 
@@ -429,6 +448,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     fetchRecommendations(song.id)
                 }
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(playbackState = PlaybackState.Error("Failed to load: ${e.message}"))
@@ -483,16 +504,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(queue = it.queue + song) }
     }
 
+    fun playNext(song: Song) {
+        _uiState.update { state ->
+            val queue = state.queue.toMutableList()
+            val currentIdx = queue.indexOfFirst { it.id == state.currentSong?.id }
+            val insertAt = if (currentIdx >= 0) currentIdx + 1 else 0
+            queue.removeAll { it.id == song.id }
+            queue.add(insertAt.coerceAtMost(queue.size), song)
+            state.copy(queue = queue.toList())
+        }
+    }
+
     fun removeFromQueue(song: Song) {
         _uiState.update { it.copy(queue = it.queue.filter { s -> s.id != song.id }) }
     }
 
     fun reorderQueue(fromIndex: Int, toIndex: Int) {
-        val queue = _uiState.value.queue.toMutableList()
-        if (fromIndex !in queue.indices || toIndex !in queue.indices) return
-        val item = queue.removeAt(fromIndex)
-        queue.add(toIndex, item)
-        _uiState.update { it.copy(queue = queue) }
+        _uiState.update { state ->
+            val queue = state.queue
+            if (fromIndex !in queue.indices || toIndex !in queue.indices) return@update state
+            val mutable = queue.toMutableList()
+            val item = mutable.removeAt(fromIndex)
+            mutable.add(toIndex, item)
+            state.copy(queue = mutable.toList())
+        }
     }
 
     fun toggleQueue() {
@@ -507,26 +542,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadLastSession() { /* handled in init critical-path block */ }
 
+    private var pendingResumePositionMs: Long = 0L
+
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
-        viewModelScope.launch {
-            playSong(session.song)
-            val resumePos = session.positionMs
-            if (resumePos > 0L) {
-                kotlinx.coroutines.delay(1500)
-                controller?.seekTo(resumePos)
-            }
-        }
+        pendingResumePositionMs = session.positionMs
+        playSong(session.song)
+    }
+
+    fun activateSearch() {
+        _uiState.update { it.copy(isSearchActive = true) }
     }
 
     fun setSearchQuery(query: String) {
         _uiState.update {
             it.copy(
                 searchQuery = query,
-                isSearchActive = query.isNotEmpty(),
+                isSearchActive = true,
                 searchPage = 1,
                 hasMoreSearchResults = false,
-                searchResults = emptyList()
+                searchResults = if (query.isEmpty()) emptyList() else it.searchResults
             )
         }
         searchJob?.cancel()
@@ -542,6 +577,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             hasMoreSearchResults = results.results.size >= 15
                         )
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     android.util.Log.e("MusicVM", "Search failed: ${e.javaClass.simpleName}: ${e.message}")
                     _uiState.update { it.copy(searchResults = emptyList()) }
@@ -566,6 +603,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         hasMoreSearchResults = results.results.size >= 15
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("MusicVM", "loadMore failed: ${e.message}")
                 _uiState.update { it.copy(isLoadingMoreSearch = false) }
@@ -583,15 +622,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun loadChart() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingChart = true) }
-            try {
-                val chart = api.getChart(language = "tamil")
-                android.util.Log.d("MusicVM", "Loaded ${chart.songs.size} trending songs")
-                _uiState.update { it.copy(trendingCharts = chart.songs, isLoadingChart = false) }
-            } catch (e: Exception) {
-                android.util.Log.e("MusicVM", "Failed to load chart: ${e.javaClass.simpleName}: ${e.message}")
-                _uiState.update { it.copy(isLoadingChart = false) }
+        viewModelScope.launch(Dispatchers.IO) {
+            // Show cached songs instantly — skip cache if artists are empty (stale data from old API shape)
+            val cached = userPrefs.cachedChart.first()
+            val cacheIsValid = cached.isNotEmpty() && cached.any { it.artist.isNotBlank() }
+            if (cacheIsValid) {
+                _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
+            }
+            // Fetch fresh — retry once after 3s if server is cold-starting
+            val retryDelayMs = 3_000L
+            repeat(3) { attempt ->
+                try {
+                    val chart = api.getChart(language = "tamil")
+                    if (chart.songs.isNotEmpty()) {
+                        _uiState.update { it.copy(trendingCharts = chart.songs, isLoadingChart = false) }
+                        userPrefs.saveChartCache(chart.songs)
+                    } else {
+                        _uiState.update { it.copy(isLoadingChart = false) }
+                    }
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    android.util.Log.w("MusicVM", "Chart fetch attempt ${attempt + 1} failed: ${e.message}")
+                    if (attempt < 2) delay(retryDelayMs) else _uiState.update { it.copy(isLoadingChart = false) }
+                }
             }
         }
     }
@@ -648,20 +703,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun loadTheme() { /* handled in init critical-path block */
-    }
-
-    fun toggleTheme() {
-        val themes = DreaminTheme.entries
-        val next = themes[(themes.indexOf(_uiState.value.selectedTheme) + 1) % themes.size]
-        _uiState.update { it.copy(selectedTheme = next) }
-        viewModelScope.launch { userPrefs.saveTheme(next) }
-    }
-
     fun extractColorsFromArtwork(artworkUrl: String) {
         if (artworkUrl.isBlank()) return
         val appContext = getApplication<Application>()
-        viewModelScope.launch {
+        colorExtractJob?.cancel()
+        colorExtractJob = viewModelScope.launch {
             try {
                 val request = coil.request.ImageRequest.Builder(appContext)
                     .data(artworkUrl)
@@ -691,6 +737,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         controller?.removeListener(playerListener)
         isListenerAttached = false
         sleepTimerJob?.cancel()
+        openPlaylistJob?.cancel()
+        colorExtractJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onCleared()
     }

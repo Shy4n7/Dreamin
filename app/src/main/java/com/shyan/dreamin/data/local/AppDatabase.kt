@@ -11,8 +11,9 @@ import com.shyan.dreamin.data.local.entity.FavoriteEntity
 import com.shyan.dreamin.data.local.entity.PlayHistoryEntity
 import com.shyan.dreamin.data.local.entity.PlaylistEntity
 import com.shyan.dreamin.data.local.entity.PlaylistSongEntity
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 @Database(
@@ -23,7 +24,7 @@ import kotlinx.coroutines.launch
         PlaylistSongEntity::class
     ],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -42,8 +43,6 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "dreamin_db")
-                .fallbackToDestructiveMigration()
-                // WAL mode: reads don't block writes, much faster concurrent access
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
 
@@ -51,8 +50,9 @@ abstract class AppDatabase : RoomDatabase() {
          * Warm up the database connection on a background thread so the first
          * Room query doesn't pay the connection-open cost on the main thread.
          */
+        @OptIn(DelicateCoroutinesApi::class)
         fun warmUp(context: Context) {
-            CoroutineScope(Dispatchers.IO).launch {
+            GlobalScope.launch(Dispatchers.IO) {
                 getInstance(context).openHelper.readableDatabase
             }
         }

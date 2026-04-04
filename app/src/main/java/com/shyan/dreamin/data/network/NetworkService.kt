@@ -1,12 +1,15 @@
-﻿package com.shyan.dreamin.data.network
+package com.shyan.dreamin.data.network
 
+import com.shyan.dreamin.BuildConfig
 import com.shyan.dreamin.data.model.*
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
@@ -40,6 +43,9 @@ interface MusicApi {
 
     @GET("api/mobile/recommend")
     suspend fun getRecommendations(@Query("song_id") songId: String): RecommendResponse
+
+    @POST("api/mobile/register")
+    suspend fun registerUser(@Body body: RegisterRequest): Map<String, String>
 }
 
 object NetworkService {
@@ -47,7 +53,7 @@ object NetworkService {
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         })
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

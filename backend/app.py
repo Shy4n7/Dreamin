@@ -18,8 +18,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 
@@ -29,6 +30,9 @@ CACHE_DIR.mkdir(exist_ok=True)
 DATA_DIR.mkdir(exist_ok=True)
 
 PLAY_HISTORY_FILE = DATA_DIR / "play_history.json"
+USERS_FILE        = DATA_DIR / "users.json"
+
+ADMIN_TOKEN = os.environ.get("DREAMIN_ADMIN_TOKEN", "shyan-admin-2025")
 
 # ── In-memory caches ────────────────────────────────────────────────────────
 
@@ -100,6 +104,10 @@ class UpNextResponse(BaseModel):
 class RecommendResponse(BaseModel):
     recommendations: list[Song] = []
 
+class RegisterRequest(BaseModel):
+    name: str
+    device_id: str = ""
+
 
 # ── Title / metadata helpers ─────────────────────────────────────────────────
 
@@ -107,6 +115,27 @@ def clean_title(raw: str) -> str:
     title = html.unescape(raw)
     title = re.sub(r'\s*\(?\s*[Ff]rom\s+["\u201c\u2018].*?["\u201d\u2019]?\s*\)?$', '', title).strip()
     return title
+
+
+def extract_artist(more_info: dict) -> str:
+    """Extract artist name — handles both old (singers string) and new (artistMap array) API shapes."""
+    # New shape: more_info.artistMap.primary_artists = [{name: ...}, ...]
+    artist_map = more_info.get("artistMap", {})
+    primary = artist_map.get("primary_artists", [])
+    if primary and isinstance(primary, list):
+        return ", ".join(a["name"] for a in primary if a.get("name"))
+
+    # Old shape fallback: more_info.singers = "Artist Name"
+    singers = more_info.get("singers", "")
+    if singers:
+        return html.unescape(singers)
+
+    # Featured artists last resort
+    featured = artist_map.get("featured_artists", [])
+    if featured and isinstance(featured, list):
+        return ", ".join(a["name"] for a in featured if a.get("name"))
+
+    return ""
 
 
 def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
@@ -124,12 +153,13 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
         songs = []
         for item in data.get("results", []):
             image = item.get("image", "").replace("150x150", "500x500")
+            more = item.get("more_info", {})
             songs.append(Song(
                 id=item.get("id", ""),
                 title=clean_title(item.get("title", "")),
-                artist=html.unescape(item.get("more_info", {}).get("singers", "")),
+                artist=extract_artist(more),
                 artwork_url=image,
-                duration=int(item.get("more_info", {}).get("duration", 0)) * 1000,
+                duration=int(more.get("duration", 0)) * 1000,
             ))
         return songs
     except Exception as e:
@@ -199,8 +229,16 @@ def build_queue_queries(
     more      = song_details.get("more_info", {})
     raw_lang  = song_details.get("language", language).lower().strip()
     raw_genre = html.unescape(more.get("genres", "") or "")
-    primary   = html.unescape(more.get("primary_artists", "") or artist)
-    featured  = html.unescape(more.get("featured_artists", "") or "")
+    primary   = html.unescape(
+        song_details.get("primary_artists", "")
+        or more.get("primary_artists", "")
+        or artist
+    )
+    featured  = html.unescape(
+        song_details.get("featured_artists", "")
+        or more.get("featured_artists", "")
+        or ""
+    )
     music_dir = html.unescape(more.get("music", "") or "")
 
     primary_first  = primary.split(",")[0].strip()
@@ -322,6 +360,79 @@ async def health():
     return {"status": "ok", "server": "Dreamin"}
 
 
+@app.post("/api/mobile/register")
+async def register(req: RegisterRequest):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    users: list[dict] = load_json(USERS_FILE, [])
+    import datetime
+    entry = {
+        "name": name,
+        "device_id": req.device_id,
+        "registered_at": datetime.datetime.utcnow().isoformat()
+    }
+    # Update existing device or append new
+    existing = next((u for u in users if u.get("device_id") == req.device_id and req.device_id), None)
+    if existing:
+        existing["name"] = name
+        existing["updated_at"] = entry["registered_at"]
+    else:
+        users.append(entry)
+    save_json(USERS_FILE, users)
+    return {"status": "ok"}
+
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users(token: str = Query(...)):
+    if token != ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    users: list[dict] = load_json(USERS_FILE, [])
+    import datetime
+
+    rows = ""
+    for u in reversed(users):
+        ts = u.get("updated_at") or u.get("registered_at", "")
+        try:
+            dt = datetime.datetime.fromisoformat(ts).strftime("%d %b %Y, %H:%M") if ts else "—"
+        except ValueError:
+            dt = ts
+        device = u.get("device_id", "")[:16] + "…" if len(u.get("device_id", "")) > 16 else u.get("device_id", "—")
+        rows += f"""
+        <tr>
+          <td>{html.escape(u.get("name", ""))}</td>
+          <td style="font-family:monospace;font-size:12px">{html.escape(device)}</td>
+          <td>{dt}</td>
+        </tr>"""
+
+    page = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dreamin — Users</title>
+  <style>
+    body {{ font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; padding: 24px; }}
+    h1 {{ color: #aba3ff; margin-bottom: 4px; }}
+    p  {{ color: #888; margin: 0 0 24px; font-size: 14px; }}
+    table {{ border-collapse: collapse; width: 100%; max-width: 700px; }}
+    th {{ text-align: left; color: #aba3ff; padding: 8px 16px; border-bottom: 1px solid #333; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }}
+    td {{ padding: 10px 16px; border-bottom: 1px solid #1a1a1a; font-size: 15px; }}
+    tr:hover td {{ background: #111; }}
+  </style>
+</head>
+<body>
+  <h1>Dreamin</h1>
+  <p>{len(users)} user{"s" if len(users) != 1 else ""} registered</p>
+  <table>
+    <thead><tr><th>Name</th><th>Device ID</th><th>Last Seen</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</body>
+</html>"""
+    return HTMLResponse(content=page)
+
+
 @app.get("/api/mobile/search", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1),
@@ -438,7 +549,10 @@ async def up_next(
     song_data = jiosaavn_song_details(song_id)
 
     if not artist:
-        artist = html.unescape(song_data.get("more_info", {}).get("primary_artists", ""))
+        artist = html.unescape(
+            song_data.get("primary_artists", "")
+            or song_data.get("more_info", {}).get("primary_artists", "")
+        )
 
     language = song_data.get("language", stored_lang).lower().strip()
     if not language:
@@ -499,7 +613,10 @@ async def recommend(song_id: str = Query(...)):
         language = detect_language(artist, title, history)
 
     if not artist:
-        artist = html.unescape(song_data.get("more_info", {}).get("primary_artists", ""))
+        artist = html.unescape(
+            song_data.get("primary_artists", "")
+            or song_data.get("more_info", {}).get("primary_artists", "")
+        )
 
     primary_first = artist.split(",")[0].strip()
     raw_genre = html.unescape(song_data.get("more_info", {}).get("genres", "") or "")

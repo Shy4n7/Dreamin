@@ -28,6 +28,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -39,7 +40,10 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -58,7 +62,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.shyan.dreamin.data.model.DreaminTheme
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.viewmodel.MusicPlayerViewModel
 
@@ -82,54 +85,10 @@ val OutlineVariant = Color(0xFF484847).copy(alpha = 0.15f)
 
 
 
-val BlueHour_Background = Color(0xFF0A1628)
-val BlueHour_SurfaceContainer = Color(0xFF111B2B)
-val BlueHour_SurfaceHigh = Color(0xFF182536)
-val BlueHour_SurfaceHighest = Color(0xFF1E2E40)
-val BlueHour_SurfaceBright = Color(0xFF253545)
-val BlueHour_Primary = Color(0xFF64B5F6)
-val BlueHour_PrimaryDim = Color(0xFF42A5F5)
-val BlueHour_Secondary = Color(0xFF90CAF9)
-val BlueHour_OnSurface = Color(0xFFE3F2FD)
-val BlueHour_OnSurfaceVariant = Color(0xFF90A4AE)
-val BlueHour_OutlineVariant = Color(0xFF546E7A).copy(alpha = 0.15f)
 
 
 
-
-
-val RoseDusk_Background = Color(0xFF1A0F14)
-val RoseDusk_SurfaceContainer = Color(0xFF221319)
-val RoseDusk_SurfaceHigh = Color(0xFF2D1921)
-val RoseDusk_SurfaceHighest = Color(0xFF38202A)
-val RoseDusk_SurfaceBright = Color(0xFF422833)
-val RoseDusk_Primary = Color(0xFFFF8FAB)
-val RoseDusk_PrimaryDim = Color(0xFFE0637A)
-val RoseDusk_Secondary = Color(0xFFFFB3C6)
-val RoseDusk_OnSurface = Color(0xFFFFF0F3)
-val RoseDusk_OnSurfaceVariant = Color(0xFFCCA8B0)
-val RoseDusk_OutlineVariant = Color(0xFF6E3D4B).copy(alpha = 0.15f)
-
-
-
-
-
-val Forest_Background = Color(0xFF0C1710)
-val Forest_SurfaceContainer = Color(0xFF121D15)
-val Forest_SurfaceHigh = Color(0xFF18261C)
-val Forest_SurfaceHighest = Color(0xFF1E2F23)
-val Forest_SurfaceBright = Color(0xFF25392A)
-val Forest_Primary = Color(0xFF81C784)
-val Forest_PrimaryDim = Color(0xFF4CAF50)
-val Forest_Secondary = Color(0xFFA5D6A7)
-val Forest_OnSurface = Color(0xFFEDF7EE)
-val Forest_OnSurfaceVariant = Color(0xFF9EBAAA)
-val Forest_OutlineVariant = Color(0xFF3D6B4A).copy(alpha = 0.15f)
-
-
-
-
-
+@androidx.compose.runtime.Immutable
 data class DreaminColors(
     val background: Color,
     val surfaceContainer: Color,
@@ -142,24 +101,6 @@ data class DreaminColors(
     val onSurface: Color,
     val onSurfaceVariant: Color,
     val outlineVariant: Color
-)
-
-val RoseDuskColors = DreaminColors(
-    background = RoseDusk_Background, surfaceContainer = RoseDusk_SurfaceContainer,
-    surfaceHigh = RoseDusk_SurfaceHigh, surfaceHighest = RoseDusk_SurfaceHighest,
-    surfaceBright = RoseDusk_SurfaceBright, primary = RoseDusk_Primary,
-    primaryDim = RoseDusk_PrimaryDim, secondary = RoseDusk_Secondary,
-    onSurface = RoseDusk_OnSurface, onSurfaceVariant = RoseDusk_OnSurfaceVariant,
-    outlineVariant = RoseDusk_OutlineVariant
-)
-
-val ForestNightColors = DreaminColors(
-    background = Forest_Background, surfaceContainer = Forest_SurfaceContainer,
-    surfaceHigh = Forest_SurfaceHigh, surfaceHighest = Forest_SurfaceHighest,
-    surfaceBright = Forest_SurfaceBright, primary = Forest_Primary,
-    primaryDim = Forest_PrimaryDim, secondary = Forest_Secondary,
-    onSurface = Forest_OnSurface, onSurfaceVariant = Forest_OnSurfaceVariant,
-    outlineVariant = Forest_OutlineVariant
 )
 
 val SonicNocturneColors = DreaminColors(
@@ -176,21 +117,8 @@ val SonicNocturneColors = DreaminColors(
     outlineVariant = OutlineVariant
 )
 
-val BlueHourColors = DreaminColors(
-    background = BlueHour_Background,
-    surfaceContainer = BlueHour_SurfaceContainer,
-    surfaceHigh = BlueHour_SurfaceHigh,
-    surfaceHighest = BlueHour_SurfaceHighest,
-    surfaceBright = BlueHour_SurfaceBright,
-    primary = BlueHour_Primary,
-    primaryDim = BlueHour_PrimaryDim,
-    secondary = BlueHour_Secondary,
-    onSurface = BlueHour_OnSurface,
-    onSurfaceVariant = BlueHour_OnSurfaceVariant,
-    outlineVariant = BlueHour_OutlineVariant
-)
-
 val LocalDreaminColors = compositionLocalOf { SonicNocturneColors }
+val LocalPlaylists = staticCompositionLocalOf<List<com.shyan.dreamin.data.local.Playlist>> { emptyList() }
 
 private fun blendDominantTint(base: Color, tint: Color, alpha: Float): Color = Color(
     red   = base.red   * (1f - alpha) + tint.red   * alpha,
@@ -232,23 +160,16 @@ fun MusicPlayerScreen(vm: MusicPlayerViewModel = viewModel()) {
     var currentScreen by remember { mutableStateOf(Screen.Home) }
     var isNowPlayingOpen by remember { mutableStateOf(false) }
 
-    val baseColors = when (state.selectedTheme) {
-        DreaminTheme.BlueHour    -> BlueHourColors
-        DreaminTheme.RoseDusk    -> RoseDuskColors
-        DreaminTheme.ForestNight -> ForestNightColors
-        else                     -> SonicNocturneColors
-    }
-
     LaunchedEffect(state.currentSong?.id) {
         state.currentSong?.artworkUrl?.takeIf { it.isNotBlank() }?.let { url ->
             vm.extractColorsFromArtwork(url)
         }
     }
 
-    CompositionLocalProvider(LocalDreaminColors provides baseColors) {
+    CompositionLocalProvider(LocalDreaminColors provides SonicNocturneColors) {
         DreaminRippleTheme {
             when {
-                state.userName == null -> Box(Modifier.fillMaxSize().background(baseColors.background))
+                state.userName == null -> Box(Modifier.fillMaxSize().background(SonicNocturneColors.background))
                 state.userName?.isBlank() == true -> OnboardingScreen(onNameSubmit = vm::saveUserName)
                 else -> MainAppScaffold(
                     state            = state,
@@ -351,29 +272,41 @@ private fun MainAppScaffold(
             HorizontalPager(
                 state             = pagerState,
                 modifier          = Modifier.fillMaxSize().padding(padding),
-                userScrollEnabled = true,
+                userScrollEnabled = false,
                 key               = { navScreens[it].name }
             ) { page ->
                 Box(Modifier.fillMaxSize().background(colors.background)) {
                     when (navScreens[page]) {
                         Screen.Home -> HomeScreen(
-                            state                 = state,
-                            onSongClick           = onHomeSongClick,
-                            onShuffleFab          = onHomeShuffleFab,
-                            onAddToQueue          = vm::addToQueue,
-                            onSearchChange        = vm::setSearchQuery,
-                            onClearSearch         = vm::clearSearch,
-                            onToggleTheme         = vm::toggleTheme,
-                            onRefresh             = vm::refreshData,
-                            onLoadMoreSearch      = vm::loadMoreSearchResults,
-                            playlists             = state.playlists,
-                            onAddToPlaylist       = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
-                            onEditName            = vm::saveUserName,
-                            recentSearches        = state.recentSearches,
-                            onClearRecentSearches = vm::clearRecentSearches,
-                            lastSession           = state.lastSession,
-                            onResumeLastSession   = onResumeSession
-                        )
+                            trendingCharts           = trendingCharts,
+                            recommendations          = state.recommendations,
+                            recentlyPlayed           = state.recentlyPlayed,
+                            topSongs                 = state.topSongs,
+                            currentSong              = state.currentSong,
+                            isSearchActive           = state.isSearchActive,
+                            searchQuery              = state.searchQuery,
+                            searchResults            = state.searchResults,
+                            isLoadingChart           = state.isLoadingChart,
+                            isLoadingMoreSearch      = state.isLoadingMoreSearch,
+                            hasMoreSearchResults     = state.hasMoreSearchResults,
+                            recommendationSeedTitle  = state.recommendationSeedTitle,
+                            userName                 = state.userName.orEmpty(),
+                    playlists                = state.playlists,
+                    recentSearches           = state.recentSearches,
+                    lastSession              = state.lastSession,
+                    onSongClick              = onHomeSongClick,
+                    onShuffleFab             = onHomeShuffleFab,
+                    onAddToQueue             = vm::addToQueue,
+                    onSearchChange           = vm::setSearchQuery,
+                    onClearSearch            = vm::clearSearch,
+                    onActivateSearch         = vm::activateSearch,
+                    onRefresh                = vm::refreshData,
+                    onLoadMoreSearch         = vm::loadMoreSearchResults,
+                    onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                    onEditName               = vm::saveUserName,
+                    onClearRecentSearches    = vm::clearRecentSearches,
+                    onResumeLastSession      = onResumeSession
+                )
                         Screen.Library -> LibraryScreen(
                             state                    = state,
                             onSongClick              = onLibrarySongClick,
@@ -409,7 +342,6 @@ private fun MainAppScaffold(
                 onSeek             = vm::seekTo,
                 onToggleShuffle    = vm::toggleShuffle,
                 onToggleRepeat     = vm::toggleRepeat,
-                onToggleTheme      = vm::toggleTheme,
                 onToggleFavorite   = vm::toggleFavorite,
                 onSetSleepTimer    = vm::setSleepTimer,
                 onCancelSleepTimer = vm::cancelSleepTimer,
@@ -505,20 +437,17 @@ fun BottomNavBar(
 private fun MiniPlayerProgressBar(positionMs: Long, durationMs: Long, accentColor: Color? = null) {
     val colors = LocalDreaminColors.current
     val barColor = accentColor ?: colors.primary
+    val trackColor = colors.surfaceHighest
     val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    Box(
+    Spacer(
         modifier = Modifier
             .fillMaxWidth()
             .height(2.dp)
-            .background(colors.surfaceHighest)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(progress)
-                .background(barColor)
-        )
-    }
+            .drawBehind {
+                drawRect(trackColor)
+                drawRect(barColor, size = size.copy(width = size.width * progress))
+            }
+    )
 }
 
 @Composable
@@ -555,7 +484,7 @@ fun MiniPlayer(
                     .fillMaxWidth()
                     .height(72.dp)
                     .offset { IntOffset(swipeXAnim.value.toInt(), swipeYAnim.value.toInt()) }
-                    .pointerInput(Unit) {
+                    .pointerInput(onNext, onPrevious, onExpand) {
                         var totalX = 0f
                         var totalY = 0f
                         detectDragGestures(
@@ -604,7 +533,7 @@ fun MiniPlayer(
                         .weight(1f)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true, color = colors.primary, radius = 200.dp)
+                            indication = ripple(bounded = true, color = colors.primary)
                         ) { onExpand() },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -634,6 +563,15 @@ fun MiniPlayer(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+
+                IconButton(onClick = onPrevious, modifier = Modifier.size(44.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipPrevious,
+                        contentDescription = null,
+                        tint = colors.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 IconButton(onClick = onPlayPause, modifier = Modifier.size(44.dp)) {
@@ -672,24 +610,37 @@ fun MiniPlayer(
 
 @Composable
 fun HomeScreen(
-    state: PlayerUiState,
+    trendingCharts: List<Song>,
+    recommendations: List<Song>,
+    recentlyPlayed: List<Song>,
+    topSongs: List<Song>,
+    currentSong: Song?,
+    isSearchActive: Boolean,
+    searchQuery: String,
+    searchResults: List<Song>,
+    isLoadingChart: Boolean,
+    isLoadingMoreSearch: Boolean,
+    hasMoreSearchResults: Boolean,
+    recommendationSeedTitle: String?,
+    userName: String,
+    playlists: List<com.shyan.dreamin.data.local.Playlist>,
+    recentSearches: List<String>,
+    lastSession: com.shyan.dreamin.data.local.UserPreferencesDataStore.LastSession?,
     onSongClick: (Song) -> Unit,
     onShuffleFab: () -> Unit = {},
     onAddToQueue: (Song) -> Unit,
     onSearchChange: (String) -> Unit,
     onClearSearch: () -> Unit,
-    onToggleTheme: () -> Unit,
+    onActivateSearch: () -> Unit = {},
     onRefresh: () -> Unit,
     onLoadMoreSearch: () -> Unit = {},
-    playlists: List<com.shyan.dreamin.data.local.Playlist> = emptyList(),
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
     onEditName: (String) -> Unit = {},
-    recentSearches: List<String> = emptyList(),
     onClearRecentSearches: () -> Unit = {},
-    lastSession: com.shyan.dreamin.data.local.UserPreferencesDataStore.LastSession? = null,
-    onResumeLastSession: () -> Unit = {}
+    onResumeLastSession: () -> Unit = {},
 ) {
     val colors = LocalDreaminColors.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     val titleProgress by remember {
         derivedStateOf {
@@ -699,12 +650,8 @@ fun HomeScreen(
         }
     }
     var showEditNameDialog by remember { mutableStateOf(false) }
-    val allSongs = remember(state.trendingCharts, state.recommendations) {
-        state.trendingCharts + state.recommendations
-    }
-    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
-    val timeOfDay = remember(hour) {
-        when (hour) {
+    val timeOfDay = remember {
+        when (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
             in 5..11 -> "Good morning"
             in 12..16 -> "Good afternoon"
             in 17..20 -> "Good evening"
@@ -712,8 +659,15 @@ fun HomeScreen(
         }
     }
 
+    BackHandler(enabled = isSearchActive) { onClearSearch() }
+
+    val onSongClickWithKeyboardDismiss = remember(onSongClick, keyboard) {
+        { song: Song -> keyboard?.hide(); onSongClick(song) }
+    }
+
+    CompositionLocalProvider(LocalPlaylists provides playlists) {
     Box(modifier = Modifier.fillMaxSize()) {
-        if (state.isSearchActive) {
+        if (isSearchActive) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -721,53 +675,53 @@ fun HomeScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
                 DreaminSearchBar(
-                    query = state.searchQuery,
+                    query = searchQuery,
                     onQueryChange = onSearchChange,
                     onClear = onClearSearch,
+                    autoFocus = true,
                     recentSearches = recentSearches,
                     onRecentSearchClick = onSearchChange,
                     onClearRecentSearches = onClearRecentSearches
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                if (state.searchQuery.isNotEmpty()) SearchResults(
-                    songs = state.searchResults,
-                    currentSong = state.currentSong,
-                    onSongClick = onSongClick,
+                if (searchQuery.isNotEmpty()) SearchResults(
+                    songs = searchResults,
+                    currentSong = currentSong,
+                    onSongClick = onSongClickWithKeyboardDismiss,
                     onAddToQueue = onAddToQueue,
-                    hasMore = state.hasMoreSearchResults,
-                    isLoadingMore = state.isLoadingMoreSearch,
+                    hasMore = hasMoreSearchResults,
+                    isLoadingMore = isLoadingMoreSearch,
                     onLoadMore = onLoadMoreSearch,
-                    playlists = playlists,
                     onAddToPlaylist = onAddToPlaylist
                 )
             }
         } else {
             PullToRefreshBox(
-                isRefreshing = state.isLoadingChart,
+                isRefreshing = isLoadingChart,
                 onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize()
             ) {
                 HomeContent(
-                    trending = state.trendingCharts,
-                    recommendations = state.recommendations,
-                    recentlyPlayed = state.recentlyPlayed,
-                    topSongs = state.topSongs,
-                    recommendationSeedTitle = state.recommendationSeedTitle,
-                    currentSong = state.currentSong,
+                    trending = trendingCharts,
+                    recommendations = recommendations,
+                    recentlyPlayed = recentlyPlayed,
+                    topSongs = topSongs,
+                    recommendationSeedTitle = recommendationSeedTitle,
+                    currentSong = currentSong,
                     onSongClick = onSongClick,
                     onAddToQueue = onAddToQueue,
                     onRefresh = onRefresh,
                     listState = listState,
-                    isLoading = state.isLoadingChart,
+                    isLoading = isLoadingChart,
                     playlists = playlists,
                     onAddToPlaylist = onAddToPlaylist,
                     titleProgress = { titleProgress },
                     timeOfDay = timeOfDay,
-                    userName = state.userName.orEmpty(),
-                    onToggleTheme = onToggleTheme,
+                    userName = userName,
                     onSearchChange = onSearchChange,
                     onClearSearch = onClearSearch,
-                    searchQuery = state.searchQuery,
+                    onActivateSearch = onActivateSearch,
+                    searchQuery = searchQuery,
                     onLongPressName = { showEditNameDialog = true },
                     recentSearches = recentSearches,
                     onClearRecentSearches = onClearRecentSearches,
@@ -777,7 +731,7 @@ fun HomeScreen(
             }
         }
 
-        if (state.trendingCharts.isNotEmpty() && !state.isSearchActive) {
+        if (trendingCharts.isNotEmpty() && !isSearchActive) {
             FloatingActionButton(
                 onClick = onShuffleFab,
                 modifier = Modifier
@@ -795,10 +749,11 @@ fun HomeScreen(
             }
         }
     }
+    } // end CompositionLocalProvider(LocalPlaylists)
 
     if (showEditNameDialog) {
         EditNameDialog(
-            currentName = state.userName.orEmpty(),
+            currentName = userName ?: "",
             onDismiss = { showEditNameDialog = false },
             onSave = { newName ->
                 onEditName(newName)
@@ -813,6 +768,8 @@ fun DreaminSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
+    onActivate: () -> Unit = {},
+    autoFocus: Boolean = false,
     recentSearches: List<String> = emptyList(),
     onRecentSearchClick: (String) -> Unit = {},
     onClearRecentSearches: () -> Unit = {}
@@ -820,6 +777,15 @@ fun DreaminSearchBar(
     val colors = LocalDreaminColors.current
     var isFocused by remember { mutableStateOf(false) }
     val showRecents = isFocused && query.isEmpty() && recentSearches.isNotEmpty()
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    if (autoFocus) {
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
+    }
 
     Column {
         OutlinedTextField(
@@ -827,7 +793,11 @@ fun DreaminSearchBar(
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused },
+                .focusRequester(focusRequester)
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onActivate()
+                },
             placeholder = { Text("Search songs, artists...", color = colors.onSurfaceVariant) },
             leadingIcon = {
                 Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.onSurfaceVariant)
@@ -878,7 +848,7 @@ fun DreaminSearchBar(
                             .fillMaxWidth()
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = ripple(bounded = true, color = colors.primary, radius = 200.dp)
+                                indication = ripple(bounded = true, color = colors.primary)
                             ) { onRecentSearchClick(term) }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -902,7 +872,6 @@ fun SearchResults(
     hasMore: Boolean = false,
     isLoadingMore: Boolean = false,
     onLoadMore: () -> Unit = {},
-    playlists: List<com.shyan.dreamin.data.local.Playlist> = emptyList(),
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> }
 ) {
     val colors = LocalDreaminColors.current
@@ -918,8 +887,16 @@ fun SearchResults(
 
     val listState = rememberLazyListState()
 
-    LaunchedEffect(listState.canScrollForward) {
-        if (!listState.canScrollForward && hasMore && !isLoadingMore) {
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = listState.layoutInfo.totalItemsCount
+            total > 0 && lastVisible >= total - 3
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && hasMore && !isLoadingMore) {
             onLoadMore()
         }
     }
@@ -928,13 +905,12 @@ fun SearchResults(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(songs) { song ->
+        items(songs, key = { it.id }) { song ->
             SongRow(
                 song = song,
                 isPlaying = currentSong?.id == song.id,
                 onClick = { onSongClick(song) },
                 onAddToQueue = { onAddToQueue(song) },
-                playlists = playlists,
                 onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
             )
         }
@@ -947,6 +923,15 @@ fun SearchResults(
 
 
 
+
+private val BlackOverlay50 = Color.Black.copy(alpha = 0.50f)
+private val BlackOverlay35 = Color.Black.copy(alpha = 0.35f)
+
+private val shimmerColors = listOf(
+    Color.White.copy(alpha = 0.05f),
+    Color.White.copy(alpha = 0.13f),
+    Color.White.copy(alpha = 0.05f),
+)
 
 @Composable
 fun shimmerBrush(): Brush {
@@ -961,11 +946,7 @@ fun shimmerBrush(): Brush {
         label = "shimmer_x"
     )
     return Brush.linearGradient(
-        colors = listOf(
-            Color.White.copy(alpha = 0.05f),
-            Color.White.copy(alpha = 0.13f),
-            Color.White.copy(alpha = 0.05f),
-        ),
+        colors = shimmerColors,
         start = Offset(translateAnim - 300f, 0f),
         end = Offset(translateAnim, 0f)
     )
@@ -1123,7 +1104,7 @@ private fun JumpBackInCard(
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 200.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1141,7 +1122,7 @@ private fun JumpBackInCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black.copy(alpha = 0.35f)),
+                    .background(BlackOverlay35),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1217,9 +1198,9 @@ fun HomeContent(
     titleProgress: () -> Float = { 0f },
     timeOfDay: String = "",
     userName: String = "",
-    onToggleTheme: () -> Unit = {},
     onSearchChange: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
+    onActivateSearch: () -> Unit = {},
     searchQuery: String = "",
     onLongPressName: () -> Unit = {},
     recentSearches: List<String> = emptyList(),
@@ -1228,6 +1209,15 @@ fun HomeContent(
     onResumeLastSession: () -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
+    // Single stable lookup map — rebuilt only when song lists change, not on every state update
+    val allSongsById = remember(trending, recommendations) {
+        (trending + recommendations).associateBy { it.id }
+    }
+    val onClickById    = remember(onSongClick, allSongsById)     { { id: String -> allSongsById[id]?.let(onSongClick) } }
+    val onQueueById    = remember(onAddToQueue, allSongsById)    { { id: String -> allSongsById[id]?.let(onAddToQueue) } }
+    val onPlaylistById = remember(onAddToPlaylist, allSongsById) { { id: String, pid: Long -> allSongsById[id]?.let { onAddToPlaylist(it, pid) } } }
+    val trendingTop    = remember(trending)       { trending.take(10) }
+    val recsTop        = remember(recommendations) { recommendations.take(8) }
 
     LazyColumn(
         state = listState,
@@ -1239,11 +1229,11 @@ fun HomeContent(
                 titleProgress = titleProgress,
                 timeOfDay = timeOfDay,
                 userName = userName,
-                onToggleTheme = onToggleTheme,
                 onLongPressName = onLongPressName,
                 searchQuery = searchQuery,
                 onSearchChange = onSearchChange,
                 onClearSearch = onClearSearch,
+                onActivateSearch = onActivateSearch,
                 recentSearches = recentSearches,
                 onClearRecentSearches = onClearRecentSearches
             )
@@ -1285,14 +1275,13 @@ fun HomeContent(
             item(key = "section_trending") {
                 SectionTitle("Trending Now")
             }
-            items(trending.take(10), key = { it.id }) { song ->
+            items(trendingTop, key = { it.id }) { song ->
                 SongRow(
                     song = song,
                     isPlaying = currentSong?.id == song.id,
-                    onClick = { onSongClick(song) },
-                    onAddToQueue = { onAddToQueue(song) },
-                    playlists = playlists,
-                    onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
+                    onClick = { onClickById(song.id) },
+                    onAddToQueue = { onQueueById(song.id) },
+                    onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }
                 )
             }
         }
@@ -1305,14 +1294,13 @@ fun HomeContent(
                     else "Recommended For You"
                 )
             }
-            items(recommendations.take(8), key = { "rec_${it.id}" }) { song ->
+            items(recsTop, key = { "rec_${it.id}" }) { song ->
                 SongRow(
                     song = song,
                     isPlaying = currentSong?.id == song.id,
-                    onClick = { onSongClick(song) },
-                    onAddToQueue = { onAddToQueue(song) },
-                    playlists = playlists,
-                    onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
+                    onClick = { onClickById(song.id) },
+                    onAddToQueue = { onQueueById(song.id) },
+                    onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }
                 )
             }
         }
@@ -1380,18 +1368,17 @@ fun SongRow(
     isPlaying: Boolean,
     onClick: () -> Unit,
     onAddToQueue: () -> Unit,
-    playlists: List<com.shyan.dreamin.data.local.Playlist> = emptyList(),
     onAddToPlaylist: (Long) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
+    val playlists = LocalPlaylists.current
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = 100f
     var showPlaylistPicker by remember { mutableStateOf(false) }
-    val swipeHintColor = colors.primary.copy(alpha = 0.2f)
+    val swipeHintColor = remember(colors.primary) { colors.primary.copy(alpha = 0.2f) }
     val swipeIconColor = colors.primary
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        // Background hint — only drawn when actually swiping
         if (swipeOffset > 0f) {
             Box(
                 modifier = Modifier
@@ -1414,9 +1401,7 @@ fun SongRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // graphicsLayer translation skips layout — no measure/place pass per frame
-                .graphicsLayer { translationX = swipeOffset }
-                .pointerInput(Unit) {
+                .pointerInput(onAddToQueue) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             val captured = swipeOffset
@@ -1429,76 +1414,65 @@ fun SongRow(
                         }
                     )
                 }
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = true, color = colors.primary, radius = 120.dp),
-                    onClick = onClick,
-                    onLongClick = { if (playlists.isNotEmpty()) showPlaylistPicker = true }
-                )
+                .graphicsLayer { translationX = swipeOffset }
                 .background(
                     if (isPlaying) colors.surfaceHigh else Color.Transparent,
                     RoundedCornerShape(16.dp)
                 )
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(bounded = true, color = colors.primary),
+                    onClick = onClick,
+                    onLongClick = { if (playlists.isNotEmpty()) showPlaylistPicker = true }
+                )
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-        
-        Box {
-            AsyncImage(
-                model = song.artworkUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-                contentScale = ContentScale.Crop
-            )
-            if (isPlaying) {
-                Box(
+            Box {
+                AsyncImage(
+                    model = song.artworkUrl,
+                    contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Filled.VolumeUp,
-                        contentDescription = "Playing",
-                        tint = colors.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                if (isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(BlackOverlay50),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.VolumeUp,
+                            contentDescription = "Playing",
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    song.displayTitle,
+                    color = if (isPlaying) colors.primary else colors.onSurface,
+                    fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 15.sp
+                )
+                Text(
+                    song.artist,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                song.displayTitle,
-                color = if (isPlaying) colors.primary else colors.onSurface,
-                fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 15.sp
-            )
-            Text(
-                song.artist,
-                color = colors.onSurfaceVariant,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        IconButton(onClick = onAddToQueue) {
-            Icon(
-                Icons.Outlined.AddCircleOutline,
-                contentDescription = "Add to queue",
-                tint = colors.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
     }
 
     if (showPlaylistPicker) {
@@ -1574,7 +1548,6 @@ fun NowPlayingScreen(
     onSeek: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
     onToggleRepeat: () -> Unit,
-    onToggleTheme: () -> Unit,
     onToggleFavorite: () -> Unit,
     onSetSleepTimer: (Int) -> Unit,
     onCancelSleepTimer: () -> Unit,
@@ -1589,9 +1562,6 @@ fun NowPlayingScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     val song = state.currentSong
     val colors = LocalDreaminColors.current
-    val swipeXAnim = remember { Animatable(0f) }
-    val swipeYAnim = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
 
     BackHandler(enabled = true) { onBack() }
 
@@ -1599,50 +1569,6 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .offset { IntOffset(swipeXAnim.value.toInt(), swipeYAnim.value.toInt()) }
-            .graphicsLayer {
-                // Fade out as user drags down/right to give visual dismiss feedback
-                val dragRatio = (swipeXAnim.value / 300f + swipeYAnim.value / 400f).coerceIn(0f, 0.5f)
-                alpha = 1f - dragRatio
-            }
-            .pointerInput(Unit) {
-                var totalX = 0f
-                var totalY = 0f
-                detectDragGestures(
-                    onDragStart = {
-                        totalX = 0f
-                        totalY = 0f
-                    },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        totalX += dragAmount.x
-                        totalY += dragAmount.y
-                        val absX = kotlin.math.abs(totalX)
-                        val absY = kotlin.math.abs(totalY)
-                        if (absY > absX && totalY > 0) {
-                            scope.launch { swipeYAnim.snapTo(totalY.coerceIn(0f, 500f)) }
-                        } else if (absX > absY && totalX > 0) {
-                            scope.launch { swipeXAnim.snapTo(totalX.coerceIn(0f, 300f)) }
-                        }
-                    },
-                    onDragEnd = {
-                        if (swipeXAnim.value > 180f || swipeYAnim.value > 220f) {
-                            onBack()
-                        } else {
-                            scope.launch {
-                                launch { swipeXAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
-                                launch { swipeYAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
-                            }
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch {
-                            launch { swipeXAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
-                            launch { swipeYAnim.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
-                        }
-                    }
-                )
-            }
     ) {
 
         Column(
@@ -1822,10 +1748,11 @@ fun NowPlayingScreen(
                     modifier = Modifier
                         .size(64.dp)
                         .scale(if (isLoading) 0.95f else playScale)
-                        .background(colors.primary, RoundedCornerShape(50))
+                        .clip(CircleShape)
+                        .background(colors.primary)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true, color = Color.White, radius = 48.dp),
+                            indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.4f), radius = 32.dp),
                             enabled = !isLoading
                         ) { onPlayPause() },
                     contentAlignment = Alignment.Center
@@ -1976,7 +1903,7 @@ private fun SleepTimerChip(minutesRemaining: Long, onCancel: () -> Unit) {
             .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(50))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 80.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onCancel() }
             .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2092,7 +2019,7 @@ private fun UpNextRow(
             .clip(RoundedCornerShape(12.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 200.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onClick() }
             .background(
                 if (isNext) colors.primary.copy(alpha = 0.07f) else Color.Transparent,
@@ -2296,7 +2223,7 @@ fun QueueSongRow(
             .graphicsLayer { shadowElevation = elevation }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 120.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onClick() }
             .background(
                 if (isPlaying || isDragging) colors.surfaceHigh else Color.Transparent,
@@ -2387,6 +2314,8 @@ fun LibraryScreen(
     val tabPagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
 
+    CompositionLocalProvider(LocalPlaylists provides state.playlists) {
+
     val openPlaylist = state.openPlaylistId?.let { id -> state.playlists.find { it.id == id } }
     if (openPlaylist != null) {
         PlaylistDetailScreen(
@@ -2400,8 +2329,7 @@ fun LibraryScreen(
             onRemoveSong = { songId -> onRemoveSongFromPlaylist(openPlaylist.id, songId) },
             onRename = { newName -> onRenamePlaylist(openPlaylist.id, newName) }
         )
-        return
-    }
+    } else {
 
     Column(modifier = Modifier.fillMaxSize()) {
         
@@ -2449,10 +2377,17 @@ fun LibraryScreen(
                     onPlayPlaylist = onPlayPlaylist,
                     onOpenPlaylist = onOpenPlaylist
                 )
-                else -> FavoritesTab(state.favorites, state.currentSong, onSongClick, state.playlists, onAddToPlaylist)
+                else -> FavoritesTab(
+                    favorites = state.favorites,
+                    currentSong = state.currentSong,
+                    onSongClick = onSongClick,
+                    onAddToPlaylist = onAddToPlaylist
+                )
             }
         }
     }
+    } // end else
+    } // end CompositionLocalProvider(LocalPlaylists)
 }
 
 @Composable
@@ -2460,7 +2395,6 @@ private fun FavoritesTab(
     favorites: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
-    playlists: List<com.shyan.dreamin.data.local.Playlist> = emptyList(),
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> }
 ) {
     val colors = LocalDreaminColors.current
@@ -2489,13 +2423,12 @@ private fun FavoritesTab(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(favorites) { song ->
+            items(favorites, key = { it.id }) { song ->
                 SongRow(
                     song = song,
                     isPlaying = currentSong?.id == song.id,
                     onClick = { onSongClick(song) },
                     onAddToQueue = {},
-                    playlists = playlists,
                     onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
                 )
             }
@@ -2633,7 +2566,7 @@ private fun PlaylistRow(
             .background(colors.surfaceHigh, RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 120.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onOpen() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2786,8 +2719,23 @@ private fun PlaylistDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     val songCount = remember(songs.size) { songs.size }
     val playingId = remember(currentSong?.id) { currentSong?.id }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        containerColor = colors.background,
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = colors.surfaceHighest,
+                    contentColor = colors.onSurface,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        }
+    ) { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2872,13 +2820,24 @@ private fun PlaylistDetailScreen(
                         song = songs[idx],
                         isPlaying = playingId == songs[idx].id,
                         onClick = { onSongClick(songs[idx]) },
-                        onRemove = { onRemoveSong(songs[idx].id) }
+                        onRemove = {
+                            val title = songs[idx].displayTitle
+                            onRemoveSong(songs[idx].id)
+                            scope.launch {
+                                snackbarHostState.currentSnackbarData?.dismiss()
+                                snackbarHostState.showSnackbar(
+                                    message = "\"$title\" removed from playlist",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
                     )
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }
+    } // end Scaffold
 
     if (showRenameDialog) {
         RenamePlaylistDialog(
@@ -2910,7 +2869,7 @@ private fun PlaylistSongRow(
             .background(bgColor, RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary, radius = 120.dp)
+                indication = ripple(bounded = true, color = colors.primary)
             ) { onClick() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2952,7 +2911,7 @@ private fun ArtworkBox(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black.copy(alpha = 0.5f)),
+                    .background(BlackOverlay50),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
@@ -3093,19 +3052,73 @@ private fun StatsCard(modifier: Modifier = Modifier, label: String, value: Strin
 
 
 @Composable
+private fun DreaminInfoSheet(onDismiss: () -> Unit) {
+    val colors = LocalDreaminColors.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surfaceHigh,
+        titleContentColor = colors.onSurface,
+        title = {
+            Text("Tips & Tricks", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = colors.onSurface)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                InfoFeatureRow(Icons.Outlined.SwipeRight, "Swipe right on a song", "Adds it to the end of your queue")
+                InfoFeatureRow(Icons.Outlined.TouchApp, "Long-press a song", "Quickly add it to a playlist")
+                InfoFeatureRow(Icons.Outlined.Person, "Long-press your name", "Change what the app calls you")
+                InfoFeatureRow(Icons.Outlined.Favorite, "Double-tap artwork", "Instantly favourites the playing song")
+                InfoFeatureRow(Icons.Outlined.Timer, "Sleep timer", "In Now Playing — auto-pauses after set time")
+                InfoFeatureRow(Icons.Outlined.LockClock, "Auto-resume", "Starts exactly where you left off")
+                InfoFeatureRow(Icons.Outlined.KeyboardArrowDown, "Close Now Playing", "Tap the arrow at the top to go back")
+            }
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "DREAMIN · made by Shyan",
+                    fontSize = 11.sp,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.5f),
+                    letterSpacing = 0.5.sp
+                )
+                TextButton(onClick = onDismiss) {
+                    Text("Got it", color = colors.primary, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun InfoFeatureRow(icon: ImageVector, title: String, description: String) {
+    val colors = LocalDreaminColors.current
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp).padding(top = 2.dp))
+        Column {
+            Text(title, color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(description, color = colors.onSurfaceVariant, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 private fun HomeHeader(
     titleProgress: () -> Float,
     timeOfDay: String,
     userName: String,
-    onToggleTheme: () -> Unit,
     onLongPressName: () -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onClearSearch: () -> Unit,
+    onActivateSearch: () -> Unit,
     recentSearches: List<String>,
     onClearRecentSearches: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    var showInfoSheet by remember { mutableStateOf(false) }
 
     Column {
         // Title row — fixed layout, no scroll-driven recomposition
@@ -3120,8 +3133,20 @@ private fun HomeHeader(
                 fontWeight = FontWeight.ExtraBold,
                 color = colors.primary,
                 letterSpacing = 2.sp,
-                modifier = Modifier.clickable { onToggleTheme() }
+                modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = { showInfoSheet = true }) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = "App info",
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        if (showInfoSheet) {
+            DreaminInfoSheet(onDismiss = { showInfoSheet = false })
         }
         // Greeting fades as user scrolls — graphicsLayer defers alpha to draw phase
         Text(
@@ -3137,6 +3162,7 @@ private fun HomeHeader(
             query = searchQuery,
             onQueryChange = onSearchChange,
             onClear = onClearSearch,
+            onActivate = onActivateSearch,
             recentSearches = recentSearches,
             onRecentSearchClick = onSearchChange,
             onClearRecentSearches = onClearRecentSearches

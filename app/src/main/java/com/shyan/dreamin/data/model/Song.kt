@@ -1,9 +1,11 @@
 package com.shyan.dreamin.data.model
 
+import androidx.compose.runtime.Immutable
 import com.google.gson.annotations.SerializedName
 
 private val FROM_SUFFIX_REGEX = Regex("""\s*[\(\[]?\s*[Ff][Rr][Oo][Mm]\s+.+[\)\]]?\s*$""")
 
+@Immutable
 data class Song(
     val id: String,
     val title: String,
@@ -14,6 +16,7 @@ data class Song(
     val displayTitle: String get() = FROM_SUFFIX_REGEX.replace(title, "").trim()
 }
 
+data class RegisterRequest(val name: String, val device_id: String = "")
 data class SearchResponse(val results: List<Song> = emptyList())
 data class ChartResponse(val songs: List<Song> = emptyList())
 data class PlayResponse(
@@ -24,8 +27,6 @@ data class UpNextResponse(val songs: List<Song> = emptyList())
 data class RecommendResponse(val recommendations: List<Song> = emptyList())
 
 enum class TrackRepeatMode { OFF, ONE, ALL }
-
-enum class DreaminTheme { SonicNocturne, BlueHour, RoseDusk, ForestNight }
 
 data class ListeningStats(
     val songsThisWeek: Int = 0,
@@ -58,7 +59,6 @@ data class PlayerUiState(
     val searchQuery: String = "",
     val isQueueVisible: Boolean = false,
     val dominantColor: Int = 0xFF1A1A2E.toInt(),
-    val selectedTheme: DreaminTheme = DreaminTheme.SonicNocturne,
     val recommendationSeedTitle: String? = null,
     val isLoadingChart: Boolean = true,
     val userName: String? = null,  // null = DataStore not yet loaded; "" = first launch
