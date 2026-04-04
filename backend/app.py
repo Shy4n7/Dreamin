@@ -355,6 +355,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "server": "Dreamin", "version": "1.0.0"}
+
+
 @app.get("/api/mobile/health")
 async def health():
     return {"status": "ok", "server": "Dreamin"}
