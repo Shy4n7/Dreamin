@@ -1,28 +1,53 @@
-<<<<<<< HEAD
+# Android
 *.iml
-.gradle
+.gradle/
 /local.properties
 /.idea/
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
 local.properties
 *.hprof
-output.txt
-status.txt
-new_app/build
-app/build
-Server/build
+app/build/
+Server/build/
+new_app/build/
 .kotlin/
-=======
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+.env
+
+# Runtime data
 song_cache/
 data/
-.env
+backend/data/
+backend/song_cache/
+
+# Logs & build output
+output.txt
+status.txt
+build_log.txt
+build_output*.txt
+
+# macOS
 .DS_Store
-*.hprof
->>>>>>> 50306f16d5a8d8c335f8ceaa7a5111205c47ded9
+
+# Branding working files (keep only final assets)
+dreamin_logo*.png
+dreamin_text.png
+logo_A_*.png
+logo_B_*.png
+logo_C_purple_D.png
+logo_D_*.png
+logo_E_*.png
+gen_icons.py
+base_icon.png
+
+# Planning docs (internal)
+.planning/
+
+# Claude
+.claude/

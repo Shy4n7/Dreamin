@@ -1,134 +1,142 @@
-# 🎵 Dreamin — Personal Android Music App
+# Dreamin
 
-> Kotlin + Jetpack Compose frontend · FastAPI backend · ExoPlayer + MediaSession for lock screen controls
+A personal Android music streaming app with a self-hosted FastAPI backend. Search, stream, and discover music — with smart queue generation, personalized recommendations, and lock screen controls.
 
----
+## Screenshots
+
+> Coming soon
+
+## Features
+
+- **Search & Stream** — Search millions of songs and stream at 320kbps
+- **Smart Queue** — Radio-style queue built from genre, artist, and language signals
+- **Personalized Recommendations** — Suggestions based on your listening history
+- **Trending Charts** — Language-aware charts (Tamil, Hindi, English, Telugu, Malayalam)
+- **Lock Screen Controls** — Full playback controls on the lock screen and notification shade
+- **Playlists** — Create and manage custom playlists
+- **Favorites** — Save songs for quick access
+- **Sleep Timer** — Schedule playback to stop automatically
+- **Listening Stats** — Weekly stats, top songs, and top artists
+- **Multiple Themes** — Sonic Nocturne, Blue Hour, Rose Dusk, Forest Night
+
+## Tech Stack
+
+### Android
+- **Language**: Kotlin
+- **UI**: Jetpack Compose + Material 3
+- **Playback**: Media3 / ExoPlayer with MediaSessionService
+- **Networking**: Retrofit + OkHttp
+- **Local Storage**: Room (database) + DataStore (preferences)
+- **Image Loading**: Coil
+- **Color Extraction**: Palette API
+- **Min SDK**: 26 (Android 8.0)
+
+### Backend
+- **Framework**: FastAPI (Python 3.11)
+- **Server**: Uvicorn
+- **HTTP Client**: HTTPX (async)
+- **Containerization**: Docker
+- **Deployment**: ClawCloud (auto-deploy via GitHub Actions)
 
 ## Architecture
 
 ```
-Android App (Kotlin/Compose)
-    │
-    ├── ExoPlayer (Media3)         ← audio playback
-    ├── MediaSessionService        ← lock screen + notification controls (auto)
-    ├── MediaController (ViewModel)← bridges UI ↔ Service
-    └── Retrofit                   ← talks to your FastAPI server
-            │
-            ▼
-    FastAPI Server (Daydreamin)    ← same server, zero changes
-            ├── iTunes API         ← search + metadata
-            ├── yt-dlp             ← YouTube audio stream
-            └── songs.json         ← recommendations
+Android App
+├── MusicPlayerViewModel     — single StateFlow, all business logic
+├── MusicService             — foreground service, ExoPlayer + MediaSession
+├── Room Database            — playlists, favorites, history, stats
+├── DataStore                — user preferences, chart cache
+└── Retrofit                 — communicates with FastAPI backend
+
+FastAPI Backend
+├── /api/mobile/search       — proxies JioSaavn search
+├── /api/mobile/chart        — trending charts (cached 6h)
+├── /api/mobile/play         — resolves stream URL, records play
+├── /api/mobile/up_next      — generates smart queue candidates
+└── /api/mobile/recommend    — personalized recommendations
 ```
 
----
+## Getting Started
 
-## File Structure
+### Backend
 
-```
-app/src/main/
-├── AndroidManifest.xml
-└── java/com/shyan/resonance/
-    ├── MainActivity.kt
-    ├── data/
-    │   ├── model/Song.kt              ← Song, API responses, UI state
-    │   └── network/NetworkService.kt  ← Retrofit + API interface
-    ├── service/
-    │   └── MusicService.kt            ← Foreground service (ExoPlayer + MediaSession)
-    ├── viewmodel/
-    │   └── MusicPlayerViewModel.kt    ← All logic + state (StateFlow)
-    └── ui/
-        ├── theme/Theme.kt             ← Dark palette (DeepBlack + Cyan)
-        └── screens/MusicPlayerScreen.kt ← Full Compose UI
-```
-
----
-
-## Android App Setup
-
-### 1. Kotlin / Android project
-- Create a new Android project in Android Studio
-- Package name: `com.shyan.resonance`
-- Min SDK: 26 (Android 8.0)
-- Language: Kotlin
-- Build config: Kotlin DSL
-
-### 2. Connect Android app
-In `NetworkService.kt`, set your server IP:
-```kotlin
-// Android Emulator:
-var BASE_URL = "http://10.0.2.2:8080/"
-
-// Real phone on same WiFi as your PC:
-var BASE_URL = "http://192.168.x.x:8080/"   // ← your PC's IP
-```
-
-### 3. Build & Run
-Hit ▶️ in Android Studio.
-
----
-
-## Server Setup
-
-FastAPI backend for the Dreamin Android music app.
-
-### Run locally
-
+**Run locally:**
 ```bash
-cd Server
+cd backend
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-### Run with Docker
-
+**Run with Docker:**
 ```bash
-cd Server
+cd backend
 docker build -t dreamin-server .
 docker run -p 8080:8080 dreamin-server
 ```
 
-### Endpoints
+### Android App
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/mobile/health` | Health check |
+1. Open the project in Android Studio (Hedgehog or newer)
+2. Set your server URL in `app/src/main/java/com/shyan/dreamin/data/network/NetworkService.kt`:
+```kotlin
+// Emulator
+var BASE_URL = "http://10.0.2.2:8080/"
+
+// Physical device (same Wi-Fi as your PC)
+var BASE_URL = "http://192.168.x.x:8080/"
+
+// Production
+var BASE_URL = "https://your-server-url.com/"
+```
+3. Hit **Run** in Android Studio
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Health check |
+| GET | `/api/mobile/health` | App health check |
+| POST | `/api/mobile/register` | Register device |
 | GET | `/api/mobile/search?q=` | Search songs |
-| GET | `/api/mobile/chart` | Trending chart (cached 6h) |
+| GET | `/api/mobile/chart?language=` | Trending chart |
 | GET | `/api/mobile/play?id=&artist=&title=` | Get stream URL |
 | GET | `/api/mobile/up_next?song_id=` | Queue suggestions |
-| GET | `/api/mobile/recommend?song_id=` | Personalised recommendations |
+| GET | `/api/mobile/recommend?song_id=` | Recommendations |
 
----
+## Deployment
 
-## Key Design Decisions
+The backend auto-deploys to [ClawCloud](https://clawcloud.com) on every push to `main` that changes files in `backend/`.
 
-### Why Media3 MediaSessionService?
-On iOS, Daydreamin used `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` manually.
-On Android, Media3's `MediaSessionService` does all of it automatically:
-- Lock screen album art, title, artist
-- Play/pause/skip buttons on lock screen
-- Persistent notification with controls
-- Hardware media button support
+**Required GitHub secrets:**
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `CLAWCLOUD_DEPLOY_HOOK` | ClawCloud redeploy webhook URL |
 
-Zero manual notification code needed.
+## Project Structure
 
-### Why StateFlow?
-The ViewModel exposes a single `PlayerUiState` via `StateFlow`. The UI collects it with
-`collectAsStateWithLifecycle()` for automatic lifecycle-aware updates.
+```
+Dreamin/
+├── app/                        # Android app
+│   └── src/main/java/com/shyan/dreamin/
+│       ├── data/
+│       │   ├── local/          # Room database, DAOs, DataStore
+│       │   ├── model/          # Data models
+│       │   └── network/        # Retrofit API interface
+│       ├── service/            # MusicService (ExoPlayer + MediaSession)
+│       ├── viewmodel/          # MusicPlayerViewModel
+│       └── ui/
+│           ├── screens/        # Compose screens
+│           └── theme/          # App themes and colors
+├── backend/                    # FastAPI server
+│   ├── app.py
+│   ├── requirements.txt
+│   └── Dockerfile
+└── .github/workflows/          # CI/CD
+    └── deploy-backend.yml
+```
 
-### Why MediaController?
-`MediaController` connects the ViewModel to `MusicService` over a session.
-This means even if the Activity is destroyed (user swipes away), the Service keeps playing,
-and re-connecting when the app re-opens gives instant state sync.
+## License
 
----
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| Can't reach server on real phone | Make sure phone + PC are on same WiFi. Use PC's LAN IP, not `localhost`. |
-| Stream URL not working | Start FastAPI server first. Check `usesCleartextTraffic="true"` in Manifest. |
-| No notification showing | Grant notification permission (Android 13+) — the app requests this on launch. |
-| Audio cuts out in background | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission is in Manifest ✅ |
+Personal project — not licensed for redistribution.
