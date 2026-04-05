@@ -395,11 +395,13 @@ async def admin_users(token: str = Query(...)):
     users: list[dict] = load_json(USERS_FILE, [])
     import datetime
 
+    IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+
     rows = ""
     for u in reversed(users):
         ts = u.get("updated_at") or u.get("registered_at", "")
         try:
-            dt = datetime.datetime.fromisoformat(ts).strftime("%d %b %Y, %H:%M") if ts else "—"
+            dt = datetime.datetime.fromisoformat(ts).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST") if ts else "—"
         except ValueError:
             dt = ts
         device = u.get("device_id", "")[:16] + "…" if len(u.get("device_id", "")) > 16 else u.get("device_id", "—")
