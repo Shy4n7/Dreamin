@@ -637,6 +637,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 isSearchActive = true,
                 searchPage = 1,
                 hasMoreSearchResults = false,
+                searchError = null,
                 searchResults = if (query.isEmpty()) emptyList() else it.searchResults
             )
         }
@@ -657,7 +658,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     throw e
                 } catch (e: Exception) {
                     android.util.Log.e("MusicVM", "Search failed: ${e.javaClass.simpleName}: ${e.message}")
-                    _uiState.update { it.copy(searchResults = emptyList()) }
+                    _uiState.update { it.copy(searchResults = emptyList(), searchError = "Couldn't reach search. Check your connection.") }
                 }
             }
         }

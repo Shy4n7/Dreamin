@@ -208,6 +208,20 @@ private fun MainAppScaffold(
         pageCount = { navScreens.size }
     )
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show snackbar on playback error
+    LaunchedEffect(state.playbackState) {
+        val err = state.playbackState as? PlaybackState.Error ?: return@LaunchedEffect
+        val msg = when {
+            err.message.contains("auth_url", ignoreCase = true) ||
+            err.message.contains("encrypted", ignoreCase = true) -> "Couldn't load this song. Try another."
+            err.message.contains("timeout", ignoreCase = true) ||
+            err.message.contains("connect", ignoreCase = true) -> "Connection timed out. Check your internet."
+            else -> "Couldn't play this song. Try another."
+        }
+        snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+    }
 
     LaunchedEffect(pagerState.settledPage) {
         val screen = navScreens.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
@@ -246,6 +260,16 @@ private fun MainAppScaffold(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = colors.surfaceHighest,
+                        contentColor = colors.onSurface,
+                        actionColor = colors.primary
+                    )
+                }
+            },
             bottomBar = {
                 Column {
                     AnimatedVisibility(
@@ -310,7 +334,8 @@ private fun MainAppScaffold(
                     onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
                     onEditName               = vm::saveUserName,
                     onClearRecentSearches    = vm::clearRecentSearches,
-                    onResumeLastSession      = onResumeSession
+                    onResumeLastSession      = onResumeSession,
+                    searchError              = state.searchError
                 )
                         Screen.Library -> LibraryScreen(
                             state                    = state,
@@ -646,6 +671,7 @@ fun HomeScreen(
     onEditName: (String) -> Unit = {},
     onClearRecentSearches: () -> Unit = {},
     onResumeLastSession: () -> Unit = {},
+    searchError: String? = null,
 ) {
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -700,7 +726,8 @@ fun HomeScreen(
                     hasMore = hasMoreSearchResults,
                     isLoadingMore = isLoadingMoreSearch,
                     onLoadMore = onLoadMoreSearch,
-                    onAddToPlaylist = onAddToPlaylist
+                    onAddToPlaylist = onAddToPlaylist,
+                    errorMessage = searchError
                 )
             }
         } else {
@@ -880,7 +907,8 @@ fun SearchResults(
     hasMore: Boolean = false,
     isLoadingMore: Boolean = false,
     onLoadMore: () -> Unit = {},
-    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> }
+    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    errorMessage: String? = null
 ) {
     val colors = LocalDreaminColors.current
     if (songs.isEmpty()) {
@@ -888,7 +916,20 @@ fun SearchResults(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text("No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (errorMessage != null) {
+                    Icon(
+                        Icons.Outlined.WifiOff,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(errorMessage, color = colors.onSurfaceVariant, fontSize = 15.sp)
+                } else {
+                    Text("No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                }
+            }
         }
         return
     }

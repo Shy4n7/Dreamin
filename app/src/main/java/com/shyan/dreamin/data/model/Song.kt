@@ -79,5 +79,6 @@ data class PlayerUiState(
     val playlistArtworks: Map<Long, List<String>> = emptyMap(),
     val openPlaylistId: Long? = null,
     val openPlaylistSongs: List<Song> = emptyList(),
-    val playlistQueueActive: Boolean = false
+    val playlistQueueActive: Boolean = false,
+    val searchError: String? = null
 )
