@@ -32,6 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -629,14 +631,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (cacheIsValid) {
                 _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
             }
-            // Fetch fresh — retry once after 3s if server is cold-starting
+            // Fetch Tamil + English charts in parallel, interleave results
             val retryDelayMs = 3_000L
             repeat(3) { attempt ->
                 try {
-                    val chart = api.getChart(language = "tamil")
-                    if (chart.songs.isNotEmpty()) {
-                        _uiState.update { it.copy(trendingCharts = chart.songs, isLoadingChart = false) }
-                        userPrefs.saveChartCache(chart.songs)
+                    val (tamil, english) = coroutineScope {
+                        val tamilDeferred = async { runCatching { api.getChart(language = "tamil") }.getOrNull() }
+                        val englishDeferred = async { runCatching { api.getChart(language = "english") }.getOrNull() }
+                        Pair(
+                            tamilDeferred.await()?.songs ?: emptyList(),
+                            englishDeferred.await()?.songs ?: emptyList()
+                        )
+                    }
+
+                    // Interleave: T E T E T E ...
+                    val merged = mutableListOf<com.shyan.dreamin.data.model.Song>()
+                    val maxLen = maxOf(tamil.size, english.size)
+                    for (i in 0 until maxLen) {
+                        if (i < tamil.size) merged.add(tamil[i])
+                        if (i < english.size) merged.add(english[i])
+                    }
+
+                    if (merged.isNotEmpty()) {
+                        _uiState.update { it.copy(trendingCharts = merged, isLoadingChart = false) }
+                        userPrefs.saveChartCache(merged)
                     } else {
                         _uiState.update { it.copy(isLoadingChart = false) }
                     }
