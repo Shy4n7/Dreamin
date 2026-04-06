@@ -1708,7 +1708,7 @@ fun NowPlayingScreen(
             ) { _ ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        song.artist,
+                        song.displayTitle,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = colors.onSurface,
@@ -1722,7 +1722,7 @@ fun NowPlayingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            song.displayTitle,
+                            song.artist,
                             fontSize = 16.sp,
                             color = colors.onSurfaceVariant,
                             maxLines = 1,
