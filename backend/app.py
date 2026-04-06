@@ -146,25 +146,32 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
         f"&_format=json&_marker=0&api_version=4&ctx=web6dot0"
         f"&q={encoded}&n={limit}&p={page}"
     )
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-        songs = []
-        for item in data.get("results", []):
-            image = item.get("image", "").replace("150x150", "500x500")
-            more = item.get("more_info", {})
-            songs.append(Song(
-                id=item.get("id", ""),
-                title=clean_title(item.get("title", "")),
-                artist=extract_artist(more),
-                artwork_url=image,
-                duration=int(more.get("duration", 0)) * 1000,
-            ))
-        return songs
-    except Exception as e:
-        print(f"[jiosaavn_search] error: {e}")
-        return []
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            results = data.get("results", [])
+            if not results and attempt < 2:
+                time.sleep(0.5)
+                continue
+            songs = []
+            for item in results:
+                image = item.get("image", "").replace("150x150", "500x500")
+                more = item.get("more_info", {})
+                songs.append(Song(
+                    id=item.get("id", ""),
+                    title=clean_title(item.get("title", "")),
+                    artist=extract_artist(more),
+                    artwork_url=image,
+                    duration=int(more.get("duration", 0)) * 1000,
+                ))
+            return songs
+        except Exception as e:
+            print(f"[jiosaavn_search] attempt {attempt + 1} error: {e}")
+            if attempt < 2:
+                time.sleep(0.5)
+    return []
 
 
 def _fetch_song_details_raw(song_id: str) -> dict:
