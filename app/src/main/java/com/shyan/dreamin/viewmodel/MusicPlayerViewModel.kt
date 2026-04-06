@@ -32,6 +32,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import org.json.JSONObject
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -397,6 +401,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private suspend fun resolveStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
+        // Step 1: get encrypted_media_url from song details
+        val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=$songId"
+        val conn1 = (URL(detailsUrl).openConnection() as HttpURLConnection).apply {
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
+            setRequestProperty("Referer", "https://www.jiosaavn.com/")
+            connectTimeout = 12000
+            readTimeout = 12000
+        }
+        val details = JSONObject(conn1.inputStream.bufferedReader().readText())
+        conn1.disconnect()
+        val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "") ?: ""
+        if (encUrl.isBlank()) throw IllegalStateException("No encrypted_media_url for $songId")
+
+        // Step 2: exchange for auth_url
+        val enc = URLEncoder.encode(encUrl, "UTF-8")
+        val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=web6dot0&_marker=0"
+        val conn2 = (URL(authUrl).openConnection() as HttpURLConnection).apply {
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
+            setRequestProperty("Referer", "https://www.jiosaavn.com/")
+            connectTimeout = 12000
+            readTimeout = 12000
+        }
+        val authResp = JSONObject(conn2.inputStream.bufferedReader().readText())
+        conn2.disconnect()
+        val streamUrl = authResp.optString("auth_url", "")
+        if (streamUrl.isBlank() || streamUrl == "false") throw IllegalStateException("No auth_url for $songId")
+        streamUrl
+    }
+
     fun playSong(song: Song, fromPlaylist: Boolean = false) {
         // Optimistic UI: update song + state immediately so artwork/title swap is instant
         _uiState.update {
@@ -411,20 +445,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             try {
-                val response = api.getStreamUrl(
-                    id = song.id,
-                    artist = song.artist,
-                    title = song.title,
-                )
+                // Resolve stream URL on-device — bypasses server for playback
+                val streamUrl = resolveStreamUrl(song.id)
 
-                val streamUrl = response.proxyUrl ?: response.streamUrl
-                    ?: throw IllegalStateException("No stream URL for '${song.title}'")
+                // Fire-and-forget: record play on server (non-blocking, failure is ok)
+                launch {
+                    runCatching { api.recordPlay(id = song.id, artist = song.artist, title = song.title) }
+                }
 
                 historyRepo.recordPlay(song)
 
                 val mediaItem = MediaItem.Builder()
                     .setMediaId(song.id)
-                    .setUri(streamUrl)
+                    .setUri(android.net.Uri.parse(streamUrl))
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(song.title)

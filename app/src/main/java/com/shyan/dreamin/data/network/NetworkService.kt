@@ -28,7 +28,7 @@ interface MusicApi {
     suspend fun getChart(@Query("language") language: String = "tamil"): ChartResponse
 
     @GET("api/mobile/play")
-    suspend fun getStreamUrl(
+    suspend fun recordPlay(
         @Query("id") id: String,
         @Query("artist") artist: String,
         @Query("title") title: String,

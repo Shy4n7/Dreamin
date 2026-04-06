@@ -521,14 +521,16 @@ async def play(
     artist: str = Query(...),
     title: str = Query(...),
 ):
-    # Fetch song details and cache them — /up_next will reuse without extra network call
-    song_data = await asyncio.to_thread(_fetch_song_details_raw, id)
-    _song_details_cache[id] = {"ts": time.time(), "data": song_data}
+    # Stream URL is now resolved on-device — server just records the play and caches details
+    # Run both concurrently; neither blocks playback on the client
+    async def _record():
+        song_data = await asyncio.to_thread(_fetch_song_details_raw, id)
+        _song_details_cache[id] = {"ts": time.time(), "data": song_data}
+        language = song_data.get("language", "").lower().strip()
+        await asyncio.to_thread(record_play, id, title, artist, language)
 
-    language = song_data.get("language", "").lower().strip()
-    await asyncio.to_thread(record_play, id, title, artist, language)
-    stream_url = await asyncio.to_thread(jiosaavn_stream, id)
-    return PlayResponse(stream_url=stream_url)
+    asyncio.create_task(_record())
+    return PlayResponse(stream_url=None)
 
 
 @app.get("/api/mobile/up_next", response_model=UpNextResponse)
