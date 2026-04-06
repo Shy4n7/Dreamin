@@ -401,6 +401,49 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private suspend fun searchOnDevice(query: String, limit: Int = 15, page: Int = 1): List<Song> = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
+        repeat(3) { attempt ->
+            try {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
+                    connectTimeout = 10000
+                    readTimeout = 10000
+                }
+                val text = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                val root = org.json.JSONObject(text)
+                val results = root.optJSONArray("results") ?: return@withContext emptyList()
+                val songs = mutableListOf<Song>()
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val more = item.optJSONObject("more_info") ?: org.json.JSONObject()
+                    val image = item.optString("image").replace("150x150", "500x500")
+                    val artistMap = more.optJSONObject("artistMap")
+                    val primaryArr = artistMap?.optJSONArray("primary_artists")
+                    val artist = if (primaryArr != null && primaryArr.length() > 0) {
+                        (0 until primaryArr.length()).joinToString(", ") { primaryArr.getJSONObject(it).optString("name") }
+                    } else more.optString("singers").ifBlank { "" }
+                    songs.add(Song(
+                        id = item.optString("id"),
+                        title = item.optString("title"),
+                        artist = artist,
+                        artworkUrl = image,
+                        duration = (more.optString("duration").toLongOrNull() ?: 0L) * 1000L
+                    ))
+                }
+                return@withContext songs
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("MusicVM", "searchOnDevice attempt ${attempt + 1} failed: ${e.message}")
+                if (attempt < 2) kotlinx.coroutines.delay(500)
+            }
+        }
+        emptyList()
+    }
+
     private suspend fun resolveStreamUrl(songId: String): String = withContext(Dispatchers.IO) {
         // Step 1: get encrypted_media_url from song details
         val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=$songId"
@@ -602,12 +645,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             searchJob = viewModelScope.launch {
                 delay(300)
                 try {
-                    val results = api.search(query, page = 1)
+                    val songs = searchOnDevice(query, page = 1)
                     userPrefs.addRecentSearch(query.trim())
                     _uiState.update {
                         it.copy(
-                            searchResults = results.results,
-                            hasMoreSearchResults = results.results.size >= 15
+                            searchResults = songs,
+                            hasMoreSearchResults = songs.size >= 15
                         )
                     }
                 } catch (e: CancellationException) {
@@ -627,13 +670,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(isLoadingMoreSearch = true) }
         viewModelScope.launch {
             try {
-                val results = api.search(state.searchQuery, page = nextPage)
+                val songs = searchOnDevice(state.searchQuery, page = nextPage)
                 _uiState.update {
                     it.copy(
-                        searchResults = it.searchResults + results.results,
+                        searchResults = it.searchResults + songs,
                         searchPage = nextPage,
                         isLoadingMoreSearch = false,
-                        hasMoreSearchResults = results.results.size >= 15
+                        hasMoreSearchResults = songs.size >= 15
                     )
                 }
             } catch (e: CancellationException) {
