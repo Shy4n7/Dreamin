@@ -54,7 +54,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.shyan.dreamin.data.model.*
+import com.shyan.dreamin.data.model.TrackRepeatMode
 import com.shyan.dreamin.viewmodel.MusicPlayerViewModel
 
 
@@ -1521,6 +1524,7 @@ private fun NowPlayingProgressSlider(
     onSeek: (Long) -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val haptic = LocalHapticFeedback.current
     val trackColor = colors.primary
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     var isSeeking by remember { mutableStateOf(false) }
@@ -1530,8 +1534,13 @@ private fun NowPlayingProgressSlider(
 
     Slider(
         value = displayProgress,
-        onValueChange = { seekProgress = it; isSeeking = true },
+        onValueChange = {
+            if (!isSeeking) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            seekProgress = it
+            isSeeking = true
+        },
         onValueChangeFinished = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onSeek((seekProgress * durationMs).toLong())
             isSeeking = false
         },
@@ -1689,48 +1698,55 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            
-            Text(
-                song.artist,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = colors.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    song.displayTitle,
-                    fontSize = 16.sp,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                        imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (state.currentSongIsFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (state.currentSongIsFavorite) Color(0xFFFF6B6B) else colors.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
+            // Artist + title crossfade on song change
+            AnimatedContent(
+                targetState = song.id,
+                transitionSpec = {
+                    fadeIn(tween(300)) togetherWith fadeOut(tween(200))
+                },
+                label = "song_meta_crossfade"
+            ) { _ ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        song.artist,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = colors.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (state.playlists.isNotEmpty()) {
-                    IconButton(onClick = { showPlaylistPicker = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.PlaylistAdd,
-                            contentDescription = "Add to playlist",
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            song.displayTitle,
+                            fontSize = 16.sp,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        IconButton(onClick = onToggleFavorite) {
+                            Icon(
+                                imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = null,
+                                tint = if (state.currentSongIsFavorite) Color(0xFFFF6B6B) else colors.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        if (state.playlists.isNotEmpty()) {
+                            IconButton(onClick = { showPlaylistPicker = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.PlaylistAdd,
+                                    contentDescription = "Add to playlist",
+                                    tint = colors.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1743,72 +1759,132 @@ fun NowPlayingScreen(
                 onSeek = onSeek
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
+            // Shuffle / Repeat row
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
+                val shuffleTint by animateColorAsState(
+                    targetValue = if (state.isShuffle) colors.primary else colors.onSurfaceVariant,
+                    animationSpec = tween(200),
+                    label = "shuffle_tint"
+                )
+                IconButton(onClick = onToggleShuffle, modifier = Modifier.size(44.dp)) {
                     Icon(
-                        Icons.Filled.SkipPrevious,
-                        contentDescription = "Previous",
-                        tint = colors.onSurface,
-                        modifier = Modifier.size(32.dp)
+                        Icons.Filled.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = shuffleTint,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(24.dp))
-
-                val isLoading = state.playbackState == PlaybackState.Loading
-                val playScale by animateFloatAsState(
-                    targetValue = if (state.playbackState == PlaybackState.Playing) 1f else 0.95f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
-                    label = "play_scale"
-                )
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .scale(if (isLoading) 0.95f else playScale)
-                        .clip(CircleShape)
-                        .background(colors.primary)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.4f), radius = 32.dp),
-                            enabled = !isLoading
-                        ) { onPlayPause() },
-                    contentAlignment = Alignment.Center
+                // Playback controls — prev / play / next
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            color = Color.Black,
-                            strokeWidth = 2.5.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = if (state.playbackState == PlaybackState.Playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (state.playbackState == PlaybackState.Playing) "Pause" else "Play",
-                            tint = Color.Black,
-                            modifier = Modifier.size(32.dp)
-                        )
+                    var prevPressed by remember { mutableStateOf(false) }
+                    val prevScale by animateFloatAsState(
+                        targetValue = if (prevPressed) 0.82f else 1f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                        label = "prev_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(prevScale)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false, radius = 24.dp, color = colors.primary)
+                            ) {
+                                prevPressed = true
+                                onPrevious()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.onSurface, modifier = Modifier.size(32.dp))
                     }
+                    LaunchedEffect(prevPressed) { if (prevPressed) { kotlinx.coroutines.delay(120); prevPressed = false } }
+
+                    Spacer(modifier = Modifier.width(20.dp))
+
+                    val isLoading = state.playbackState == PlaybackState.Loading
+                    val playScale by animateFloatAsState(
+                        targetValue = if (state.playbackState == PlaybackState.Playing) 1f else 0.95f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                        label = "play_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .scale(if (isLoading) 0.95f else playScale)
+                            .clip(CircleShape)
+                            .background(colors.primary)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.4f), radius = 32.dp),
+                                enabled = !isLoading
+                            ) { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.Black, strokeWidth = 2.5.dp)
+                        } else {
+                            Icon(
+                                imageVector = if (state.playbackState == PlaybackState.Playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(20.dp))
+
+                    var nextPressed by remember { mutableStateOf(false) }
+                    val nextScale by animateFloatAsState(
+                        targetValue = if (nextPressed) 0.82f else 1f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                        label = "next_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(nextScale)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false, radius = 24.dp, color = colors.primary)
+                            ) {
+                                nextPressed = true
+                                onNext()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.onSurface, modifier = Modifier.size(32.dp))
+                    }
+                    LaunchedEffect(nextPressed) { if (nextPressed) { kotlinx.coroutines.delay(120); nextPressed = false } }
                 }
 
-                Spacer(modifier = Modifier.width(24.dp))
-
-                IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
+                val repeatActive = state.repeatMode != TrackRepeatMode.OFF
+                val repeatTint by animateColorAsState(
+                    targetValue = if (repeatActive) colors.primary else colors.onSurfaceVariant,
+                    animationSpec = tween(200),
+                    label = "repeat_tint"
+                )
+                IconButton(onClick = onToggleRepeat, modifier = Modifier.size(44.dp)) {
                     Icon(
-                        Icons.Filled.SkipNext,
-                        contentDescription = "Next",
-                        tint = colors.onSurface,
-                        modifier = Modifier.size(32.dp)
+                        imageVector = if (state.repeatMode == TrackRepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                        contentDescription = "Repeat",
+                        tint = repeatTint,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             Spacer(modifier = Modifier.height(24.dp))
             val upcomingSlice = remember(state.queue, state.currentSong) {
@@ -2064,7 +2140,10 @@ private fun UpNextRow(
         }
 
         AsyncImage(
-            model = song.artworkUrl,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(song.artworkUrl)
+                .crossfade(200)
+                .build(),
             contentDescription = null,
             modifier = Modifier
                 .size(44.dp)
@@ -2274,7 +2353,10 @@ fun QueueSongRow(
         Spacer(modifier = Modifier.width(8.dp))
 
         AsyncImage(
-            model = song.artworkUrl,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(song.artworkUrl)
+                .crossfade(200)
+                .build(),
             contentDescription = null,
             modifier = Modifier
                 .size(56.dp)
