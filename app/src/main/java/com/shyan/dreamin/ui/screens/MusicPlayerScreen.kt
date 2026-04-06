@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.viewmodel.MusicPlayerViewModel
 
@@ -538,7 +540,10 @@ fun MiniPlayer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AsyncImage(
-                        model = s.artworkUrl,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(s.artworkUrl)
+                            .crossfade(200)
+                            .build(),
                         contentDescription = null,
                         modifier = Modifier
                             .size(48.dp)
@@ -1032,15 +1037,19 @@ fun HorizontalSongCard(
     Column(
         modifier = Modifier
             .width(110.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
+                indication = ripple(bounded = true, color = LocalDreaminColors.current.primary)
             ) { onClick() },
         horizontalAlignment = Alignment.Start
     ) {
         Box {
             AsyncImage(
-                model = song.artworkUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(song.artworkUrl)
+                    .crossfade(200)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier
                     .size(100.dp)
@@ -1111,7 +1120,10 @@ private fun JumpBackInCard(
     ) {
         Box {
             AsyncImage(
-                model = session.song.artworkUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(session.song.artworkUrl)
+                    .crossfade(200)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier
                     .size(56.dp)
@@ -1372,14 +1384,19 @@ fun SongRow(
 ) {
     val colors = LocalDreaminColors.current
     val playlists = LocalPlaylists.current
-    var swipeOffset by remember { mutableFloatStateOf(0f) }
+    val swipeOffset = remember { Animatable(0f) }
     val swipeThreshold = 100f
     var showPlaylistPicker by remember { mutableStateOf(false) }
     val swipeHintColor = remember(colors.primary) { colors.primary.copy(alpha = 0.2f) }
-    val swipeIconColor = colors.primary
+    val scope = rememberCoroutineScope()
+
+    // Capture callbacks in refs so pointerInput doesn't need to restart on lambda change
+    val onAddToQueueRef = rememberUpdatedState(onAddToQueue)
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        if (swipeOffset > 0f) {
+        // Background hint — only drawn when swiping, no recomposition during drag
+        val swipeVal = swipeOffset.value
+        if (swipeVal > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1387,11 +1404,11 @@ fun SongRow(
                     .background(swipeHintColor),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (swipeOffset > swipeThreshold * 0.5f) {
+                if (swipeVal > swipeThreshold * 0.5f) {
                     Icon(
                         Icons.Default.AddCircle,
                         contentDescription = "Add to queue",
-                        tint = swipeIconColor,
+                        tint = colors.primary,
                         modifier = Modifier.padding(start = 20.dp)
                     )
                 }
@@ -1401,20 +1418,23 @@ fun SongRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(onAddToQueue) {
+                .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
-                            val captured = swipeOffset
-                            swipeOffset = 0f
-                            if (captured > swipeThreshold) onAddToQueue()
+                            val captured = swipeOffset.value
+                            scope.launch { swipeOffset.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                            if (captured > swipeThreshold) onAddToQueueRef.value()
+                        },
+                        onDragCancel = {
+                            scope.launch { swipeOffset.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            swipeOffset = (swipeOffset + dragAmount).coerceIn(0f, 200f)
+                            scope.launch { swipeOffset.snapTo((swipeOffset.value + dragAmount).coerceIn(0f, 200f)) }
                         }
                     )
                 }
-                .graphicsLayer { translationX = swipeOffset }
+                .graphicsLayer { translationX = swipeOffset.value }
                 .background(
                     if (isPlaying) colors.surfaceHigh else Color.Transparent,
                     RoundedCornerShape(16.dp)
@@ -1430,7 +1450,10 @@ fun SongRow(
         ) {
             Box {
                 AsyncImage(
-                    model = song.artworkUrl,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(song.artworkUrl)
+                        .crossfade(200)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
@@ -1455,7 +1478,7 @@ fun SongRow(
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     song.displayTitle,
                     color = if (isPlaying) colors.primary else colors.onSurface,
