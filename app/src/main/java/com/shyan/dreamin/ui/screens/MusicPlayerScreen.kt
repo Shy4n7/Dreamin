@@ -171,10 +171,28 @@ fun MusicPlayerScreen(vm: MusicPlayerViewModel = viewModel()) {
         }
     }
 
-    CompositionLocalProvider(LocalDreaminColors provides SonicNocturneColors) {
+    val baseColors = SonicNocturneColors
+    val rawTint = if (state.dominantColor != 0) Color(state.dominantColor) else null
+    val animatedTint by animateColorAsState(
+        targetValue = rawTint ?: baseColors.background,
+        animationSpec = tween(800),
+        label = "dominant_tint"
+    )
+    val tintAlpha = if (rawTint != null) 0.10f else 0f
+    val colors = remember(animatedTint, tintAlpha) {
+        baseColors.copy(
+            background       = blendDominantTint(baseColors.background,      animatedTint, tintAlpha),
+            surfaceContainer = blendDominantTint(baseColors.surfaceContainer, animatedTint, tintAlpha * 0.7f),
+            surfaceHigh      = blendDominantTint(baseColors.surfaceHigh,      animatedTint, tintAlpha * 0.5f),
+            surfaceHighest   = blendDominantTint(baseColors.surfaceHighest,   animatedTint, tintAlpha * 0.4f),
+            surfaceBright    = blendDominantTint(baseColors.surfaceBright,    animatedTint, tintAlpha * 0.3f)
+        )
+    }
+
+    CompositionLocalProvider(LocalDreaminColors provides colors) {
         DreaminRippleTheme {
             when {
-                state.userName == null -> Box(Modifier.fillMaxSize().background(SonicNocturneColors.background))
+                state.userName == null -> Box(Modifier.fillMaxSize().background(colors.background))
                 state.userName?.isBlank() == true -> OnboardingScreen(onNameSubmit = vm::saveUserName)
                 else -> MainAppScaffold(
                     state            = state,
@@ -208,21 +226,6 @@ private fun MainAppScaffold(
         pageCount = { navScreens.size }
     )
     val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    // Show snackbar on playback error
-    LaunchedEffect(state.playbackState) {
-        val err = state.playbackState as? PlaybackState.Error ?: return@LaunchedEffect
-        val msg = when {
-            err.message.contains("auth_url", ignoreCase = true) ||
-            err.message.contains("encrypted", ignoreCase = true) -> "Couldn't load this song. Try another."
-            err.message.contains("timeout", ignoreCase = true) ||
-            err.message.contains("connect", ignoreCase = true) -> "Connection timed out. Check your internet."
-            else -> "Couldn't play this song. Try another."
-        }
-        snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
-    }
-
     LaunchedEffect(pagerState.settledPage) {
         val screen = navScreens.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
         if (screen != currentScreen) onScreenChange(screen)
@@ -260,16 +263,6 @@ private fun MainAppScaffold(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
-            snackbarHost = {
-                SnackbarHost(snackbarHostState) { data ->
-                    Snackbar(
-                        snackbarData = data,
-                        containerColor = colors.surfaceHighest,
-                        contentColor = colors.onSurface,
-                        actionColor = colors.primary
-                    )
-                }
-            },
             bottomBar = {
                 Column {
                     AnimatedVisibility(
@@ -916,20 +909,7 @@ fun SearchResults(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (errorMessage != null) {
-                    Icon(
-                        Icons.Outlined.WifiOff,
-                        contentDescription = null,
-                        tint = colors.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(errorMessage, color = colors.onSurfaceVariant, fontSize = 15.sp)
-                } else {
-                    Text("No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
-                }
-            }
+            Text("No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
         }
         return
     }

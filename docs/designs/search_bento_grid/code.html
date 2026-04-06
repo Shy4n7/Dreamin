@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Music Search - Bento Style</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#221610",
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<!-- Sticky Header with Search Bar -->
+<header class="sticky top-0 z-30 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md px-4 pt-6 pb-4">
+<div class="flex items-center justify-between mb-4">
+<h1 class="text-3xl font-800 tracking-tight">Search</h1>
+<div class="bg-primary/10 dark:bg-primary/20 p-2 rounded-full">
+<span class="material-symbols-outlined text-primary">account_circle</span>
+</div>
+</div>
+<label class="flex flex-col w-full group">
+<div class="flex w-full items-stretch rounded-xl h-14 bg-slate-200/50 dark:bg-slate-800/50 border-2 border-transparent focus-within:border-primary transition-all">
+<div class="flex items-center justify-center pl-4 text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="form-input flex w-full border-none bg-transparent focus:ring-0 placeholder:text-slate-500 dark:placeholder:text-slate-400 px-3 text-lg font-medium" placeholder="Artists, songs, or podcasts"/>
+</div>
+</label>
+</header>
+<!-- Search Content -->
+<main class="px-4 space-y-8">
+<!-- Recent Searches -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-xl font-bold">Recent Searches</h2>
+<button class="text-primary font-semibold text-sm">Clear</button>
+</div>
+<div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center overflow-hidden border-2 border-primary/20">
+<img class="object-cover size-full" data-alt="Close up portrait of a male jazz musician" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOP_vNLudEZ9kI3o_u53tSBGjEjG_D2UhokQwou45tNo95JqAeQwRMVsxX7wU05LtDpYQesrZ4H5lXNHiPfArkUNUJWqaswoNgPpxxOByWAWArFg5XER_EE1r8qGti2wqHTzUxPH_KEJEnuigUBkoW73qTfya_GcUR2sOgkwZD04G9l-9XtSi7FBLqipWGlTfdUzK3vScRH57AeQvVoqN7eO-YH0GBptLUTTXZIiRpJG9U4I3M9HsSNFSn7A9gNReLV6NRs9mk9Io"/>
+</div>
+<span class="text-xs font-medium text-center truncate w-full">Miles Davis</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+<img class="object-cover size-full" data-alt="Vibrant neon stage lights at a concert" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUraOrEKKvzyKu7zcTm5QrRTGgAOWlOeQqTH1WMNeC76nERWTwor76J409s59hEri8FlCiFQTGEjs2rB_wV80iM5-BjD81kDc_CFXo8hRt4OwxPM3NH2LbOb6LwP3nr2uxyN6oZcvz7706fGYzHQ7aWyV2f45Pozj8jOkehSqZImAt4yYwfsD7G5bbICDpF2LkQJQ0VdoV3gUy97ZvW62fydBXwrNClFJSgY4YXEkMifUrftgehuV8IkBrZYdfW29NxFNeWOG2Uj8"/>
+</div>
+<span class="text-xs font-medium text-center truncate w-full">Techno Mix</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+<img class="object-cover size-full" data-alt="DJ turntables with glowing buttons" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNY7l_aq4QobGDxwKZx7WzhgJ4Fu0vWTdY28dcpQ05mD4FF7HfzZTF8_BgGdYOKXyVMuiy2TBkqm1kLEzexCEFuP86_6YCIJYuVTYK--OpWGUxfYi5-gmePq7WWLrrPv5XbzrFC1DLL0FquVlGDAvjxPwKHXlMcg591qs2aHJSBKmufJWSz9I-JUlJjbtTc66kLo2cu4UB54u-i2tjxxVrkF-pc6RxCDqSlg1Y1f4DpcsRU5_ab1jrTuCmXh5pRlxBCYY3M13V50g"/>
+</div>
+<span class="text-xs font-medium text-center truncate w-full">House Music</span>
+</div>
+</div>
+</section>
+<!-- Bento Grid Genres -->
+<section>
+<h2 class="text-xl font-bold mb-4">Explore Genres</h2>
+<div class="grid grid-cols-4 grid-rows-5 gap-3 h-[600px]">
+<!-- Large Feature: Pop -->
+<div class="col-span-2 row-span-2 rounded-2xl p-4 relative overflow-hidden bg-primary shadow-lg shadow-primary/20">
+<span class="relative z-10 text-white text-2xl font-800">Pop</span>
+<div class="absolute bottom-[-10%] right-[-10%] rotate-12 opacity-40">
+<span class="material-symbols-outlined !text-7xl text-white">music_note</span>
+</div>
+<img class="absolute inset-0 size-full object-cover mix-blend-overlay opacity-60" data-alt="Bright colorful pop music background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPlfxFTvu05Zo64SVCdAWepKnzKz9v-gAuuEAXb1ZAqBl2evrnxJGE1oXxFxFKq0hf8W5WadrDGV_Czf7X-BpxgRzY1lKSuywtzvI9YLLnqPUmhVfnglUk5JlZD7mqF7JUBMKXdrpeXoTHhHdb3ZTmyIFKbmuwxjJXTsZH27HQ3VUBs6VU8OeTOWkKkGaTKDu8wOqZxwH6kxtCUrwt04Yh8h9URyTQRvlRrwvUlSlEavTPmu8-F-O839914PlVfz9khRtILmd6vq8"/>
+</div>
+<!-- Hip Hop -->
+<div class="col-span-2 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-indigo-600">
+<span class="relative z-10 text-white text-xl font-700">Hip Hop</span>
+<img class="absolute inset-0 size-full object-cover mix-blend-multiply opacity-50" data-alt="Graffiti wall art with vibrant colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtUj6Sb_zQwerrEE8zAaCtbGS9Dz6wQqrujPYuruGL-g7h-XUu5XLLvLaM3Z6A3L1GzAzJxZpY8OvO2dv4cmz8_TpoxAySkSQiY137F99mb90VYickp9MZegiBr_9AyYIM_azUf33rT71GXxe0dRiSrVGutELNNV3I5XCL-MNMICxiXUOs9MgHWyZxPjeMH7bv9YSvPp7GwxJWpIyKk19lY13ElzqEkJ5cdrpednKAG6-Ax_41xTFpf-AzFNKunF1TE9yKMV74HYg"/>
+</div>
+<!-- Rock -->
+<div class="col-span-1 row-span-2 rounded-2xl p-4 relative overflow-hidden bg-red-700">
+<span class="relative z-10 text-white text-lg font-700 vertical-text">Rock</span>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<img class="absolute inset-0 size-full object-cover" data-alt="Electric guitar on stage under red lights" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyzqlHXWDvvp8ysEQqT3v9bcW2RNif_3SqhvC3e4Nclayl2WXsfXjDNnFZUCiVebLGOI6zVoVpj-vm-W1EyZk_YzsD6sp6eN2-G5suO6Fhzf8rAYu3XWjd05p3gIW--CkMts9KrvKVOfwvCdOvnoXlDV1-qbuZdlsVkacbLaGC_hqo7Hg2lxEi5pGMSH0lt9Oub0V-Y9RBLHyJ4xOXDhKFPVa0gXugrd1OaU65YneBXCiLR_g2NZZgAohKHZZXGmr16b3TrnRqcng"/>
+</div>
+<!-- Chill -->
+<div class="col-span-1 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-emerald-500">
+<span class="relative z-10 text-white text-sm font-700">Chill</span>
+<span class="material-symbols-outlined absolute bottom-2 right-2 text-white/50">spa</span>
+</div>
+<!-- Electronic -->
+<div class="col-span-2 row-span-2 rounded-2xl p-4 relative overflow-hidden bg-purple-600">
+<span class="relative z-10 text-white text-2xl font-800">EDM</span>
+<img class="absolute inset-0 size-full object-cover mix-blend-screen opacity-40" data-alt="Laser light show at a dance festival" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfi8ijEBAo6H50Hx0pbNS_ch6olSuU7YPKY7F1NSvUwZTHUvYteZAhcTsWQrjTlxlkMyabdvJzRkZlFtmPH8m6qz-f_Bt09pLGlCcRedLOiJ0f_CbObwsmgLOADDwW2a62keEVXJ1CnhOpFt9gMuh4olsnLTs_9XNZBrUKLNSTvuP-JnnCOSxwnS1zg78wbPcalRoP65u-9ciqo9DtnHihGXOafeA6UUHPhnwYDoecgFYDgzH6sSGRhhHL_TS6UrAhVybUlN1Nh0I"/>
+</div>
+<!-- Jazz -->
+<div class="col-span-1 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-amber-600">
+<span class="relative z-10 text-white text-sm font-700">Jazz</span>
+<span class="material-symbols-outlined absolute bottom-2 right-2 text-white/50">interests</span>
+</div>
+<!-- Podcast -->
+<div class="col-span-2 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-slate-900 flex items-center justify-between">
+<span class="text-white text-lg font-700">Podcasts</span>
+<span class="material-symbols-outlined text-primary text-3xl">mic</span>
+</div>
+<!-- Indie -->
+<div class="col-span-1 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-teal-600">
+<span class="relative z-10 text-white text-sm font-700">Indie</span>
+</div>
+<!-- Moods: Focus -->
+<div class="col-span-1 row-span-1 rounded-2xl p-4 relative overflow-hidden bg-blue-500">
+<span class="relative z-10 text-white text-sm font-700">Focus</span>
+</div>
+</div>
+</section>
+<!-- Browse All -->
+<section class="pb-8">
+<h2 class="text-xl font-bold mb-4">Moods &amp; More</h2>
+<div class="grid grid-cols-2 gap-3">
+<div class="h-24 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center px-4 gap-3 border border-orange-200 dark:border-orange-800">
+<span class="material-symbols-outlined text-orange-600 dark:text-orange-400">wb_sunny</span>
+<span class="font-bold">Sunny Day</span>
+</div>
+<div class="h-24 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center px-4 gap-3 border border-blue-200 dark:border-blue-800">
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400">nightlight</span>
+<span class="font-bold">Late Night</span>
+</div>
+<div class="h-24 rounded-xl bg-pink-100 dark:bg-pink-900/30 flex items-center px-4 gap-3 border border-pink-200 dark:border-pink-800">
+<span class="material-symbols-outlined text-pink-600 dark:text-pink-400">favorite</span>
+<span class="font-bold">Romance</span>
+</div>
+<div class="h-24 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center px-4 gap-3 border border-green-200 dark:border-green-800">
+<span class="material-symbols-outlined text-green-600 dark:text-green-400">fitness_center</span>
+<span class="font-bold">Workout</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 bg-background-light dark:bg-background-dark border-t border-slate-200 dark:border-slate-800 px-6 pb-6 pt-3 z-40">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined !fill-1">search</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Search</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">library_music</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Library</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Profile</span>
+</a>
+</div>
+</nav>
+</div>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .vertical-text {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            transform: rotate(180deg);
+        }
+    </style>
+</body></html>

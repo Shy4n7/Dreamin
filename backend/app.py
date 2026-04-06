@@ -15,6 +15,7 @@ import threading
 import urllib.request
 import urllib.parse
 import time
+import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,9 @@ from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 CACHE_DIR = Path("song_cache")
@@ -95,7 +99,7 @@ class ChartResponse(BaseModel):
     songs: list[Song] = []
 
 class PlayResponse(BaseModel):
-    stream_url: str
+    stream_url: Optional[str] = None
     proxy_url: Optional[str] = None
 
 class UpNextResponse(BaseModel):
@@ -378,11 +382,10 @@ async def register(req: RegisterRequest):
     if not name:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
     users: list[dict] = load_json(USERS_FILE, [])
-    import datetime
     entry = {
         "name": name,
         "device_id": req.device_id,
-        "registered_at": datetime.datetime.utcnow().isoformat()
+        "registered_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
     # Update existing device or append new
     existing = next((u for u in users if u.get("device_id") == req.device_id and req.device_id), None)
@@ -399,23 +402,43 @@ async def register(req: RegisterRequest):
 async def admin_users(token: str = Query(...)):
     if token != ADMIN_TOKEN:
         raise HTTPException(status_code=403, detail="Forbidden")
-    users: list[dict] = load_json(USERS_FILE, [])
-    import datetime
 
     IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 
-    rows = ""
+    def fmt_ts(ts_val) -> str:
+        if not ts_val:
+            return "—"
+        try:
+            if isinstance(ts_val, (int, float)):
+                return datetime.datetime.fromtimestamp(ts_val, tz=IST).strftime("%d %b %Y, %I:%M %p IST")
+            return datetime.datetime.fromisoformat(str(ts_val)).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+        except (ValueError, OSError):
+            return str(ts_val)
+
+    users: list[dict] = load_json(USERS_FILE, [])
+    user_rows = ""
     for u in reversed(users):
         ts = u.get("updated_at") or u.get("registered_at", "")
-        try:
-            dt = datetime.datetime.fromisoformat(ts).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST") if ts else "—"
-        except ValueError:
-            dt = ts
-        device = u.get("device_id", "")[:16] + "…" if len(u.get("device_id", "")) > 16 else u.get("device_id", "—")
-        rows += f"""
+        dt = fmt_ts(ts)
+        device = u.get("device_id", "")
+        device_display = (device[:16] + "…") if len(device) > 16 else (device or "—")
+        user_rows += f"""
         <tr>
           <td>{html.escape(u.get("name", ""))}</td>
-          <td style="font-family:monospace;font-size:12px">{html.escape(device)}</td>
+          <td style="font-family:monospace;font-size:12px">{html.escape(device_display)}</td>
+          <td>{dt}</td>
+        </tr>"""
+
+    history: list[dict] = load_json(PLAY_HISTORY_FILE, [])
+    stream_rows = ""
+    for entry in reversed(history[-50:]):
+        dt = fmt_ts(entry.get("ts"))
+        lang = entry.get("language", "—") or "—"
+        stream_rows += f"""
+        <tr>
+          <td>{html.escape(entry.get("title", "—"))}</td>
+          <td>{html.escape(entry.get("artist", "—"))}</td>
+          <td><span class="lang-badge">{html.escape(lang)}</span></td>
           <td>{dt}</td>
         </tr>"""
 
@@ -424,23 +447,34 @@ async def admin_users(token: str = Query(...)):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dreamin — Users</title>
+  <title>Dreamin — Admin</title>
   <style>
-    body {{ font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; padding: 24px; }}
-    h1 {{ color: #aba3ff; margin-bottom: 4px; }}
-    p  {{ color: #888; margin: 0 0 24px; font-size: 14px; }}
-    table {{ border-collapse: collapse; width: 100%; max-width: 700px; }}
-    th {{ text-align: left; color: #aba3ff; padding: 8px 16px; border-bottom: 1px solid #333; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }}
-    td {{ padding: 10px 16px; border-bottom: 1px solid #1a1a1a; font-size: 15px; }}
+    * {{ box-sizing: border-box; }}
+    body {{ font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; padding: 24px; margin: 0; }}
+    h1 {{ color: #aba3ff; margin: 0 0 4px; }}
+    h2 {{ color: #aba3ff; margin: 32px 0 12px; font-size: 16px; text-transform: uppercase; letter-spacing: .08em; }}
+    .meta {{ color: #888; margin: 0 0 8px; font-size: 14px; }}
+    table {{ border-collapse: collapse; width: 100%; max-width: 800px; margin-bottom: 8px; }}
+    th {{ text-align: left; color: #aba3ff; padding: 8px 16px; border-bottom: 1px solid #333; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }}
+    td {{ padding: 10px 16px; border-bottom: 1px solid #1a1a1a; font-size: 14px; }}
     tr:hover td {{ background: #111; }}
+    .lang-badge {{ background: #1a1a2e; color: #aba3ff; border-radius: 4px; padding: 2px 8px; font-size: 11px; text-transform: capitalize; }}
   </style>
 </head>
 <body>
   <h1>Dreamin</h1>
-  <p>{len(users)} user{"s" if len(users) != 1 else ""} registered</p>
+  <p class="meta">Admin dashboard</p>
+
+  <h2>Users <span style="color:#888;font-weight:400;font-size:13px">({len(users)})</span></h2>
   <table>
     <thead><tr><th>Name</th><th>Device ID</th><th>Last Seen</th></tr></thead>
-    <tbody>{rows}</tbody>
+    <tbody>{user_rows}</tbody>
+  </table>
+
+  <h2>Recent Streams <span style="color:#888;font-weight:400;font-size:13px">(last 50)</span></h2>
+  <table>
+    <thead><tr><th>Title</th><th>Artist</th><th>Language</th><th>Played At</th></tr></thead>
+    <tbody>{stream_rows}</tbody>
   </table>
 </body>
 </html>"""
@@ -520,17 +554,11 @@ async def play(
     id: str = Query(...),
     artist: str = Query(...),
     title: str = Query(...),
+    language: str = Query(default=""),
 ):
-    # Stream URL is now resolved on-device — server just records the play and caches details
-    # Run both concurrently; neither blocks playback on the client
-    async def _record():
-        song_data = await asyncio.to_thread(_fetch_song_details_raw, id)
-        _song_details_cache[id] = {"ts": time.time(), "data": song_data}
-        language = song_data.get("language", "").lower().strip()
-        await asyncio.to_thread(record_play, id, title, artist, language)
-
-    asyncio.create_task(_record())
-    return PlayResponse(stream_url=None)
+    # Stream URL is resolved on-device; server just records the play
+    asyncio.create_task(asyncio.to_thread(record_play, id, title, artist, language))
+    return PlayResponse()
 
 
 @app.get("/api/mobile/up_next", response_model=UpNextResponse)
