@@ -368,7 +368,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "server": "Dreamin", "version": "1.0.0"}
+    return {"status": "ok", "server": "Dreamin", "version": "1.1.2-IST"}
 
 
 @app.get("/api/mobile/health")
@@ -409,10 +409,14 @@ async def admin_users(token: str = Query(...)):
         if not ts_val:
             return "—"
         try:
+            # Handle timestamps (floats/ints)
             if isinstance(ts_val, (int, float)):
                 return datetime.datetime.fromtimestamp(ts_val, tz=IST).strftime("%d %b %Y, %I:%M %p IST")
-            return datetime.datetime.fromisoformat(str(ts_val)).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
-        except (ValueError, OSError):
+            
+            # Handle ISO strings (handle 'Z' for older Python versions)
+            ts_str = str(ts_val).replace('Z', '+00:00')
+            return datetime.datetime.fromisoformat(ts_str).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+        except Exception as e:
             return str(ts_val)
 
     users: list[dict] = load_json(USERS_FILE, [])
