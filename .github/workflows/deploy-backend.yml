@@ -29,7 +29,9 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: shyan7/dreamin-server:latest
+          tags: |
+            shyan7/dreamin-server:latest
+            shyan7/dreamin-server:${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
