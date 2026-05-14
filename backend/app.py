@@ -117,7 +117,7 @@ class RegisterRequest(BaseModel):
 
 def clean_title(raw: str) -> str:
     title = html.unescape(raw)
-    title = re.sub(r'\s*\(?\s*[Ff]rom\s+["\u201c\u2018].*?["\u201d\u2019]?\s*\)?$', '', title).strip()
+    title = re.sub(r'\s*\(?\s*[Ff]rom\s+["\u201c\u2018][^"\u201d\u2019]*["\u201d\u2019]?\s*\)?$', '', title).strip()
     return title
 
 
@@ -152,8 +152,10 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
     )
     for attempt in range(3):
         try:
+            if not url.startswith("https://"):
+                raise ValueError("Only https scheme is permitted")
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as r:
+            with urllib.request.urlopen(req, timeout=10) as r: # nosec B310
                 data = json.loads(r.read())
             results = data.get("results", [])
             if not results and attempt < 2:
@@ -180,16 +182,19 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
 
 def _fetch_song_details_raw(song_id: str) -> dict:
     """Network fetch — bypasses cache."""
+    encoded_song_id = urllib.parse.quote(song_id, safe="")
     url = (
         f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={song_id}"
+        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={encoded_song_id}"
     )
     try:
+        if not url.startswith("https://"):
+            raise ValueError("Only https scheme is permitted")
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r: # nosec B310
             data = json.loads(r.read())
         return data.get(song_id, {})
     except Exception:
@@ -285,16 +290,19 @@ def build_queue_queries(
 
 
 def jiosaavn_stream(song_id: str) -> str:
+    encoded_song_id = urllib.parse.quote(song_id, safe="")
     url1 = (
         f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={song_id}"
+        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={encoded_song_id}"
     )
     try:
+        if not url1.startswith("https://"):
+            raise ValueError("Only https scheme is permitted")
         req1 = urllib.request.Request(url1, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req1, timeout=10) as r:
+        with urllib.request.urlopen(req1, timeout=10) as r: # nosec B310
             data1 = json.loads(r.read())
 
         song_data = data1.get(song_id, {})
@@ -309,11 +317,13 @@ def jiosaavn_stream(song_id: str) -> str:
             f"&url={enc_encoded}&bitrate=320&api_version=4"
             f"&_format=json&ctx=web6dot0&_marker=0"
         )
+        if not url2.startswith("https://"):
+            raise ValueError("Only https scheme is permitted")
         req2 = urllib.request.Request(url2, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req2, timeout=10) as r:
+        with urllib.request.urlopen(req2, timeout=10) as r: # nosec B310
             data2 = json.loads(r.read())
 
         auth_url = data2.get("auth_url", "")
@@ -417,7 +427,7 @@ async def admin_users(token: str = Query(...)):
             ts_str = str(ts_val).replace('Z', '+00:00')
             return datetime.datetime.fromisoformat(ts_str).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
         except Exception as e:
-            return str(ts_val)
+            return html.escape(str(ts_val))
 
     users: list[dict] = load_json(USERS_FILE, [])
     user_rows = ""
@@ -428,8 +438,8 @@ async def admin_users(token: str = Query(...)):
         device_display = (device[:16] + "…") if len(device) > 16 else (device or "—")
         user_rows += f"""
         <tr>
-          <td>{html.escape(u.get("name", ""))}</td>
-          <td style="font-family:monospace;font-size:12px">{html.escape(device_display)}</td>
+          <td>{html.escape(str(u.get("name", "")))}</td>
+          <td style="font-family:monospace;font-size:12px">{html.escape(str(device_display))}</td>
           <td>{dt}</td>
         </tr>"""
 
@@ -440,9 +450,9 @@ async def admin_users(token: str = Query(...)):
         lang = entry.get("language", "—") or "—"
         stream_rows += f"""
         <tr>
-          <td>{html.escape(entry.get("title", "—"))}</td>
-          <td>{html.escape(entry.get("artist", "—"))}</td>
-          <td><span class="lang-badge">{html.escape(lang)}</span></td>
+          <td>{html.escape(str(entry.get("title", "—")))}</td>
+          <td>{html.escape(str(entry.get("artist", "—")))}</td>
+          <td><span class="lang-badge">{html.escape(str(lang))}</span></td>
           <td>{dt}</td>
         </tr>"""
 
@@ -516,7 +526,9 @@ async def _refresh_chart_cache(lang: str, query: str, cache_file: Path):
 
 @app.get("/api/mobile/chart", response_model=ChartResponse)
 async def chart(language: str = Query(default="tamil")):
-    lang = language.lower()
+    lang = re.sub(r'[^a-z0-9_-]', '', language.lower())
+    if not lang:
+        lang = "tamil"
     cache_file = DATA_DIR / f"chart_cache_{lang}.json"
     cache = load_json(cache_file, {})
     now = time.time()
@@ -713,11 +725,13 @@ async def debug_stream(song_id: str = Query(...)):
             f"&url={enc_encoded}&bitrate=320&api_version=4"
             f"&_format=json&ctx=web6dot0&_marker=0"
         )
+        if not url2.startswith("https://"):
+            raise HTTPException(status_code=400, detail="Only https scheme is permitted")
         req2 = urllib.request.Request(url2, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req2, timeout=10) as r:
+        with urllib.request.urlopen(req2, timeout=10) as r: # nosec B310
             data2 = json.loads(r.read())
         return {"enc_url": enc_url, "step2_response": data2}
     return {"error": "no enc_url found", "keys": list(song_data.keys())}
@@ -725,4 +739,6 @@ async def debug_stream(song_id: str = Query(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    host = os.environ.get("HOST", "0.0.0.0")  # nosec B104
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host=host, port=port)
