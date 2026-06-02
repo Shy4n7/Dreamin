@@ -66,6 +66,52 @@ FastAPI Backend
 └── In-memory cache          — TTL-based caching (charts: 6h, queue: 1h)
 ```
 
+## System Architecture
+
+```mermaid
+graph LR
+    subgraph You
+        A[You open the app]
+        B[You search for a song or browse charts]
+    end
+
+    subgraph Your Phone
+        C[App sends your request]
+        D[App plays the audio stream]
+        E[App saves your listening history]
+    end
+
+    subgraph Our Server
+        F[Server finds the song and fetches its details]
+        G[Server picks what to play next based on your taste]
+        H[Server builds a personal recommendation list]
+    end
+
+    A --> B
+    B --> C
+    C -- search query --> F
+    F -- song details and stream link --> D
+    D -- play history --> E
+    E -- listening signals --> G
+    G -- next song suggestion --> D
+    E -- listening signals --> H
+    H -- recommended songs --> D
+```
+
+### How It Works
+
+| Step | What's happening |
+|------|-----------------|
+| 1 | You open Dreamin and search for a song or pick from the trending charts |
+| 2 | Your phone sends that request to our server, which looks up the song's details and finds a working audio link |
+| 3 | The audio streams directly to your phone at high quality — no waiting for a full download |
+| 4 | As you listen, the app quietly notes which songs you played, skipped, or replayed |
+| 5 | When a song is about to end, the server uses your listening history to pick the next song you are most likely to enjoy |
+| 6 | If you ask for recommendations, the server compares your history against similar listeners and suggests songs you have not heard yet |
+| 7 | Everything is stored privately on your device and our server — no ads, no third-party trackers |
+
+---
+
 ## Getting Started
 
 ### Backend
