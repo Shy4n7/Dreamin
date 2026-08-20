@@ -1,3 +1,7 @@
+<img width="1774" height="887" alt="ChatGPT Image Aug 20, 2026, 02_39_33 PM" src="https://github.com/user-attachments/assets/864e837d-9656-4a94-9579-e8bf8d0aeccc" />
+
+
+
 # Dreamin
 
 Dreamin is a minimalist, ad-free music experience designed for private listening — built to make music feel uninterrupted, personal, and alive.
