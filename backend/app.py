@@ -116,25 +116,127 @@ class RegisterRequest(BaseModel):
 # ── Title / metadata helpers ─────────────────────────────────────────────────
 
 def clean_title(raw: str) -> str:
-    title = html.unescape(raw)
-    title = re.sub(r'\s*\(?\s*[Ff]rom\s+["\u201c\u2018][^"\u201d\u2019]*["\u201d\u2019]?\s*\)?$', '', title).strip()
+    title = html.unescape(raw or "")
+    title = re.sub(r'\s*\(?\s*[Ff]rom\s+["\u201c\u2018].*?["\u201d\u2019]?\s*\)?$', '', title).strip()
     return title
+
+
+def normalize_title(raw_title: str) -> str:
+    """Normalize song title to detect duplicates across language remakes or editions."""
+    t = clean_title(raw_title).lower()
+    t = re.sub(r'[\(\[\{].*?[\)\]\}]', '', t)
+    t = re.sub(r'[^a-z0-9]', '', t)
+    return t.strip()
+
+
+def clean_artwork_url(url: str) -> str:
+    """Upgrade low-res thumbnails (50x50, 150x150) to crisp 500x500 https images."""
+    if not url:
+        return ""
+    cleaned = re.sub(r'_\d+x\d+\.', '_500x500.', url)
+    cleaned = cleaned.replace("50x50", "500x500").replace("150x150", "500x500")
+    if cleaned.startswith("http://"):
+        cleaned = "https://" + cleaned[7:]
+    return cleaned
+
+
+NOISE_KEYWORDS = {
+    "remix", "8d", "8d audio", "bass boosted", "slowed", "reverb", "cover",
+    "lofi", "lo-fi", "flip", "status", "dialogue", "teaser", "trailer",
+    "jukebox", "mashup", "full audio", "full song", "bgm", "ringtone",
+    "theme", "promo", "whatsapp", "sped up", "speed up", "karaoke"
+}
+
+
+def is_noise_track(title: str) -> bool:
+    """Filter out amateur remixes, bass-boosted tracks, status clips, and teasers."""
+    t_lower = title.lower()
+    for kw in NOISE_KEYWORDS:
+        if re.search(r'(?i)\b' + re.escape(kw) + r'\b', t_lower):
+            return True
+    return False
+
+
+COMPILATION_KEYWORDS = {
+    "best of", "this is", "top ", "hits", "vol.", "vol ", "volume",
+    "love notes", "collection", "playlist", "raga collective", "kondattam",
+    "selected", "radio", "superhit", "compilation", "greatest hits",
+    "evergreen", "melody", "melodies", "latest", "essential", "party",
+    "workout", "for the road", "romance", "mashup", "area boys",
+    "konjam", "thamizh music", "kondattam"
+}
+
+
+def extract_movie_from_title(title: str) -> str:
+    m = re.search(r'(?i)\(?\s*from\s+["\'\u201c\u2018](.*?)["\'\u201d\u2019]\s*\)?', title)
+    return m.group(1).strip().lower() if m else ""
+
+
+def is_compilation_album(album_name: str) -> bool:
+    if not album_name:
+        return False
+    alb = album_name.lower()
+    return any(kw in alb for kw in COMPILATION_KEYWORDS)
+
+
+def resolve_original_artwork(title: str, current_image: str, album: str) -> str:
+    """Resolve genuine movie OST poster when song is bundled in a generic compilation album."""
+    if not is_compilation_album(album):
+        return current_image
+    try:
+        clean_q = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).strip() or title
+        q = urllib.parse.quote(clean_title(clean_q))
+        url = (
+            f"https://www.jiosaavn.com/api.php"
+            f"?__call=search.getResults"
+            f"&_format=json&_marker=0&api_version=4&ctx=web6dot0"
+            f"&q={q}&n=10&p=1"
+        )
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Referer": "https://www.jiosaavn.com/"
+        })
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+        items = data.get("results", [])
+        
+        movie_detected = ""
+        for it in items:
+            raw_t = html.unescape(it.get("title", ""))
+            m = extract_movie_from_title(raw_t)
+            if m:
+                movie_detected = m
+                break
+
+        def score_item(it):
+            alb_name = it.get("more_info", {}).get("album", "").strip().lower()
+            if movie_detected and alb_name == movie_detected:
+                return 0
+            if not is_compilation_album(alb_name):
+                return 1
+            return 2
+
+        if items:
+            best = min(items, key=score_item)
+            best_alb = best.get("more_info", {}).get("album", "")
+            if not is_compilation_album(best_alb) or (movie_detected and best_alb.lower() == movie_detected):
+                return clean_artwork_url(best.get("image", ""))
+    except Exception as e:
+        print(f"[resolve_artwork] Error for {title}: {e}")
+    return current_image
 
 
 def extract_artist(more_info: dict) -> str:
     """Extract artist name — handles both old (singers string) and new (artistMap array) API shapes."""
-    # New shape: more_info.artistMap.primary_artists = [{name: ...}, ...]
     artist_map = more_info.get("artistMap", {})
     primary = artist_map.get("primary_artists", [])
     if primary and isinstance(primary, list):
         return ", ".join(a["name"] for a in primary if a.get("name"))
 
-    # Old shape fallback: more_info.singers = "Artist Name"
     singers = more_info.get("singers", "")
     if singers:
         return html.unescape(singers)
 
-    # Featured artists last resort
     featured = artist_map.get("featured_artists", [])
     if featured and isinstance(featured, list):
         return ", ".join(a["name"] for a in featured if a.get("name"))
@@ -142,7 +244,7 @@ def extract_artist(more_info: dict) -> str:
     return ""
 
 
-def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
+def jiosaavn_search(query: str, limit: int = 15, page: int = 1, target_language: str = "") -> list[Song]:
     encoded = urllib.parse.quote(query)
     url = (
         f"https://www.jiosaavn.com/api.php"
@@ -152,49 +254,94 @@ def jiosaavn_search(query: str, limit: int = 15, page: int = 1) -> list[Song]:
     )
     for attempt in range(3):
         try:
-            if not url.startswith("https://"):
-                raise ValueError("Only https scheme is permitted")
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as r: # nosec B310
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Linux; Android 14)"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
             results = data.get("results", [])
             if not results and attempt < 2:
-                time.sleep(0.5)
+                time.sleep(0.4)
                 continue
-            songs = []
+
+            # Group candidate releases to prioritize original OST album
+            grouped: dict[str, list[dict]] = {}
             for item in results:
-                image = item.get("image", "").replace("150x150", "500x500")
+                raw_title = item.get("title", "")
+                title = clean_title(raw_title)
                 more = item.get("more_info", {})
+                duration_sec = int(more.get("duration", 0) or 0)
+                item_lang = item.get("language", more.get("language", "")).lower().strip()
+
+                # Filter noise
+                if is_noise_track(title):
+                    continue
+
+                # Filter duration anomalies (too short / full movie jukeboxes)
+                if duration_sec > 0 and (duration_sec < 75 or duration_sec > 540):
+                    continue
+
+                # Filter language if target specified
+                if target_language and item_lang and item_lang != target_language.lower():
+                    continue
+
+                norm_key = normalize_title(title)
+                if norm_key not in grouped:
+                    grouped[norm_key] = []
+                grouped[norm_key].append(item)
+
+            songs = []
+            for norm_key, items in grouped.items():
+                movie_detected = ""
+                for it in items:
+                    m = extract_movie_from_title(it.get("title", ""))
+                    if m:
+                        movie_detected = m
+                        break
+
+                def score_group_item(it):
+                    alb_name = it.get("more_info", {}).get("album", "").strip().lower()
+                    if movie_detected and alb_name == movie_detected:
+                        return 0
+                    if not is_compilation_album(alb_name):
+                        return 1
+                    return 2
+
+                best_item = min(items, key=score_group_item)
+                raw_title = best_item.get("title", "")
+                title = clean_title(raw_title)
+                more = best_item.get("more_info", {})
+                duration_sec = int(more.get("duration", 0) or 0)
+                alb = more.get("album", "")
+                image = clean_artwork_url(best_item.get("image", ""))
+                if is_compilation_album(alb):
+                    image = resolve_original_artwork(title, image, alb)
+
                 songs.append(Song(
-                    id=item.get("id", ""),
-                    title=clean_title(item.get("title", "")),
+                    id=best_item.get("id", ""),
+                    title=title,
                     artist=extract_artist(more),
                     artwork_url=image,
-                    duration=int(more.get("duration", 0)) * 1000,
+                    duration=duration_sec * 1000,
                 ))
-            return songs
+            return songs[:limit]
         except Exception as e:
             print(f"[jiosaavn_search] attempt {attempt + 1} error: {e}")
             if attempt < 2:
-                time.sleep(0.5)
+                time.sleep(0.4)
     return []
 
 
 def _fetch_song_details_raw(song_id: str) -> dict:
     """Network fetch — bypasses cache."""
-    encoded_song_id = urllib.parse.quote(song_id, safe="")
     url = (
         f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={encoded_song_id}"
+        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={song_id}"
     )
     try:
-        if not url.startswith("https://"):
-            raise ValueError("Only https scheme is permitted")
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req, timeout=10) as r: # nosec B310
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
         return data.get(song_id, {})
     except Exception:
@@ -234,7 +381,7 @@ def detect_language(artist: str, title: str, history: list[dict]) -> str:
         return "malayalam"
     if re.search(r'[\u0900-\u097F]', text):
         return "hindi"
-    return ""
+    return "tamil"
 
 
 def build_queue_queries(
@@ -243,73 +390,86 @@ def build_queue_queries(
     queries: list[str] = []
 
     more      = song_details.get("more_info", {})
-    raw_lang  = song_details.get("language", language).lower().strip()
+    raw_lang  = song_details.get("language", language).lower().strip() or language or "tamil"
     raw_genre = html.unescape(more.get("genres", "") or "")
+    album     = html.unescape(more.get("album", "") or "")
     primary   = html.unescape(
         song_details.get("primary_artists", "")
         or more.get("primary_artists", "")
         or artist
     )
-    featured  = html.unescape(
-        song_details.get("featured_artists", "")
-        or more.get("featured_artists", "")
-        or ""
-    )
     music_dir = html.unescape(more.get("music", "") or "")
 
     primary_first  = primary.split(",")[0].strip()
-    featured_first = featured.split(",")[0].strip() if featured else ""
     music_first    = music_dir.split(",")[0].strip() if music_dir else ""
 
+    # 1. Album / Movie affinity
+    if album and raw_lang:
+        queries.append(f"{album} {raw_lang} songs")
+
+    # 2. Composer / Music Director hits
+    if music_first and raw_lang:
+        queries.append(f"{music_first} {raw_lang} hits")
+    elif primary_first and raw_lang:
+        queries.append(f"{primary_first} {raw_lang} hits")
+
+    # 3. Genre + Language mix
     if raw_genre and raw_lang:
         queries.append(f"{raw_genre} {raw_lang} songs")
 
-    if primary_first and raw_lang:
-        queries.append(f"{primary_first} {raw_lang} hits")
+    # 4. Regional Top Hits in exact language
+    if raw_lang:
+        queries.append(f"top {raw_lang} songs 2025")
+        queries.append(f"best {raw_lang} melody songs")
 
-    if music_first and music_first != primary_first and raw_lang:
-        queries.append(f"{music_first} {raw_lang} songs")
-
-    if featured_first and featured_first != primary_first and raw_lang:
-        queries.append(f"{featured_first} {raw_lang} songs")
-
+    # 5. Recent favorites in the same language
     for a in recent_artists_list[:3]:
         if a != primary_first and raw_lang:
             queries.append(f"{a} {raw_lang} songs")
-        elif a != primary_first:
-            queries.append(f"{a} songs")
-
-    if raw_genre:
-        queries.append(f"best {raw_genre} songs")
-
-    if raw_lang:
-        queries.append(f"top {raw_lang} songs 2024")
-        queries.append(f"popular {raw_lang} hits")
 
     return queries
 
 
-def jiosaavn_stream(song_id: str) -> str:
-    encoded_song_id = urllib.parse.quote(song_id, safe="")
-    url1 = (
-        f"https://www.jiosaavn.com/api.php"
-        f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={encoded_song_id}"
-    )
+def jiosaavn_stream(song_id: str, title: str = "", artist: str = "") -> str:
+    enc_url = ""
     try:
-        if not url1.startswith("https://"):
-            raise ValueError("Only https scheme is permitted")
+        url1 = (
+            f"https://www.jiosaavn.com/api.php"
+            f"?__call=song.getDetails&cc=in&_marker=0&_format=json&pids={song_id}"
+        )
         req1 = urllib.request.Request(url1, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req1, timeout=10) as r: # nosec B310
+        with urllib.request.urlopen(req1, timeout=8) as r:
             data1 = json.loads(r.read())
 
         song_data = data1.get(song_id, {})
         enc_url = song_data.get("encrypted_media_url", "")
-        if not enc_url:
-            raise ValueError("No encrypted_media_url found")
+    except Exception:
+        pass
 
+    if not enc_url and title:
+        try:
+            clean_title = re.sub(r'[\(\[].*?[\)\]]', '', title).strip()
+            q = urllib.parse.quote(f"{clean_title} {artist}".strip())
+            s_url = f"https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&p=1&n=5&q={q}"
+            req_s = urllib.request.Request(s_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.jiosaavn.com/"})
+            with urllib.request.urlopen(req_s, timeout=8) as r:
+                s_data = json.loads(r.read())
+            results = s_data.get("results", [])
+            for res in results:
+                cand_enc = res.get("encrypted_media_url", "")
+                if cand_enc:
+                    enc_url = cand_enc
+                    break
+        except Exception:
+            pass
+
+    if not enc_url:
+        raise HTTPException(status_code=502, detail=f"No encrypted_media_url found for {song_id}")
+
+    try:
         enc_encoded = urllib.parse.quote(enc_url, safe="")
         url2 = (
             f"https://www.jiosaavn.com/api.php"
@@ -317,20 +477,17 @@ def jiosaavn_stream(song_id: str) -> str:
             f"&url={enc_encoded}&bitrate=320&api_version=4"
             f"&_format=json&ctx=web6dot0&_marker=0"
         )
-        if not url2.startswith("https://"):
-            raise ValueError("Only https scheme is permitted")
         req2 = urllib.request.Request(url2, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req2, timeout=10) as r: # nosec B310
+        with urllib.request.urlopen(req2, timeout=8) as r:
             data2 = json.loads(r.read())
 
         auth_url = data2.get("auth_url", "")
         if not auth_url:
-            raise ValueError(f"No auth_url. Response: {str(data2)[:300]}")
+            raise ValueError(f"No auth_url: {str(data2)[:200]}")
         return auth_url
-
     except HTTPException:
         raise
     except Exception as e:
@@ -427,7 +584,7 @@ async def admin_users(token: str = Query(...)):
             ts_str = str(ts_val).replace('Z', '+00:00')
             return datetime.datetime.fromisoformat(ts_str).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
         except Exception as e:
-            return html.escape(str(ts_val))
+            return str(ts_val)
 
     users: list[dict] = load_json(USERS_FILE, [])
     user_rows = ""
@@ -438,8 +595,8 @@ async def admin_users(token: str = Query(...)):
         device_display = (device[:16] + "…") if len(device) > 16 else (device or "—")
         user_rows += f"""
         <tr>
-          <td>{html.escape(str(u.get("name", "")))}</td>
-          <td style="font-family:monospace;font-size:12px">{html.escape(str(device_display))}</td>
+          <td>{html.escape(u.get("name", ""))}</td>
+          <td style="font-family:monospace;font-size:12px">{html.escape(device_display)}</td>
           <td>{dt}</td>
         </tr>"""
 
@@ -450,9 +607,9 @@ async def admin_users(token: str = Query(...)):
         lang = entry.get("language", "—") or "—"
         stream_rows += f"""
         <tr>
-          <td>{html.escape(str(entry.get("title", "—")))}</td>
-          <td>{html.escape(str(entry.get("artist", "—")))}</td>
-          <td><span class="lang-badge">{html.escape(str(lang))}</span></td>
+          <td>{html.escape(entry.get("title", "—"))}</td>
+          <td>{html.escape(entry.get("artist", "—"))}</td>
+          <td><span class="lang-badge">{html.escape(lang)}</span></td>
           <td>{dt}</td>
         </tr>"""
 
@@ -505,19 +662,66 @@ async def search(
     return SearchResponse(results=results)
 
 
+PLAYLIST_CHARTS: dict[str, str] = {
+    "tamil":     "1268500351",  # Trending Tamil Songs
+    "hindi":     "1134543272",  # India Superhits Top 50
+    "english":   "946682072",   # Top English Hits
+    "telugu":    "1073873492",  # Trending Telugu
+    "malayalam": "1134548194",  # Trending Malayalam
+}
+
 LANGUAGE_QUERIES: dict[str, str] = {
-    "tamil":     "top tamil songs 2025",
-    "hindi":     "top hindi songs 2025",
-    "english":   "top english songs 2025",
-    "telugu":    "top telugu songs 2025",
-    "malayalam": "top malayalam songs 2025",
+    "tamil":     "trending tamil songs 2025",
+    "hindi":     "trending hindi songs 2025",
+    "english":   "trending english hits 2025",
+    "telugu":    "trending telugu songs 2025",
+    "malayalam": "trending malayalam songs 2025",
 }
 
 
-async def _refresh_chart_cache(lang: str, query: str, cache_file: Path):
+def jiosaavn_playlist_songs(list_id: str, limit: int = 35) -> list[Song]:
+    url = f"https://www.jiosaavn.com/api.php?__call=playlist.getDetails&_format=json&cc=in&_marker=0&listid={list_id}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    try:
+        with urllib.request.urlopen(req, timeout=7) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            songs_raw = data.get("songs", data.get("list", []))
+            songs = []
+            for s in songs_raw:
+                song_id = s.get("id")
+                title = html.unescape(s.get("song") or s.get("title") or "")
+                more = s.get("more_info", {})
+                duration = int(s.get("duration") or more.get("duration") or 0) * 1000
+                artist = html.unescape(s.get("primary_artists") or more.get("singers") or "")
+                artwork = clean_artwork_url(s.get("image") or more.get("image") or "")
+                if song_id and title:
+                    songs.append(Song(
+                        id=song_id,
+                        title=title,
+                        artist=artist,
+                        artwork_url=artwork,
+                        duration=duration
+                    ))
+            return songs[:limit]
+    except Exception as e:
+        print(f"[jiosaavn_playlist_songs] error for {list_id}: {e}")
+        return []
+
+
+def fetch_chart_songs(lang: str, limit: int = 30) -> list[Song]:
+    list_id = PLAYLIST_CHARTS.get(lang)
+    if list_id:
+        songs = jiosaavn_playlist_songs(list_id, limit=limit)
+        if songs:
+            return songs
+    query = LANGUAGE_QUERIES.get(lang, f"trending {lang} songs 2025")
+    return jiosaavn_search(query, limit)
+
+
+async def _refresh_chart_cache(lang: str, cache_file: Path):
     """Background task: fetch fresh chart data and write to disk cache."""
     try:
-        songs = await asyncio.to_thread(jiosaavn_search, query, 30)
+        songs = await asyncio.to_thread(fetch_chart_songs, lang, 30)
         if songs:
             save_json_atomic(cache_file, {"ts": time.time(), "songs": [s.model_dump() for s in songs]})
     except Exception as e:
@@ -526,33 +730,32 @@ async def _refresh_chart_cache(lang: str, query: str, cache_file: Path):
 
 @app.get("/api/mobile/chart", response_model=ChartResponse)
 async def chart(language: str = Query(default="tamil")):
-    lang = re.sub(r'[^a-z0-9_-]', '', language.lower())
-    if not lang:
-        lang = "tamil"
+    lang = language.lower()
     cache_file = DATA_DIR / f"chart_cache_{lang}.json"
     cache = load_json(cache_file, {})
     now = time.time()
     age = now - cache.get("ts", 0)
 
-    if cache and age < _CHART_TTL:
-        songs = [Song(**s) for s in cache.get("songs", [])]
+    # Check if cached songs are outdated compilation lists (e.g. containing Don'u)
+    cached_raw = cache.get("songs", [])
+    has_stale_data = any("don'u" in (s.get("title", "")).lower() for s in cached_raw)
 
-        # Background refresh when cache is 80% expired — user still gets instant response
+    if cache and age < _CHART_TTL and not has_stale_data:
+        songs = [Song(**s) for s in cached_raw]
+
         if age > _CHART_TTL * 0.8:
             if lang not in _chart_refresh_lock:
                 _chart_refresh_lock[lang] = asyncio.Lock()
             lock = _chart_refresh_lock[lang]
             if not lock.locked():
-                query = LANGUAGE_QUERIES.get(lang, f"top {lang} songs 2025")
                 asyncio.create_task(
-                    _run_with_lock(lock, _refresh_chart_cache(lang, query, cache_file))
+                    _run_with_lock(lock, _refresh_chart_cache(lang, cache_file))
                 )
 
         return ChartResponse(songs=songs)
 
-    # Cache expired or missing — fetch synchronously this time
-    query = LANGUAGE_QUERIES.get(lang, f"top {lang} songs 2025")
-    songs = await asyncio.to_thread(jiosaavn_search, query, 30)
+    # Cache expired, missing, or stale — fetch fresh trending chart
+    songs = await asyncio.to_thread(fetch_chart_songs, lang, 30)
     save_json_atomic(cache_file, {"ts": now, "songs": [s.model_dump() for s in songs]})
     return ChartResponse(songs=songs)
 
@@ -565,6 +768,40 @@ async def _run_with_lock(lock: asyncio.Lock, coro):
         await coro
 
 
+@app.get("/api/mobile/proxy")
+async def stream_proxy(url: str = Query(...)):
+    """Relays audio from CDNs to bypass client-side network restrictions."""
+    user_agent = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
+    referer = "https://www.jiosaavn.com/"
+    
+    try:
+        # We use a stream-capable request
+        req = urllib.request.Request(url, headers={
+            "User-Agent": user_agent,
+            "Referer": referer,
+        })
+        
+        def iter_content():
+            with urllib.request.urlopen(req, timeout=15) as r:
+                # Basic chunked streaming
+                while True:
+                    chunk = r.read(65536) # 64KB
+                    if not chunk:
+                        break
+                    yield chunk
+
+        from fastapi.responses import StreamingResponse
+        # Check if it's an mp4 or m4a
+        media_type = "audio/mpeg"
+        if ".mp4" in url or ".m4a" in url:
+            media_type = "audio/mp4"
+            
+        return StreamingResponse(iter_content(), media_type=media_type)
+
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Proxy failed: {e}")
+
+
 @app.get("/api/mobile/play", response_model=PlayResponse)
 async def play(
     id: str = Query(...),
@@ -572,9 +809,16 @@ async def play(
     title: str = Query(...),
     language: str = Query(default=""),
 ):
-    # Stream URL is resolved on-device; server just records the play
+    # Log the play event
     asyncio.create_task(asyncio.to_thread(record_play, id, title, artist, language))
-    return PlayResponse()
+    
+    # Resolve stream URL server-side
+    try:
+        direct_url = await asyncio.to_thread(jiosaavn_stream, id, title, artist)
+        return PlayResponse(stream_url=direct_url)
+    except Exception as e:
+        print(f"[play] server-side resolution failed for {id}: {e}")
+        return PlayResponse()
 
 
 @app.get("/api/mobile/up_next", response_model=UpNextResponse)
@@ -626,16 +870,18 @@ async def up_next(
     history_ids    = {h["id"] for h in history[-50:]}
     excluded_ids   = client_exclude | history_ids | {song_id}
 
-    # ── 4. Fetch candidates in parallel ─────────────────────────────────────
-    pool_per_query = max(4, (limit * 2) // max(len(queries), 1))
+    # ── 4. Fetch candidates in parallel with strict language anchoring ─────────
+    pool_per_query = max(5, (limit * 2) // max(len(queries), 1))
     fetch_tasks = [
-        asyncio.to_thread(jiosaavn_search, q, pool_per_query)
+        asyncio.to_thread(jiosaavn_search, q, pool_per_query, 1, language)
         for q in queries
     ]
     batches: list[list[Song]] = await asyncio.gather(*fetch_tasks)
 
-    # ── 5. Round-robin interleave ────────────────────────────────────────────
+    # ── 5. Round-robin interleave with Normalized Title Deduplication ─────────
     seen_ids: set[str] = set(excluded_ids)
+    curr_title = song_data.get("title", "") or (history_entry.get("title", "") if history_entry else "")
+    seen_norm_titles: set[str] = {normalize_title(curr_title)} if curr_title else set()
     candidates: list[Song] = []
     max_rounds = max((len(b) for b in batches), default=0)
 
@@ -643,12 +889,13 @@ async def up_next(
         for batch in batches:
             if i < len(batch):
                 s = batch[i]
-                if s.id not in seen_ids and s.title:
+                norm_t = normalize_title(s.title)
+                if s.id not in seen_ids and norm_t and norm_t not in seen_norm_titles:
                     seen_ids.add(s.id)
+                    seen_norm_titles.add(norm_t)
                     candidates.append(s)
 
     # ── 6. Cache the full candidate list (before client exclusion) ───────────
-    # Store all candidates so repeat calls with different exclude sets are served from cache
     _upnext_cache[song_id] = {
         "ts": time.time(),
         "songs": [s.model_dump() for s in candidates],
@@ -693,24 +940,34 @@ async def recommend(song_id: str = Query(...)):
             queries.append(f"{a} popular songs")
 
     if raw_genre and language:
-        queries.append(f"{raw_genre} {language} songs")
+        queries.append(f"{raw_genre} {language}")
 
     if language:
-        queries.append(f"top {language} songs 2024")
+        queries.append(f"top {language} hits 2025")
 
-    queries.append("trending music 2025")
+    fetch_tasks = [
+        asyncio.to_thread(jiosaavn_search, q, 6, 1, language)
+        for q in queries
+    ]
+    batches = await asyncio.gather(*fetch_tasks)
 
-    seen_ids: set[str] = {song_id}
-    songs: list[Song] = []
+    seen: set[str] = {song_id}
+    seen_titles: set[str] = {normalize_title(title)} if title else set()
+    recs: list[Song] = []
 
-    for q in queries[:5]:
-        batch = await asyncio.to_thread(jiosaavn_search, q, 6)
+    for batch in batches:
         for s in batch:
-            if s.id not in seen_ids:
-                seen_ids.add(s.id)
-                songs.append(s)
+            norm_t = normalize_title(s.title)
+            if s.id not in seen and norm_t and norm_t not in seen_titles:
+                seen.add(s.id)
+                seen_titles.add(norm_t)
+                recs.append(s)
+            if len(recs) >= 12:
+                break
+        if len(recs) >= 12:
+            break
 
-    return RecommendResponse(recommendations=songs[:20])
+    return RecommendResponse(recommendations=recs)
 
 
 @app.get("/api/debug/stream")
@@ -725,13 +982,11 @@ async def debug_stream(song_id: str = Query(...)):
             f"&url={enc_encoded}&bitrate=320&api_version=4"
             f"&_format=json&ctx=web6dot0&_marker=0"
         )
-        if not url2.startswith("https://"):
-            raise HTTPException(status_code=400, detail="Only https scheme is permitted")
         req2 = urllib.request.Request(url2, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.jiosaavn.com/",
         })
-        with urllib.request.urlopen(req2, timeout=10) as r: # nosec B310
+        with urllib.request.urlopen(req2, timeout=10) as r:
             data2 = json.loads(r.read())
         return {"enc_url": enc_url, "step2_response": data2}
     return {"error": "no enc_url found", "keys": list(song_data.keys())}
@@ -739,6 +994,4 @@ async def debug_stream(song_id: str = Query(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    host = os.environ.get("HOST", "0.0.0.0")  # nosec B104
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

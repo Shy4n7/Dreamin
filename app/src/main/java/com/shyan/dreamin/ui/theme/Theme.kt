@@ -1,7 +1,6 @@
 package com.shyan.dreamin.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -11,28 +10,33 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-val DeepBlack    = Color(0xFF0A0A0F)
-val SurfaceBlack = Color(0xFF12121A)
-val CardBlack    = Color(0xFF1C1C28)
-val CyanAccent   = Color(0xFF00E5FF)
-val PurpleAccent = Color(0xFF7C4DFF)
-val OnSurface    = Color(0xFFE8E8F0)
-val OnSurfaceMed = Color(0xFF9090A8)
-val OnSurfaceLow = Color(0xFF505068)
+val DeepBlack    = Color(0xFF07070A)
+val SurfaceBlack = Color(0xFF0F0F16)
+val CardBlack    = Color(0xFF14141E)
+val CardActive   = Color(0xFF1C1C2A)
+val CyanAccent   = Color(0xFF06B6D4)
+val PurpleAccent = Color(0xFF8B5CF6)
+val PinkAccent   = Color(0xFFEC4899)
+val OnSurface    = Color.White.copy(alpha = 0.96f)
+val OnSurfaceMed = Color.White.copy(alpha = 0.65f)
+val OnSurfaceLow = Color.White.copy(alpha = 0.38f)
+val GlassBorder  = Color.White.copy(alpha = 0.08f)
 
 private val ResonanceDarkColors = darkColorScheme(
-    primary         = CyanAccent,
-    onPrimary       = DeepBlack,
-    secondary       = PurpleAccent,
-    onSecondary     = Color.White,
-    background      = DeepBlack,
-    onBackground    = OnSurface,
-    surface         = SurfaceBlack,
-    onSurface       = OnSurface,
-    surfaceVariant  = CardBlack,
+    primary          = PurpleAccent,
+    onPrimary        = Color.White,
+    secondary        = CyanAccent,
+    onSecondary      = DeepBlack,
+    tertiary         = PinkAccent,
+    background       = DeepBlack,
+    onBackground     = OnSurface,
+    surface          = SurfaceBlack,
+    onSurface        = OnSurface,
+    surfaceVariant   = CardBlack,
     onSurfaceVariant = OnSurfaceMed,
-    outline         = OnSurfaceLow,
-    error           = Color(0xFFFF6B6B)
+    outline          = OnSurfaceLow,
+    outlineVariant   = GlassBorder,
+    error            = Color(0xFFF43F5E)
 )
 
 @Composable
@@ -42,7 +46,9 @@ fun ResonanceTheme(content: @Composable () -> Unit) {
     SideEffect {
         val window = (view.context as Activity).window
         window.statusBarColor = DeepBlack.toArgb()
+        window.navigationBarColor = DeepBlack.toArgb()
         WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
     }
 
     MaterialTheme(

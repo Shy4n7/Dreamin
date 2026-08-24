@@ -3,8 +3,8 @@ package com.shyan.dreamin.data.network
 import com.shyan.dreamin.BuildConfig
 import com.shyan.dreamin.data.model.*
 
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
@@ -49,21 +49,35 @@ interface MusicApi {
 }
 
 object NetworkService {
-    val BASE_URL = "https://tjlsaxykmlbp.ap-southeast-1.clawcloudrun.com/"
+    val BASE_URL = "http://10.0.2.2:8080/"
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-        })
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+    private val connectionPool = ConnectionPool(8, 5, TimeUnit.MINUTES)
+
+    val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectionPool(connectionPool)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val orig = chain.request()
+            val host = orig.url.host
+            val builder = orig.newBuilder()
+            if (host.contains("jiosaavn") || host.contains("saavncdn")) {
+                builder.header("Referer", "https://www.jiosaavn.com/")
+                builder.header("Origin", "https://www.jiosaavn.com")
+                builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+            } else if (host.contains("lrclib")) {
+                builder.header("User-Agent", "DreaminApp/1.0 (https://github.com/shyan/dreamin)")
+            }
+            chain.proceed(builder.build())
+        }
+        .retryOnConnectionFailure(true)
         .build()
 
     val api: MusicApi by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .client(okHttpClient)
+            .client(httpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(MusicApi::class.java)

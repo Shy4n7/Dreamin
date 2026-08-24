@@ -27,6 +27,7 @@ backend/data/
 backend/song_cache/
 
 # Logs & build output
+*.log
 output.txt
 status.txt
 build_log.txt

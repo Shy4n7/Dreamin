@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.shyan.dreamin.data.local.dao.DownloadDao
 import com.shyan.dreamin.data.local.dao.FavoriteDao
 import com.shyan.dreamin.data.local.dao.PlayHistoryDao
 import com.shyan.dreamin.data.local.dao.PlaylistDao
+import com.shyan.dreamin.data.local.entity.DownloadedSongEntity
 import com.shyan.dreamin.data.local.entity.FavoriteEntity
 import com.shyan.dreamin.data.local.entity.PlayHistoryEntity
 import com.shyan.dreamin.data.local.entity.PlaylistEntity
@@ -21,16 +23,18 @@ import kotlinx.coroutines.launch
         PlayHistoryEntity::class,
         FavoriteEntity::class,
         PlaylistEntity::class,
-        PlaylistSongEntity::class
+        PlaylistSongEntity::class,
+        DownloadedSongEntity::class
     ],
-    version = 1,
-    exportSchema = true
+    version = 3,
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun playHistoryDao(): PlayHistoryDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun downloadDao(): DownloadDao
 
     companion object {
         @Volatile
@@ -43,6 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "dreamin_db")
+                .fallbackToDestructiveMigration()
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
 

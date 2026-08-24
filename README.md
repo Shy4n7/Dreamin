@@ -43,116 +43,43 @@ Dreamin started as something I built for myself and a few friends. It's lean, fa
 | Image Loading | Coil + Palette API |
 | Min SDK | 26 (Android 8.0) |
 
-### Backend
+### Backend (Optional Admin Dashboard)
 | Layer | Technology |
 |-------|-----------|
 | Framework | FastAPI (Python 3.11) |
 | Server | Uvicorn (ASGI) |
 | HTTP Client | HTTPX (async) |
-| Containerization | Docker |
-| Deployment | ClawCloud via GitHub Actions |
 
 ## Architecture
 
 ```
-Android App
-├── MusicPlayerViewModel     — single StateFlow, all business logic
+Android App (Fully Standalone & Direct-Streaming)
+├── MusicPlayerViewModel     — single StateFlow, all business logic & on-device fallbacks
 ├── MusicService             — foreground service, ExoPlayer + MediaSession
 ├── Room Database            — playlists, favorites, history, stats
 ├── DataStore                — user preferences, chart cache
-└── Retrofit                 — communicates with FastAPI backend
-        │
-        ▼
-FastAPI Backend
-├── Music aggregation layer  — metadata, streaming sources, artwork
-├── Smart queue engine       — multi-source candidate ranking with language detection
-├── Recommendation engine    — personalized suggestions from play history
-└── In-memory cache          — TTL-based caching (charts: 6h, queue: 1h)
+└── On-Device Engine         — direct 320kbps stream resolution, search & queueing
 ```
-
-## System Architecture
-
-```mermaid
-graph LR
-    subgraph You
-        A[You open the app]
-        B[You search for a song or browse charts]
-    end
-
-    subgraph Your Phone
-        C[App sends your request]
-        D[App plays the audio stream]
-        E[App saves your listening history]
-    end
-
-    subgraph Our Server
-        F[Server finds the song and fetches its details]
-        G[Server picks what to play next based on your taste]
-        H[Server builds a personal recommendation list]
-    end
-
-    A --> B
-    B --> C
-    C -- search query --> F
-    F -- song details and stream link --> D
-    D -- play history --> E
-    E -- listening signals --> G
-    G -- next song suggestion --> D
-    E -- listening signals --> H
-    H -- recommended songs --> D
-```
-
-### How It Works
-
-| Step | What's happening |
-|------|-----------------|
-| 1 | You open Dreamin and search for a song or pick from the trending charts |
-| 2 | Your phone sends that request to our server, which looks up the song's details and finds a working audio link |
-| 3 | The audio streams directly to your phone at high quality — no waiting for a full download |
-| 4 | As you listen, the app quietly notes which songs you played, skipped, or replayed |
-| 5 | When a song is about to end, the server uses your listening history to pick the next song you are most likely to enjoy |
-| 6 | If you ask for recommendations, the server compares your history against similar listeners and suggests songs you have not heard yet |
-| 7 | Everything is stored privately on your device and our server — no ads, no third-party trackers |
 
 ---
 
 ## Getting Started
 
-### Backend
+### Android App
 
-**Run locally:**
+1. Connect your Android device or start an emulator.
+2. Run `run_app.bat` or open the project in Android Studio and hit **Run**.
+
+### Backend (Optional)
+
+If you wish to run the optional local admin analytics dashboard:
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8080 --reload
+python app.py
 ```
 
-**Run with Docker:**
-```bash
-cd backend
-docker build -t dreamin-server .
-docker run -p 8080:8080 dreamin-server
-```
-
-### Android App
-
-1. Open the project in Android Studio (Hedgehog or newer)
-2. Set your server URL in `app/src/main/java/com/shyan/dreamin/data/network/NetworkService.kt`:
-
-```kotlin
-// Emulator
-var BASE_URL = "http://10.0.2.2:8080/"
-
-// Physical device (same Wi-Fi as your machine)
-var BASE_URL = "http://192.168.x.x:8080/"
-
-// Production
-var BASE_URL = "https://your-server-url.com/"
-```
-
-3. Hit **Run** in Android Studio
-
-## API Reference
+## API Reference (Optional Backend)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -164,18 +91,7 @@ var BASE_URL = "https://your-server-url.com/"
 | GET | `/api/mobile/play?id=&artist=&title=` | Get stream URL |
 | GET | `/api/mobile/up_next?song_id=` | Queue suggestions |
 | GET | `/api/mobile/recommend?song_id=` | Recommendations |
-
-## Deployment
-
-The backend auto-deploys to ClawCloud on every push to `main` that touches `backend/`.
-
-**Required GitHub secrets:**
-
-| Secret | Description |
-|--------|-------------|
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
-| `CLAWCLOUD_DEPLOY_HOOK` | ClawCloud redeploy webhook URL |
+| GET | `/admin/users?token=` | Admin monitoring dashboard |
 
 ## Project Structure
 
@@ -192,12 +108,9 @@ Dreamin/
 │       └── ui/
 │           ├── screens/        # Compose screens
 │           └── theme/          # App themes and colors
-├── backend/                    # FastAPI server
-│   ├── app.py
-│   ├── requirements.txt
-│   └── Dockerfile
-└── .github/workflows/          # CI/CD
-    └── deploy-backend.yml
+└── backend/                    # Optional FastAPI admin & analytics server
+    ├── app.py
+    └── requirements.txt
 ```
 
 ## What's Next

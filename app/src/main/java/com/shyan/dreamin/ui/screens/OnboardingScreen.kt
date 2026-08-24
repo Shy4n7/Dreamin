@@ -42,6 +42,22 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
             .background(colors.background),
         contentAlignment = Alignment.Center
     ) {
+        // Ambient soft aura glow
+        Box(
+            modifier = Modifier
+                .size(360.dp)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            colors.primary.copy(alpha = 0.25f),
+                            colors.secondary.copy(alpha = 0.12f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = androidx.compose.foundation.shape.CircleShape
+                )
+        )
+
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(animationSpec = tween(600))
@@ -54,17 +70,17 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "DREAMIN",
+                    "DREAMIN'",
                     fontSize = 44.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = colors.primary,
+                    color = colors.onSurface,
                     letterSpacing = 4.sp
                 )
 
                 Text(
-                    "your personal soundtrack",
+                    "sound, uninterrupted",
                     fontSize = 14.sp,
-                    color = colors.onSurfaceVariant,
+                    color = colors.secondary,
                     letterSpacing = 1.sp
                 )
 
@@ -87,11 +103,11 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                         Text("Your name", color = colors.onSurfaceVariant)
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF000000),
-                        unfocusedContainerColor = Color(0xFF000000),
-                        focusedBorderColor = colors.primary.copy(alpha = 0.5f),
+                        focusedContainerColor = colors.surfaceContainer,
+                        unfocusedContainerColor = colors.surfaceContainer,
+                        focusedBorderColor = colors.primary,
                         unfocusedBorderColor = colors.outlineVariant,
                         cursorColor = colors.primary,
                         focusedTextColor = colors.onSurface,
@@ -118,9 +134,9 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.primary,
-                        contentColor = colors.background,
+                        contentColor = Color.White,
                         disabledContainerColor = colors.primary.copy(alpha = 0.25f),
-                        disabledContentColor = colors.background.copy(alpha = 0.4f)
+                        disabledContentColor = Color.White.copy(alpha = 0.4f)
                     ),
                     enabled = nameInput.isNotBlank()
                 ) {
