@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -18,11 +19,15 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.shyan.dreamin.MainActivity
@@ -79,6 +84,11 @@ class MusicService : MediaSessionService() {
     companion object {
         const val ACTION_PLAY_NEXT = "com.shyan.dreamin.ACTION_PLAY_NEXT"
         const val ACTION_PLAY_PREVIOUS = "com.shyan.dreamin.ACTION_PLAY_PREVIOUS"
+        const val ACTION_TOGGLE_FAVORITE = "com.shyan.dreamin.ACTION_TOGGLE_FAVORITE"
+        const val ACTION_TOGGLE_SHUFFLE = "com.shyan.dreamin.ACTION_TOGGLE_SHUFFLE"
+
+        const val CUSTOM_COMMAND_FAVORITE = "com.shyan.dreamin.COMMAND_FAVORITE"
+        const val CUSTOM_COMMAND_SHUFFLE = "com.shyan.dreamin.COMMAND_SHUFFLE"
     }
 
     @androidx.annotation.OptIn(UnstableApi::class)
@@ -91,8 +101,8 @@ class MusicService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        val httpDataSourceFactory = OkHttpDataSource.Factory(com.shyan.dreamin.data.network.NetworkService.httpClient)
-        val universalDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+        // ⚡ ExoPlayer LRU Disk Cache: 512 MB disk cache for instant offline replay
+        val universalDataSourceFactory = ExoPlayerCacheManager.createCacheDataSourceFactory(this)
 
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
@@ -164,20 +174,53 @@ class MusicService : MediaSessionService() {
             }
         }
 
+        val customFavoriteButton = CommandButton.Builder()
+            .setDisplayName("Favorite")
+            .setIconResId(android.R.drawable.star_on)
+            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
+            .build()
+
+        val customShuffleButton = CommandButton.Builder()
+            .setDisplayName("Shuffle")
+            .setIconResId(android.R.drawable.ic_menu_rotate)
+            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+            .build()
+
         val sessionCallback = object : MediaSession.Callback {
             override fun onConnect(
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo
             ): MediaSession.ConnectionResult {
+                val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                    .add(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
+                    .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+                    .build()
+
                 val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                     .add(Player.COMMAND_SEEK_TO_NEXT)
                     .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                     .build()
+
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                    .setAvailableSessionCommands(sessionCommands)
                     .setAvailablePlayerCommands(availablePlayerCommands)
+                    .setCustomLayout(listOf(customFavoriteButton, customShuffleButton))
                     .build()
+            }
+
+            override fun onCustomCommand(
+                session: MediaSession,
+                controller: MediaSession.ControllerInfo,
+                customCommand: SessionCommand,
+                args: Bundle
+            ): ListenableFuture<SessionResult> {
+                when (customCommand.customAction) {
+                    CUSTOM_COMMAND_FAVORITE -> sendBroadcast(Intent(ACTION_TOGGLE_FAVORITE).setPackage(packageName))
+                    CUSTOM_COMMAND_SHUFFLE -> sendBroadcast(Intent(ACTION_TOGGLE_SHUFFLE).setPackage(packageName))
+                }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
         }
 

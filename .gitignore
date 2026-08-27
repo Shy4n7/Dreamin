@@ -21,8 +21,8 @@ __pycache__/
 .env
 
 # Runtime data
-song_cache/
-data/
+/song_cache/
+/data/
 backend/data/
 backend/song_cache/
 

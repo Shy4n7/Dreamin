@@ -79,6 +79,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             when (intent?.action) {
                 MusicService.ACTION_PLAY_NEXT -> playNext()
                 MusicService.ACTION_PLAY_PREVIOUS -> playPrevious()
+                MusicService.ACTION_TOGGLE_FAVORITE -> _uiState.value.currentSong?.let { toggleFavoriteFor(it) }
+                MusicService.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
             }
         }
     }
@@ -120,6 +122,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val filter = android.content.IntentFilter().apply {
             addAction(MusicService.ACTION_PLAY_NEXT)
             addAction(MusicService.ACTION_PLAY_PREVIOUS)
+            addAction(MusicService.ACTION_TOGGLE_FAVORITE)
+            addAction(MusicService.ACTION_TOGGLE_SHUFFLE)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             context,
