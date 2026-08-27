@@ -14,6 +14,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.regex.Pattern
 
+import com.shyan.dreamin.data.network.NetworkService
+import okhttp3.Request
+
 data class SpotifyImportedTrack(
     val title: String,
     val artist: String,
@@ -34,8 +37,9 @@ data class SpotifyPlaylistDetails(
  *
  * Direct, zero-bloat pipeline:
  * 1. Resolves short & standard Spotify playlist URLs.
- * 2. Fetches playlist metadata & session token from public embed endpoint.
- * 3. Automatically paginates all tracks via official Web API (100–5,000+ tracks).
+ * 2. Fetches playlist metadata & session token from public embed endpoint (tracks 1–100).
+ * 3. Extracts complete playlist tracklist via spclient (tracks 101–5,000+).
+ * 4. Resolves missing track metadata concurrently with OkHttp connection pooling & OEmbed fallback.
  */
 object SpotifyImportService {
 
@@ -172,7 +176,9 @@ object SpotifyImportService {
                 ?: data.optJSONObject("session")?.optString("accessToken")
                 ?: data.optString("accessToken").takeIf { it.isNotBlank() }
 
-            if (!sessionToken.isNullOrBlank() && tracks.size >= 100) {
+            var reportedTotal = tracks.size
+
+            if (!sessionToken.isNullOrBlank()) {
                 var spConn: HttpURLConnection? = null
                 try {
                     val spUrl = URL("https://spclient.wg.spotify.com/playlist/v2/playlist/$playlistId")
@@ -188,7 +194,11 @@ object SpotifyImportService {
                     if (spConn.responseCode == 200) {
                         val spText = BufferedReader(InputStreamReader(spConn.inputStream, Charsets.UTF_8)).use { it.readText() }
                         val spRoot = JSONObject(spText)
+                        val spLength = spRoot.optInt("length", 0)
                         val items = spRoot.optJSONObject("contents")?.optJSONArray("items")
+                        val actualItemCount = items?.length() ?: 0
+                        reportedTotal = maxOf(tracks.size, spLength, actualItemCount)
+
                         if (items != null && items.length() > tracks.size) {
                             val remainingUris = mutableListOf<String>()
                             for (i in tracks.size until items.length()) {
@@ -212,13 +222,14 @@ object SpotifyImportService {
                 }
             }
 
-            android.util.Log.d("SpotifyImport", "Total tracks fetched for '$title': ${tracks.size}")
+            val finalTotal = maxOf(tracks.size, reportedTotal)
+            android.util.Log.d("SpotifyImport", "Total tracks fetched for '$title': ${tracks.size} (total reported: $finalTotal)")
 
             return@withContext SpotifyPlaylistDetails(
                 id = playlistId,
                 title = title,
                 coverUrl = coverUrl,
-                totalTracks = tracks.size,
+                totalTracks = finalTotal,
                 tracks = tracks
             )
         } catch (e: Exception) {
@@ -230,12 +241,12 @@ object SpotifyImportService {
     }
 
     private suspend fun fetchTracksConcurrently(trackIds: List<String>): List<SpotifyImportedTrack> = coroutineScope {
-        val semaphore = kotlinx.coroutines.sync.Semaphore(16)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(20)
         trackIds.map { tid ->
             async(Dispatchers.IO) {
                 semaphore.acquire()
                 try {
-                    fetchSingleEmbedTrack(tid)
+                    fetchSingleTrackResilient(tid)
                 } catch (e: Exception) {
                     android.util.Log.w("SpotifyImport", "Failed to fetch track $tid: ${e.message}")
                     null
@@ -246,56 +257,87 @@ object SpotifyImportService {
         }.awaitAll().filterNotNull()
     }
 
-    private fun fetchSingleEmbedTrack(trackId: String): SpotifyImportedTrack? {
-        var conn: HttpURLConnection? = null
+    private fun fetchSingleTrackResilient(trackId: String): SpotifyImportedTrack? {
+        // Pass 1: Spotify Embed Track page via connection-pooled HTTP client
+        for (attempt in 0..1) {
+            try {
+                val request = Request.Builder()
+                    .url("https://open.spotify.com/embed/track/$trackId")
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .build()
+
+                NetworkService.httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val html = response.body?.string().orEmpty()
+                        val marker = "<script id=\"__NEXT_DATA__\" type=\"application/json\">"
+                        val startIndex = html.indexOf(marker)
+                        if (startIndex != -1) {
+                            val jsonStart = startIndex + marker.length
+                            val jsonEnd = html.indexOf("</script>", jsonStart)
+                            if (jsonEnd != -1) {
+                                val root = JSONObject(html.substring(jsonStart, jsonEnd).trim())
+                                val entity = root.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")?.optJSONObject("data")?.optJSONObject("entity")
+                                if (entity != null) {
+                                    val title = entity.optString("name").ifBlank { entity.optString("title", "") }.trim()
+                                    if (title.isNotBlank()) {
+                                        val artistsArr = entity.optJSONArray("artists")
+                                        val artists = mutableListOf<String>()
+                                        if (artistsArr != null) {
+                                            for (a in 0 until artistsArr.length()) {
+                                                val name = artistsArr.optJSONObject(a)?.optString("name")
+                                                if (!name.isNullOrBlank()) artists.add(name)
+                                            }
+                                        }
+                                        val artistName = if (artists.isNotEmpty()) artists.joinToString(", ") else entity.optString("subtitle", "Unknown Artist")
+                                        val duration = entity.optLong("duration", 0L)
+                                        val coverSources = entity.optJSONObject("coverArt")?.optJSONArray("sources")
+                                        val coverUrl = coverSources?.optJSONObject(0)?.optString("url") ?: ""
+
+                                        return SpotifyImportedTrack(
+                                            title = title,
+                                            artist = artistName,
+                                            durationMs = duration,
+                                            artworkUrl = coverUrl
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Retry once
+            }
+        }
+
+        // Pass 2: OEmbed Fallback
         try {
-            val url = URL("https://open.spotify.com/embed/track/$trackId")
-            conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", USER_AGENT)
-            conn.connectTimeout = 6000
-            conn.readTimeout = 6000
+            val oeRequest = Request.Builder()
+                .url("https://open.spotify.com/oembed?url=https://open.spotify.com/track/$trackId")
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .build()
 
-            if (conn.responseCode != 200) return null
-
-            val html = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            val marker = "<script id=\"__NEXT_DATA__\" type=\"application/json\">"
-            val startIndex = html.indexOf(marker)
-            if (startIndex == -1) return null
-
-            val jsonStart = startIndex + marker.length
-            val jsonEnd = html.indexOf("</script>", jsonStart)
-            if (jsonEnd == -1) return null
-
-            val root = JSONObject(html.substring(jsonStart, jsonEnd).trim())
-            val entity = root.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")?.optJSONObject("data")?.optJSONObject("entity") ?: return null
-
-            val title = entity.optString("name").ifBlank { entity.optString("title", "") }.trim()
-            if (title.isBlank()) return null
-
-            val artistsArr = entity.optJSONArray("artists")
-            val artists = mutableListOf<String>()
-            if (artistsArr != null) {
-                for (a in 0 until artistsArr.length()) {
-                    val name = artistsArr.optJSONObject(a)?.optString("name")
-                    if (!name.isNullOrBlank()) artists.add(name)
+            NetworkService.httpClient.newCall(oeRequest).execute().use { response ->
+                if (response.isSuccessful) {
+                    val oeJson = JSONObject(response.body?.string().orEmpty())
+                    val title = oeJson.optString("title", "").trim()
+                    val thumbUrl = oeJson.optString("thumbnail_url", "")
+                    if (title.isNotBlank()) {
+                        return SpotifyImportedTrack(
+                            title = title,
+                            artist = "Unknown Artist",
+                            durationMs = 0L,
+                            artworkUrl = thumbUrl
+                        )
+                    }
                 }
             }
-            val artistName = if (artists.isNotEmpty()) artists.joinToString(", ") else entity.optString("subtitle", "Unknown Artist")
-            val duration = entity.optLong("duration", 0L)
-            val coverSources = entity.optJSONObject("coverArt")?.optJSONArray("sources")
-            val coverUrl = coverSources?.optJSONObject(0)?.optString("url") ?: ""
-
-            return SpotifyImportedTrack(
-                title = title,
-                artist = artistName,
-                durationMs = duration,
-                artworkUrl = coverUrl
-            )
         } catch (_: Exception) {
-            return null
-        } finally {
-            conn?.disconnect()
+            // Silently proceed
         }
+
+        return null
     }
 }
