@@ -1012,7 +1012,8 @@ fun CreatePlaylistDialog(
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
     onImportTextList: (String, String) -> Unit = { _, _ -> },
-    onResetSpotifyImport: () -> Unit = {}
+    onResetSpotifyImport: () -> Unit = {},
+    onSearchOnline: ((String) -> Unit)? = null
 ) {
     val colors = LocalDreaminColors.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -1261,65 +1262,229 @@ fun CreatePlaylistDialog(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(colors.surfaceHighest)
-                                    .padding(14.dp),
+                                    .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        "Importing '${st.playlistTitle}'",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = colors.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        "${st.currentTrackIndex}/${st.totalTracks}",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF1DB954),
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    if (st.coverUrl.isNotBlank()) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(st.coverUrl)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(1.dp, Color(0xFF1DB954).copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                st.playlistTitle,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = colors.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                "${st.currentTrackIndex}/${st.totalTracks}",
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF1DB954),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { progress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(5.dp)
+                                                .clip(RoundedCornerShape(3.dp)),
+                                            color = Color(0xFF1DB954),
+                                            trackColor = colors.surfaceHigh
+                                        )
+                                        Text(
+                                            "Matching: ${st.currentTrackName}",
+                                            color = colors.onSurfaceVariant,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                    color = Color(0xFF1DB954),
-                                    trackColor = colors.surfaceHigh
-                                )
-                                Text(
-                                    "Matching: ${st.currentTrackName}",
-                                    color = colors.onSurfaceVariant,
-                                    fontSize = 11.5.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
                             }
                         }
                         is SpotifyImportState.Success -> {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
+                                    .padding(vertical = 4.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(36.dp))
+                                if (st.coverUrl.isNotBlank()) {
+                                    Box(contentAlignment = Alignment.BottomEnd) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(st.coverUrl)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(64.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .border(1.5.dp, Color(0xFF1DB954).copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                        )
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .offset(x = 3.dp, y = 3.dp)
+                                        )
+                                    }
+                                } else {
+                                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(34.dp))
+                                }
+
                                 Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Text(
                                     "Imported ${st.matchedCount} of ${st.totalTracks} songs",
                                     color = colors.onSurfaceVariant,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 12.sp,
                                     textAlign = TextAlign.Center
                                 )
+
+                                if (st.unmatchedTracks.isNotEmpty()) {
+                                    var copiedIndex by remember { mutableIntStateOf(-1) }
+                                    val haptic = LocalHapticFeedback.current
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(colors.surfaceHighest)
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "⚠️ ${st.unmatchedTracks.size} songs not found",
+                                                color = Color(0xFFFFB74D),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    val allNames = st.unmatchedTracks.joinToString("\n") { "${it.title} - ${it.artist}" }
+                                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(allNames))
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    copiedIndex = -99
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(24.dp)
+                                            ) {
+                                                Text(
+                                                    if (copiedIndex == -99) "Copied All!" else "Copy All",
+                                                    color = Color(0xFF1DB954),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 140.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            itemsIndexed(st.unmatchedTracks) { idx, track ->
+                                                val query = "${track.title} ${track.artist}".trim()
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(colors.surfaceHigh)
+                                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            track.title,
+                                                            color = colors.onSurface,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            track.artist,
+                                                            color = colors.onSurfaceVariant,
+                                                            fontSize = 10.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+
+                                                    IconButton(
+                                                        onClick = {
+                                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(query))
+                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            copiedIndex = idx
+                                                        },
+                                                        modifier = Modifier.size(26.dp)
+                                                    ) {
+                                                        Icon(
+                                                            if (copiedIndex == idx) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                                                            contentDescription = "Copy",
+                                                            tint = if (copiedIndex == idx) Color(0xFF1DB954) else colors.onSurfaceVariant,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                    }
+
+                                                    if (onSearchOnline != null) {
+                                                        IconButton(
+                                                            onClick = {
+                                                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(query))
+                                                                onSearchOnline(query)
+                                                                onResetSpotifyImport()
+                                                                onDismiss()
+                                                            },
+                                                            modifier = Modifier.size(26.dp)
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Outlined.Search,
+                                                                contentDescription = "Search",
+                                                                tint = colors.primary,
+                                                                modifier = Modifier.size(15.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         is SpotifyImportState.Error -> {

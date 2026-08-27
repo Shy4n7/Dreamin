@@ -178,7 +178,14 @@ sealed class SpotifyImportState {
         val matchedCount: Int,
         val currentTrackName: String
     ) : SpotifyImportState()
-    data class Success(val playlistId: Long, val playlistTitle: String, val matchedCount: Int, val totalTracks: Int) : SpotifyImportState()
+    data class Success(
+        val playlistId: Long,
+        val playlistTitle: String,
+        val matchedCount: Int,
+        val totalTracks: Int,
+        val coverUrl: String = "",
+        val unmatchedTracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack> = emptyList()
+    ) : SpotifyImportState()
     data class Error(val message: String) : SpotifyImportState()
 }
 

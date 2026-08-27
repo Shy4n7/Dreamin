@@ -197,7 +197,8 @@ fun LibraryScreen(
                     spotifyImportState = state.spotifyImportState,
                     onImportSpotify = onImportSpotifyPlaylist,
                     onImportTextList = onImportTextList,
-                    onResetSpotifyImport = onResetSpotifyImportState
+                    onResetSpotifyImport = onResetSpotifyImportState,
+                    onSearchOnline = onSearchOnline
                 )
                 1 -> FavoritesTab(
                     favorites = state.favorites,
@@ -368,10 +369,12 @@ fun PlaylistsTab(
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
     onImportTextList: (String, String) -> Unit = { _, _ -> },
-    onResetSpotifyImport: () -> Unit = {}
+    onResetSpotifyImport: () -> Unit = {},
+    onSearchOnline: suspend (String) -> List<Song> = { emptyList() }
 ) {
     val colors = LocalDreaminColors.current
     var showCreateDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(spotifyImportState) {
         if (spotifyImportState !is SpotifyImportState.Idle) {
@@ -450,7 +453,8 @@ fun PlaylistsTab(
             spotifyImportState = spotifyImportState,
             onImportSpotify = onImportSpotify,
             onImportTextList = onImportTextList,
-            onResetSpotifyImport = onResetSpotifyImport
+            onResetSpotifyImport = onResetSpotifyImport,
+            onSearchOnline = { q -> scope.launch { onSearchOnline(q) } }
         )
     }
 }

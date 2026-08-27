@@ -386,7 +386,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val matchedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(6)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(16)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
@@ -395,8 +395,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     try {
                         var matched = matchSpotifyTrack(track, playlistLang)
                         if (matched == null) {
-                            // Quick retry with 250ms backoff for network transient hiccups
-                            kotlinx.coroutines.delay(250)
                             matched = matchSpotifyTrack(track, playlistLang)
                         }
 
@@ -416,17 +414,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         semaphore.release()
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
-                        _uiState.update {
-                            it.copy(
-                                spotifyImportState = SpotifyImportState.MatchingTracks(
-                                    playlistTitle = title,
-                                    coverUrl = coverUrl,
-                                    currentTrackIndex = currDone,
-                                    totalTracks = total,
-                                    matchedCount = currMatched,
-                                    currentTrackName = track.title
+                        if (currDone % 2 == 0 || currDone == total) {
+                            _uiState.update {
+                                it.copy(
+                                    spotifyImportState = SpotifyImportState.MatchingTracks(
+                                        playlistTitle = title,
+                                        coverUrl = coverUrl,
+                                        currentTrackIndex = currDone,
+                                        totalTracks = total,
+                                        matchedCount = currMatched,
+                                        currentTrackName = track.title
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }
@@ -434,6 +434,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         val matchedSongs = matchedArray.filterNotNull()
+        val unmatchedTracks = tracks.filterIndexed { index, _ -> matchedArray[index] == null }
 
         if (matchedSongs.isEmpty()) {
             _uiState.update {
@@ -451,7 +452,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     playlistId = newPlaylistId,
                     playlistTitle = title,
                     matchedCount = matchedSongs.size,
-                    totalTracks = total
+                    totalTracks = total,
+                    coverUrl = coverUrl,
+                    unmatchedTracks = unmatchedTracks
                 )
             )
         }
