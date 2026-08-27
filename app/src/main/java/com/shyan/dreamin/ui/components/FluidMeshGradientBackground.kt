@@ -67,22 +67,25 @@ fun FluidMeshGradientBackground(
         label = "mesh_speed"
     )
 
-    // Continuous monotonic time clock
-    var elapsedTime by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(Unit) {
-        var lastFrameNanos = 0L
-        while (true) {
-            withFrameNanos { frameNanos ->
-                if (lastFrameNanos != 0L) {
-                    val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    val clampedDt = dt.coerceIn(0.001f, 0.05f)
-                    elapsedTime += clampedDt * speedMultiplier * 0.35f
-                }
-                lastFrameNanos = frameNanos
-            }
-        }
-    }
+    val infiniteTransition = rememberInfiniteTransition(label = "mesh_orbit")
+    val orbitPhase1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = if (isPlaying) 16000 else 32000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "orbit_1"
+    )
+    val orbitPhase2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = if (isPlaying) 22000 else 44000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "orbit_2"
+    )
 
     Box(modifier = modifier.fillMaxSize()) {
         Canvas(
@@ -92,15 +95,16 @@ fun FluidMeshGradientBackground(
         ) {
             val width = size.width
             val height = size.height
-            val t = elapsedTime.toDouble()
+            val t1 = orbitPhase1.toDouble()
+            val t2 = orbitPhase2.toDouble()
             val bloom = bloomScale.value
 
             // Solid base background
             drawRect(color = backgroundColor)
 
             // 1. Orb 1 (Dominant Color Aura - Elevated Upper Center/Left)
-            val orb1X = (0.42 + 0.26 * sin(t * 0.72)).toFloat() * width
-            val orb1Y = (0.16 + 0.12 * cos(t * 0.58)).toFloat() * height
+            val orb1X = (0.42 + 0.26 * sin(t1 * 1.0)).toFloat() * width
+            val orb1Y = (0.16 + 0.12 * cos(t1 * 0.8)).toFloat() * height
             val orb1Radius = width * 0.90f * bloom
 
             drawCircle(
@@ -118,8 +122,8 @@ fun FluidMeshGradientBackground(
             )
 
             // 2. Orb 2 (Secondary Color Aura - Elevated Center Right Artwork Region)
-            val orb2X = (0.68 + 0.22 * cos(t * 0.65 + 1.4)).toFloat() * width
-            val orb2Y = (0.32 + 0.14 * sin(t * 0.82 + 0.9)).toFloat() * height
+            val orb2X = (0.68 + 0.22 * cos(t2 * 0.9 + 1.4)).toFloat() * width
+            val orb2Y = (0.32 + 0.14 * sin(t2 * 1.1 + 0.9)).toFloat() * height
             val orb2Radius = width * 0.95f * bloom
 
             drawCircle(
@@ -137,8 +141,8 @@ fun FluidMeshGradientBackground(
             )
 
             // 3. Orb 3 (Accent Color Glow - Mid Elevation under Artwork)
-            val orb3X = (0.32 + 0.24 * sin(t * 0.52 + 2.8)).toFloat() * width
-            val orb3Y = (0.46 + 0.12 * cos(t * 0.68 + 2.1)).toFloat() * height
+            val orb3X = (0.32 + 0.24 * sin(t2 * 0.7 + 2.8)).toFloat() * width
+            val orb3Y = (0.46 + 0.12 * cos(t2 * 0.85 + 2.1)).toFloat() * height
             val orb3Radius = width * 0.85f * bloom
 
             drawCircle(

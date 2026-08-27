@@ -286,23 +286,40 @@ fun NowPlayingProgressSlider(
 
         Spacer(modifier = Modifier.height(2.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                formatDuration((displayProgress * durationMs).toLong()),
-                color = colors.onSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                formatDuration(durationMs),
-                color = colors.onSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        DurationLabelsRow(
+            positionMsProvider = { (displayProgress * durationMs).toLong() },
+            durationMs = durationMs,
+            textColor = colors.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun DurationLabelsRow(
+    positionMsProvider: () -> Long,
+    durationMs: Long,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val currentSec = remember {
+        derivedStateOf { (positionMsProvider() / 1000L) * 1000L }
+    }
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = formatDuration(currentSec.value),
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = formatDuration(durationMs),
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shyan.dreamin.data.model.LyricsState
 import com.shyan.dreamin.data.model.PlaybackProgress
 import com.shyan.dreamin.ui.screens.LocalDreaminColors
@@ -43,7 +44,7 @@ fun SyncedLyricsView(
 ) {
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
-    val progress by progressFlow.collectAsState()
+    val progress by progressFlow.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     Box(
