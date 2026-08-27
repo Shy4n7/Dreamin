@@ -736,9 +736,16 @@ fun QueueSongRow(
     onHeightMeasured: (Float) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
-    val elevation by animateFloatAsState(
-        targetValue = if (isDragging) 8f else 0f,
+    val haptic = LocalHapticFeedback.current
+    val elevation by animateDpAsState(
+        targetValue = if (isDragging) 16.dp else 0.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
         label = "drag_elevation"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isDragging) 1.03f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "drag_scale"
     )
 
     Row(
@@ -746,14 +753,27 @@ fun QueueSongRow(
             .fillMaxWidth()
             .offset { IntOffset(0, dragOffsetY.toInt()) }
             .onGloballyPositioned { onHeightMeasured(it.size.height.toFloat()) }
-            .zIndex(if (isDragging) 1f else 0f)
-            .graphicsLayer { shadowElevation = elevation }
+            .zIndex(if (isDragging) 10f else 0f)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                shadowElevation = elevation.toPx()
+                shape = RoundedCornerShape(16.dp)
+                clip = false
+            }
+            .border(
+                width = if (isDragging) 1.5.dp else 0.dp,
+                brush = if (isDragging) Brush.horizontalGradient(listOf(colors.primary, colors.secondary)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)),
+                shape = RoundedCornerShape(16.dp)
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true, color = colors.primary)
             ) { onClick() }
             .background(
-                if (isPlaying || isDragging) colors.surfaceHigh else Color.Transparent,
+                if (isDragging) colors.surfaceHighest.copy(alpha = 0.95f)
+                else if (isPlaying) colors.surfaceHigh
+                else Color.Transparent,
                 RoundedCornerShape(16.dp)
             )
             .padding(12.dp),
@@ -761,13 +781,16 @@ fun QueueSongRow(
     ) {
         Icon(
             imageVector = Icons.Outlined.DragHandle,
-            contentDescription = "Drag to reorder",
-            tint = colors.onSurfaceVariant.copy(alpha = 0.5f),
+            contentDescription = "Drag to reorder ${song.displayTitle}",
+            tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier
                 .size(20.dp)
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = { onDragStart() },
+                        onDragStart = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onDragStart()
+                        },
                         onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
                         onDragEnd = { onDragEnd() },
                         onDragCancel = { onDragEnd() }
@@ -782,7 +805,7 @@ fun QueueSongRow(
                 .data(song.displayArtworkUrl)
                 .crossfade(200)
                 .build(),
-            contentDescription = null,
+            contentDescription = "Artwork for ${song.displayTitle}",
             modifier = Modifier
                 .size(56.dp)
                 .clip(RoundedCornerShape(16.dp)),
@@ -812,7 +835,7 @@ fun QueueSongRow(
         IconButton(onClick = onRemove) {
             Icon(
                 Icons.Outlined.RemoveCircleOutline,
-                contentDescription = "Remove",
+                contentDescription = "Remove ${song.displayTitle} from queue",
                 tint = colors.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )

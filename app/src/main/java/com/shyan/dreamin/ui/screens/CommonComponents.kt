@@ -423,10 +423,15 @@ fun MiniPlayer(
                         .fillMaxWidth()
                         .height(68.dp)
                         .graphicsLayer {
-                            translationX = swipeXAnim.value
-                            translationY = swipeYAnim.value
-                            scaleX = pressScale
-                            scaleY = pressScale
+                            val dragX = swipeXAnim.value
+                            val dragY = swipeYAnim.value
+                            translationX = dragX
+                            translationY = dragY
+                            rotationZ = (dragX / 35f).coerceIn(-4f, 4f)
+                            val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1400f)).coerceIn(0.92f, 1f)
+                            scaleX = pressScale * dynamicScale
+                            scaleY = pressScale * dynamicScale
+                            alpha = (1f - (kotlin.math.abs(dragX) / 500f)).coerceIn(0.6f, 1f)
                         }
                         .pointerInput(onNext, onPrevious, onExpand) {
                             var totalX = 0f
@@ -496,7 +501,7 @@ fun MiniPlayer(
                             .size(coil.size.Size(160, 160))
                             .crossfade(150)
                             .build(),
-                        contentDescription = null,
+                        contentDescription = "Artwork for ${s.displayTitle}",
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(10.dp)),
@@ -525,7 +530,7 @@ fun MiniPlayer(
                 IconButton(onClick = onPrevious, modifier = Modifier.size(44.dp)) {
                     Icon(
                         imageVector = Icons.Filled.SkipPrevious,
-                        contentDescription = null,
+                        contentDescription = "Previous track",
                         tint = colors.onSurface,
                         modifier = Modifier.size(24.dp)
                     )
@@ -541,7 +546,7 @@ fun MiniPlayer(
                     } else {
                         Icon(
                             imageVector = if (playbackState == PlaybackState.Playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = null,
+                            contentDescription = if (playbackState == PlaybackState.Playing) "Pause" else "Play",
                             tint = colors.onSurface,
                             modifier = Modifier.size(28.dp)
                         )
@@ -551,7 +556,7 @@ fun MiniPlayer(
                 IconButton(onClick = onNext, modifier = Modifier.size(44.dp)) {
                     Icon(
                         imageVector = Icons.Filled.SkipNext,
-                        contentDescription = null,
+                        contentDescription = "Skip to next track",
                         tint = colors.onSurface,
                         modifier = Modifier.size(24.dp)
                     )

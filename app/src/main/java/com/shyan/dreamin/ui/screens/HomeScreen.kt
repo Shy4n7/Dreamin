@@ -524,8 +524,10 @@ fun DreaminSearchBar(
                     enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)) + fadeIn(tween(150)),
                     exit = scaleOut(tween(120)) + fadeOut(tween(120))
                 ) {
+                    val haptic = LocalHapticFeedback.current
                     IconButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onQueryChange("")
                             onClear()
                         },
@@ -533,8 +535,8 @@ fun DreaminSearchBar(
                     ) {
                         Icon(
                             Icons.Outlined.Close,
-                            contentDescription = "Clear",
-                            tint = colors.onSurfaceVariant,
+                            contentDescription = "Clear search query",
+                            tint = colors.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
