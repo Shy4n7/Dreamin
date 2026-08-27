@@ -81,4 +81,85 @@ class IntelliMatchEngineTest {
         assertTrue(result.score >= 1750)
         assertEquals(IntelliMatchEngine.MatchConfidence.HIGH, result.confidence)
     }
+
+    @Test
+    fun testDetectDominantPlaylistLanguage_malayalamPlaylist() {
+        val tracks = listOf(
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Illuminati",
+                artist = "Sushin Shyam, Dabzee",
+                durationMs = 193000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Kuthanthram",
+                artist = "Sushin Shyam, Vedan",
+                durationMs = 175000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Darshana (From \"Hridayam\")",
+                artist = "Hesham Abdul Wahab, Darshana Rajendran",
+                durationMs = 269000L
+            )
+        )
+        val detected = IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, playlistTitle = "Chill Hits")
+        assertEquals("malayalam", detected)
+    }
+
+    @Test
+    fun testDetectDominantPlaylistLanguage_tamilPlaylist() {
+        val tracks = listOf(
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Badass",
+                artist = "Anirudh Ravichander",
+                durationMs = 229000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Arabic Kuthu",
+                artist = "Anirudh Ravichander, Jonita Gandhi",
+                durationMs = 280000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Marakkuma Nenjam",
+                artist = "A.R. Rahman",
+                durationMs = 250000L
+            )
+        )
+        val detected = IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, playlistTitle = "My Songs")
+        assertEquals("tamil", detected)
+    }
+
+    @Test
+    fun testLanguageAffinity_prefersTargetLanguageVersion() {
+        val malayalamCandidate = Song(
+            id = "mal_1",
+            title = "Aalroorathil (From \"Film\") (Malayalam)",
+            artist = "Sushin Shyam",
+            artworkUrl = "",
+            duration = 200000L
+        )
+        val teluguDubCandidate = Song(
+            id = "tel_1",
+            title = "Aalroorathil (From \"Film\") (Telugu)",
+            artist = "Sushin Shyam",
+            artworkUrl = "",
+            duration = 200000L
+        )
+
+        val malResult = IntelliMatchEngine.evaluateCandidate(
+            targetTitle = "Aalroorathil",
+            targetArtist = "Sushin Shyam",
+            targetDurationMs = 200000L,
+            candidate = malayalamCandidate,
+            targetLanguage = "malayalam"
+        )
+        val telResult = IntelliMatchEngine.evaluateCandidate(
+            targetTitle = "Aalroorathil",
+            targetArtist = "Sushin Shyam",
+            targetDurationMs = 200000L,
+            candidate = teluguDubCandidate,
+            targetLanguage = "malayalam"
+        )
+
+        assertTrue("Malayalam version should score higher than Telugu dub in Malayalam playlist", malResult.score > telResult.score)
+    }
 }

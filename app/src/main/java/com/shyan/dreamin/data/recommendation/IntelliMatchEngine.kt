@@ -125,6 +125,86 @@ object IntelliMatchEngine {
     }
 
     /**
+     * Context-aware language inference for Spotify Playlists.
+     * Scans playlist title, track titles, and regional artist profiles to detect the dominant language.
+     * Returns "tamil", "malayalam", "telugu", "hindi", "kannada", "punjabi", or "english".
+     */
+    fun detectDominantPlaylistLanguage(
+        tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>,
+        playlistTitle: String = ""
+    ): String {
+        val langScores = mutableMapOf(
+            "tamil" to 0,
+            "malayalam" to 0,
+            "telugu" to 0,
+            "hindi" to 0,
+            "kannada" to 0,
+            "punjabi" to 0,
+            "english" to 0
+        )
+
+        val plLower = playlistTitle.lowercase()
+        for (lang in langScores.keys) {
+            if (plLower.contains(lang)) {
+                langScores[lang] = langScores.getValue(lang) + 15
+            }
+        }
+
+        val malayalamArtists = setOf(
+            "sushin shyam", "hesham abdul wahab", "jassie gift", "deepak dev",
+            "shaan rahman", "alphons joseph", "gopi sundar", "bijibal", "mg sreekumar",
+            "vineeth sreenivasan", "job kurian", "dabzee", "vedan", "vishnu vijay",
+            "christo xavier", "rex vijayan", "kailas", "sithara krishnakumar",
+            "najim arshad", "sooraj santhosh", "k.s. harisankar", "ks harisankar"
+        )
+        val tamilArtists = setOf(
+            "anirudh ravichander", "a.r. rahman", "ar rahman", "yuvan shankar raja", "harris jayaraj",
+            "g.v. prakash", "gv prakash", "santhosh narayanan", "d. imman", "d imman",
+            "deva", "ilayaraja", "ilaiyaraaja", "sid sriram", "anthony daasan",
+            "dhee", "sean roldan", "hiphop tamizha", "sam c.s.", "sam cs", "leon james", "ghibran"
+        )
+        val teluguArtists = setOf(
+            "devi sri prasad", "dsp", "thaman s", "s. thaman", "m.m. keeravani", "keeravani",
+            "mickey j. meyer", "anup rubens", "chaitan bharadwaj", "mahathi swara sagar",
+            "ram miriyala", "anurag kulkarni", "sri krishna", "geetha madhuri", "mangli",
+            "hema chandra", "rahul sipligunj", "penchal das"
+        )
+        val hindiArtists = setOf(
+            "arijit singh", "pritam", "vishal-shekhar", "vishal mishra", "sachin-jigar",
+            "tanishk bagchi", "neha kakkar", "badshah", "guru randhawa",
+            "sonu nigam", "shaan", "kk", "kumar sanu", "alka yagnik", "udit narayan",
+            "amit trivedi", "mithoon", "shankar-ehsaan-loy", "jubin nautiyal", "b praak"
+        )
+
+        for (t in tracks) {
+            val titleLower = t.title.lowercase()
+            val artistLower = t.artist.lowercase()
+
+            for (lang in listOf("tamil", "malayalam", "telugu", "hindi", "kannada", "punjabi", "english")) {
+                if (titleLower.contains("($lang)") || titleLower.contains("[$lang]")) {
+                    langScores[lang] = langScores.getValue(lang) + 10
+                }
+            }
+
+            if (malayalamArtists.any { artistLower.contains(it) }) {
+                langScores["malayalam"] = langScores.getValue("malayalam") + 3
+            }
+            if (tamilArtists.any { artistLower.contains(it) }) {
+                langScores["tamil"] = langScores.getValue("tamil") + 3
+            }
+            if (teluguArtists.any { artistLower.contains(it) }) {
+                langScores["telugu"] = langScores.getValue("telugu") + 3
+            }
+            if (hindiArtists.any { artistLower.contains(it) }) {
+                langScores["hindi"] = langScores.getValue("hindi") + 3
+            }
+        }
+
+        val best = langScores.maxByOrNull { it.value }
+        return if (best != null && best.value > 0) best.key else "tamil"
+    }
+
+    /**
      * Evaluates and scores a candidate song against a target Spotify track.
      */
     fun evaluateCandidate(
@@ -187,20 +267,19 @@ object IntelliMatchEngine {
         }
         if (artistHits > 0) score += 250
 
-        // 3. Language Affinity (Only penalize if title/artist match is uncertain)
-        val isExactTrackMatch = (targetBaseKey == candBaseKey || maxTitleSim >= 0.85) && artistHits > 0
-        if (!isExactTrackMatch) {
-            val candTitleLower = candidate.title.lowercase()
-            val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLanguage.lowercase() }
-            for (other in otherLanguages) {
-                if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]")) {
-                    score -= 250
-                }
-            }
-            if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]")) {
-                score += 300
+        // 3. Language Affinity (Context-aware preference for targetLanguage over other regional versions)
+        val candTitleLower = candidate.title.lowercase()
+        val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi").filter { it != targetLanguage.lowercase() }
+        for (other in otherLanguages) {
+            if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]")) {
+                score -= 300
             }
         }
+        if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]")) {
+            score += 350
+        }
+
+        val isExactTrackMatch = (targetBaseKey == candBaseKey || maxTitleSim >= 0.85) && artistHits > 0
 
         // 4. Adaptive Duration Tolerance (Soundtrack vs Audio Cut)
         if (targetDurationMs > 0 && candidate.duration > 0) {

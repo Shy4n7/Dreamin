@@ -354,8 +354,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private suspend fun processTrackMatching(title: String, coverUrl: String, tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>) {
-        val langRegex = Regex("(?i)\\b(tamil|telugu|hindi|malayalam|kannada|punjabi|english)\\b")
-        val playlistLang = langRegex.find(title)?.value?.lowercase() ?: "tamil"
+        val playlistLang = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, title)
+        android.util.Log.d("MusicVM", "Inferred dominant playlist language for '$title': $playlistLang")
 
         val total = tracks.size
         val matchedArray = arrayOfNulls<Song>(total)
