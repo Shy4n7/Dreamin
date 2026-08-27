@@ -1,5 +1,15 @@
 # Antigravity Workspace Guidelines & Rules
 
+## Core Rules
+
+- **Modular Components**: Keep components small, focused, and modular.
+- **Database Safety**: Always include robust error handling (try-catch / Result) in database calls and repository operations.
+
+## Modes of Operation
+
+- **Explain Mode**: When asked to investigate or explain, summarize clearly before writing or proposing code changes.
+- **Implement Mode**: Only write code after a clear plan or direction is agreed upon.
+
 ## Automatic Local Git Commits
 
 - **Automatic Local Commit**: Whenever you complete a feature, bug fix, refactor, or UI modification requested by the user and verify that it compiles/passes tests, **automatically stage and commit the changes to local git** (`git add .` and `git commit -m "<type>: <concise description>"`) before concluding your response.
@@ -26,4 +36,5 @@
 
 - Format local commit messages using Conventional Commits:
   - `feat(ui): ...`, `fix(player): ...`, `perf(compose): ...`, `refactor(nav): ...`
+
 
