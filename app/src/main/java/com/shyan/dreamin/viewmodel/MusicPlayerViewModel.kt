@@ -386,12 +386,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val matchedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(12)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
                 launch {
-                    kotlinx.coroutines.delay(index * 20L)
                     semaphore.acquire()
                     try {
                         val matched = matchSpotifyTrack(track, playlistLang)
@@ -411,7 +410,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         semaphore.release()
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
-                        if (currDone % 3 == 0 || currDone == total) {
+                        if (currDone % 4 == 0 || currDone == total) {
                             _uiState.update {
                                 it.copy(
                                     spotifyImportState = SpotifyImportState.MatchingTracks(
