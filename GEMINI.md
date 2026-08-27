@@ -37,4 +37,9 @@
 - Format local commit messages using Conventional Commits:
   - `feat(ui): ...`, `fix(player): ...`, `perf(compose): ...`, `refactor(nav): ...`
 
+## Response Style
 
+- Keep responses concise and technical. Skip filler like "Great question!".
+- Use code blocks for all code snippets, even short ones.
+- Prefer bullet points over paragraphs for technical explanations.
+- When referencing files, always use clickable markdown links.
