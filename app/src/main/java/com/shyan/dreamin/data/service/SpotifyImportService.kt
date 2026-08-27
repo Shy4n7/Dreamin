@@ -243,15 +243,16 @@ object SpotifyImportService {
     }
 
     private suspend fun fetchTracksConcurrently(trackIds: List<String>): List<SpotifyImportedTrack> = coroutineScope {
-        val semaphore = kotlinx.coroutines.sync.Semaphore(20)
-        trackIds.map { tid ->
+        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
+        trackIds.mapIndexed { index, tid ->
             async(Dispatchers.IO) {
                 semaphore.acquire()
                 try {
+                    kotlinx.coroutines.delay((index % 8) * 35L)
                     fetchSingleTrackResilient(tid)
                 } catch (e: Exception) {
                     android.util.Log.w("SpotifyImport", "Failed to fetch track $tid: ${e.message}")
-                    null
+                    SpotifyImportedTrack(title = "Spotify Track", artist = "", durationMs = 0L)
                 } finally {
                     semaphore.release()
                 }
@@ -259,10 +260,13 @@ object SpotifyImportService {
         }.awaitAll().filterNotNull()
     }
 
-    private fun fetchSingleTrackResilient(trackId: String): SpotifyImportedTrack? {
-        // Pass 1: Spotify Embed Track page via connection-pooled HTTP client
-        for (attempt in 0..1) {
+    private fun fetchSingleTrackResilient(trackId: String): SpotifyImportedTrack {
+        // Pass 1: Spotify Embed Track page via connection-pooled HTTP client with backoff
+        for (attempt in 0..2) {
             try {
+                if (attempt > 0) {
+                    Thread.sleep(attempt * 250L)
+                }
                 val request = Request.Builder()
                     .url("https://open.spotify.com/embed/track/$trackId")
                     .header("User-Agent", USER_AGENT)
@@ -309,11 +313,11 @@ object SpotifyImportService {
                     }
                 }
             } catch (_: Exception) {
-                // Retry once
+                // Retry with backoff
             }
         }
 
-        // Pass 2: OEmbed Fallback
+        // Pass 2: OEmbed Fallback with Title + Artist Regex Decomposition
         try {
             val oeRequest = Request.Builder()
                 .url("https://open.spotify.com/oembed?url=https://open.spotify.com/track/$trackId")
@@ -324,12 +328,27 @@ object SpotifyImportService {
             NetworkService.httpClient.newCall(oeRequest).execute().use { response ->
                 if (response.isSuccessful) {
                     val oeJson = JSONObject(response.body?.string().orEmpty())
-                    val title = oeJson.optString("title", "").trim()
+                    val rawTitle = oeJson.optString("title", "").trim()
                     val thumbUrl = oeJson.optString("thumbnail_url", "")
-                    if (title.isNotBlank()) {
+                    if (rawTitle.isNotBlank()) {
+                        var parsedTitle = rawTitle
+                        var parsedArtist = "Unknown Artist"
+
+                        val matchDash = Regex("^(.*?)\\s*[-–—]\\s*(?:song and lyrics by|song by|track by|by)\\s*(.*?)$", RegexOption.IGNORE_CASE).find(rawTitle)
+                        if (matchDash != null) {
+                            parsedTitle = matchDash.groupValues[1].trim()
+                            parsedArtist = matchDash.groupValues[2].trim()
+                        } else {
+                            val matchBy = Regex("^(.*?)\\s+by\\s+(.*?)$", RegexOption.IGNORE_CASE).find(rawTitle)
+                            if (matchBy != null) {
+                                parsedTitle = matchBy.groupValues[1].trim()
+                                parsedArtist = matchBy.groupValues[2].trim()
+                            }
+                        }
+
                         return SpotifyImportedTrack(
-                            title = title,
-                            artist = "Unknown Artist",
+                            title = parsedTitle,
+                            artist = parsedArtist,
                             durationMs = 0L,
                             artworkUrl = thumbUrl
                         )
@@ -340,6 +359,6 @@ object SpotifyImportService {
             // Silently proceed
         }
 
-        return null
+        return SpotifyImportedTrack(title = "Spotify Track $trackId", artist = "", durationMs = 0L)
     }
 }

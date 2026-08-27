@@ -44,7 +44,7 @@ object IntelliMatchEngine {
                 .replace(Regex("\\{[^{}]*\\}"), "")
         }
         val fullClean = cleaned.replace(Regex("[\"\'“”‘’]"), "").trim().ifBlank { rawTitle.trim() }
-        val subtitleParts = fullClean.split(Regex("\\s+[-–—:]\\s+"))
+        val subtitleParts = fullClean.split(Regex("\\s+[-–—:|]\\s+"))
         val baseTitle = subtitleParts.firstOrNull()?.trim()?.ifBlank { fullClean } ?: fullClean
         return Pair(baseTitle, fullClean)
     }
@@ -151,12 +151,12 @@ object IntelliMatchEngine {
         val maxTitleSim = max(titleJaro, phonJaro)
 
         if (targetBaseKey == candBaseKey || targetFullKey == candBaseKey) {
-            score += 700
+            score += 750
         } else if (maxTitleSim >= 0.90) {
-            score += 600
-        } else if (maxTitleSim >= 0.80 || candBaseKey.contains(targetBaseKey) || targetBaseKey.contains(candBaseKey)) {
-            score += 450
-        } else if (maxTitleSim >= 0.68) {
+            score += 650
+        } else if (maxTitleSim >= 0.78 || candBaseKey.contains(targetBaseKey) || targetBaseKey.contains(candBaseKey)) {
+            score += 480
+        } else if (maxTitleSim >= 0.65) {
             score += 250
         } else {
             score -= 300
@@ -174,44 +174,46 @@ object IntelliMatchEngine {
         for (ta in targetArtistsNormalized) {
             if (candArtistNormalized.contains(ta) || ta.contains(candArtistNormalized)) {
                 artistHits++
-                score += 200
+                score += 220
             } else {
-                // Check Jaro on artist sub-tokens
                 val candSubTokens = candidate.artist.lowercase().split(",", "&", "/", " ")
                     .map { it.replace(Regex("[^a-z0-9]"), "").trim() }
                     .filter { it.length >= 3 }
-                if (candSubTokens.any { jaroWinkler(ta, it) >= 0.88 }) {
+                if (candSubTokens.any { jaroWinkler(ta, it) >= 0.85 }) {
                     artistHits++
-                    score += 150
+                    score += 160
                 }
             }
         }
-        if (artistHits > 0) score += 200
+        if (artistHits > 0) score += 250
 
-        // 3. Language Affinity
-        val candTitleLower = candidate.title.lowercase()
-        val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLanguage.lowercase() }
-        for (other in otherLanguages) {
-            if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]")) {
-                score -= 300
+        // 3. Language Affinity (Only penalize if title/artist match is uncertain)
+        val isExactTrackMatch = (targetBaseKey == candBaseKey || maxTitleSim >= 0.85) && artistHits > 0
+        if (!isExactTrackMatch) {
+            val candTitleLower = candidate.title.lowercase()
+            val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLanguage.lowercase() }
+            for (other in otherLanguages) {
+                if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]")) {
+                    score -= 250
+                }
             }
-        }
-        if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]")) {
-            score += 350
+            if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]")) {
+                score += 300
+            }
         }
 
         // 4. Adaptive Duration Tolerance (Soundtrack vs Audio Cut)
         if (targetDurationMs > 0 && candidate.duration > 0) {
             val diffSec = abs(targetDurationMs - candidate.duration) / 1000
-            if (diffSec <= 5) score += 250
-            else if (diffSec <= 15) score += 140
-            else if (diffSec <= 25) score += 60
-            else if (diffSec > 60) score -= 350
+            if (diffSec <= 6) score += 250
+            else if (diffSec <= 18) score += 140
+            else if (diffSec <= 30) score += 60
+            else if (diffSec > 60) score -= 300
         }
 
         val confidence = when {
-            score >= 1750 -> MatchConfidence.HIGH
-            score >= 1400 -> MatchConfidence.MEDIUM
+            isExactTrackMatch || score >= 1600 -> MatchConfidence.HIGH
+            score >= 1200 -> MatchConfidence.MEDIUM
             else -> MatchConfidence.LOW
         }
 
