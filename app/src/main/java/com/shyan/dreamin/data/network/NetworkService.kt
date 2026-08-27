@@ -51,13 +51,13 @@ interface MusicApi {
 object NetworkService {
     val BASE_URL = "http://10.0.2.2:8080/"
 
-    private val connectionPool = ConnectionPool(8, 5, TimeUnit.MINUTES)
+    private val connectionPool = ConnectionPool(32, 5, TimeUnit.MINUTES)
 
     val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectionPool(connectionPool)
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val orig = chain.request()
             val host = orig.url.host

@@ -386,18 +386,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val matchedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(16)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
                 launch {
+                    kotlinx.coroutines.delay(index * 20L)
                     semaphore.acquire()
                     try {
-                        var matched = matchSpotifyTrack(track, playlistLang)
-                        if (matched == null) {
-                            matched = matchSpotifyTrack(track, playlistLang)
-                        }
-
+                        val matched = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
                             val finalArtwork = when {
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
@@ -414,7 +411,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         semaphore.release()
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
-                        if (currDone % 2 == 0 || currDone == total) {
+                        if (currDone % 3 == 0 || currDone == total) {
                             _uiState.update {
                                 it.copy(
                                     spotifyImportState = SpotifyImportState.MatchingTracks(
@@ -876,13 +873,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     ): List<Song> = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
-        repeat(2) { attempt ->
-            try {
-                val req = okhttp3.Request.Builder()
-                    .url(url)
-                    .build()
-                val resp = NetworkService.httpClient.newCall(req).execute()
-                val text = resp.body?.string().orEmpty()
+        try {
+            val req = okhttp3.Request.Builder()
+                .url(url)
+                .build()
+            val resp = NetworkService.httpClient.newCall(req).execute()
+            val text = resp.body?.string().orEmpty()
                 val root = org.json.JSONObject(text)
                 val results = root.optJSONArray("results")
                 if (results != null && results.length() > 0) {
@@ -968,11 +964,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                     if (songs.isNotEmpty()) return@withContext songs.take(limit)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.w("MusicVM", "searchOnDevice attempt ${attempt + 1} failed: ${e.message}")
-            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("MusicVM", "searchOnDevice failed: ${e.message}")
         }
         // Seamless fallback to server search
         try {
