@@ -386,14 +386,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val matchedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(12)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(6)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
                 launch {
                     semaphore.acquire()
                     try {
-                        val matched = matchSpotifyTrack(track, playlistLang)
+                        var matched = matchSpotifyTrack(track, playlistLang)
+                        if (matched == null) {
+                            // Quick retry with 250ms backoff for network transient hiccups
+                            kotlinx.coroutines.delay(250)
+                            matched = matchSpotifyTrack(track, playlistLang)
+                        }
+
                         if (matched != null) {
                             val finalArtwork = when {
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
@@ -458,7 +464,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val rawTitle = track.title
         val rawArtist = track.artist
 
-        // 1. Language Detection from track title (e.g., "(From ... [Tamil])", "(Tamil)", "(Telugu Version)", etc.)
+        // 1. Language Detection from track title
         val langRegex = Regex("(?i)\\b(tamil|telugu|hindi|malayalam|kannada|punjabi|english)\\b")
         val trackLangMatch = langRegex.find(rawTitle)
         val targetLang = trackLangMatch?.value?.lowercase() ?: playlistLanguage.ifBlank { "tamil" }
@@ -474,7 +480,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
         val query = "$cleanTitle $primaryArtist".trim()
 
-        // 3. Multi-Pass Search Fallbacks
+        // 3. Multi-Pass Primary Search (JioSaavn / Local Catalog)
         var candidates = searchOnDevice(query, limit = 8, targetLanguage = targetLang)
         if (candidates.isEmpty()) {
             candidates = searchOnDevice(query, limit = 8, targetLanguage = "")
@@ -504,9 +510,32 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 candidates = searchOnDevice(firstTwoWords, limit = 12, targetLanguage = "")
             }
         }
+
+        // 4. Secondary Fallback: Server / YouTube Music Engine for Indie & Non-Catalog Releases
+        if (candidates.isEmpty()) {
+            try {
+                val serverResp = api.search(query, page = 1, limit = 10)
+                if (serverResp.results.isNotEmpty()) {
+                    candidates = serverResp.results.filter { cand ->
+                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (candidates.isEmpty()) {
+            try {
+                val serverResp = api.search(cleanTitle, page = 1, limit = 10)
+                if (serverResp.results.isNotEmpty()) {
+                    candidates = serverResp.results.filter { cand ->
+                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
         if (candidates.isEmpty()) return@withContext null
 
-        // 4. Multi-Factor Scoring
+        // 5. Multi-Factor Scoring with Strict Duration Verification
         val spotifyArtists = rawArtist.lowercase().split(",", "&", "feat.", "ft.", "/", ";").map { it.trim() }.filter { it.length >= 2 }
         val cleanSpotifyTitle = cleanTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
 
@@ -523,7 +552,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 score += 300
             }
 
-            // Language Penalty & Bonus (softened penalty so un-language-tagged tracks still match)
+            // Language Penalty & Bonus
             val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLang }
             for (other in otherLanguages) {
                 if (candTitle.contains("($other)") || candTitle.contains("[$other]")) {
