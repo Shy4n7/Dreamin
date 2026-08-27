@@ -5,7 +5,7 @@ import com.shyan.dreamin.data.model.Song
 object OfficialSongFilter {
 
     private val UNWANTED_TITLE_PATTERNS = Regex(
-        "(?i)(\\||~|//|\\b(cover|mashup|status|whatsapp|lyrical|8d|8d audio|bass boosted|slowed|reverb|shorts?|remix|bgm|teaser|trailer|speech|scene|full video|video song|hd|4k|unplugged|acoustic version|acoustic|karaoke|dubbed|instrumental|tribute|reaction|performance|theme music|audio jukebox|jukebox|ost|special edit|female version|male version|ringtone|ring tone|sped up|spedup|lo-fi|lofi|dj|creator|recreation|recreated|re-created|ai cover)\\b)"
+        "(?i)(~|//|\\b(cover|mashup|status|whatsapp|lyrical|8d|8d audio|bass boosted|slowed|reverb|shorts?|remix|bgm|teaser|trailer|speech|scene|full video|video song|hd|4k|unplugged|acoustic version|acoustic|karaoke|dubbed|instrumental|tribute|reaction|performance|theme music|audio jukebox|jukebox|ost|special edit|female version|male version|ringtone|ring tone|sped up|spedup|lo-fi|lofi|dj|creator|recreation|recreated|re-created|ai cover)\\b)"
     )
 
     private val UNWANTED_ARTISTS = listOf(
@@ -73,9 +73,9 @@ object OfficialSongFilter {
         if (song.duration in 1..79_999L || song.duration > 540_000L) return false
 
         // 4. Reject suspicious title formatting
-        if (title.contains("|") || title.contains(":") && title.contains("Song", ignoreCase = true)) return false
+        if (title.contains(":") && title.contains("Song", ignoreCase = true)) return false
 
-        // 5. Strict Language Filter: Reject invading Hindi tracks in South Indian queue
+        // 5. Strict Language Filter: Reject invading Hindi tracks in South Indian queue (only when rejectHindi=true)
         if (rejectHindi && isHindiTrack(song)) return false
 
         return true

@@ -875,7 +875,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         query: String, 
         limit: Int = 15, 
         page: Int = 1,
-        targetLanguage: String = ""
+        targetLanguage: String = "",
+        rejectHindi: Boolean = false
     ): List<Song> = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
@@ -963,7 +964,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             artworkUrl = image,
                             duration = durationSec * 1000L
                         )
-                        if (OfficialSongFilter.isOfficial(songItem)) {
+                        if (OfficialSongFilter.isOfficial(songItem, rejectHindi = rejectHindi)) {
                             songs.add(songItem)
                         }
                     }

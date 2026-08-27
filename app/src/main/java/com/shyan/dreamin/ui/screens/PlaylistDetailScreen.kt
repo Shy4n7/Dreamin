@@ -215,6 +215,7 @@ fun PlaylistDetailScreen(
     )
 
     // 🔍 2. In-Playlist Instant Filter & Search
+    val listState = rememberLazyListState()
     val filteredSongs = remember(songs, searchQuery) {
         if (searchQuery.isBlank()) songs
         else {
@@ -395,11 +396,17 @@ fun PlaylistDetailScreen(
                     }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = if (filteredSongs.size >= 8) 20.dp else 16.dp, top = 6.dp, bottom = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                     // Hero Header Item (Always shown)
                     if (!isSearchActive || searchQuery.isBlank()) {
                         item {
@@ -837,8 +844,21 @@ fun PlaylistDetailScreen(
                         item { Spacer(modifier = Modifier.height(if (currentSong != null) 90.dp else 24.dp)) }
                     }
                 }
+                if (filteredSongs.size >= 8) {
+                    PlaylistFastScroller(
+                        listState = listState,
+                        itemCount = filteredSongs.size,
+                        songs = filteredSongs,
+                        dominantColor = animatedDominant,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(top = 16.dp, bottom = if (currentSong != null) 96.dp else 24.dp, end = 2.dp)
+                    )
+                }
             }
         }
+    }
 
         // MiniPlayer floating inside playlist screen at the bottom
         AnimatedVisibility(
@@ -1390,4 +1410,169 @@ fun RenamePlaylistDialog(currentName: String, onDismiss: () -> Unit, onRename: (
         containerColor = colors.surfaceHigh,
         titleContentColor = colors.onSurface
     )
+}
+
+/**
+ * Sleek, glassmorphic vertical fast-scroll slider and scrubber for playlists.
+ * Allows effortless navigation across 300+ tracks with a floating index indicator and haptic feedback.
+ */
+@Composable
+fun PlaylistFastScroller(
+    listState: LazyListState,
+    itemCount: Int,
+    songs: List<Song>,
+    dominantColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalDreaminColors.current
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+    var lastHapticIndex by remember { mutableIntStateOf(-1) }
+
+    val isScrollInProgress = listState.isScrollInProgress
+    val firstVisibleIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+
+    val scrollFraction by remember {
+        derivedStateOf {
+            if (isDragging) dragFraction
+            else if (itemCount > 1) {
+                val effectiveIdx = (firstVisibleIndex - 1).coerceAtLeast(0)
+                (effectiveIdx.toFloat() / (itemCount - 1).coerceAtLeast(1)).coerceIn(0f, 1f)
+            } else 0f
+        }
+    }
+
+    val alphaAnim by animateFloatAsState(
+        targetValue = if (isDragging || isScrollInProgress) 1f else 0.30f,
+        animationSpec = tween(if (isDragging || isScrollInProgress) 150 else 500),
+        label = "fast_scroll_alpha"
+    )
+
+    val currentTargetIndex = remember(scrollFraction, itemCount) {
+        (scrollFraction * (itemCount - 1).coerceAtLeast(0)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
+    }
+    val currentSongSnippet = remember(currentTargetIndex, songs) {
+        songs.getOrNull(currentTargetIndex)
+    }
+
+    Box(
+        modifier = modifier
+            .width(42.dp)
+            .graphicsLayer { alpha = alphaAnim }
+            .pointerInput(itemCount) {
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        isDragging = true
+                        val fraction = (offset.y / size.height.toFloat()).coerceIn(0f, 1f)
+                        dragFraction = fraction
+                        val targetIdx = (fraction * (itemCount - 1)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
+                        scope.launch {
+                            listState.scrollToItem((targetIdx + 1).coerceIn(0, itemCount))
+                        }
+                    },
+                    onDragEnd = { isDragging = false },
+                    onDragCancel = { isDragging = false },
+                    onVerticalDrag = { change, _ ->
+                        change.consume()
+                        val fraction = (change.position.y / size.height.toFloat()).coerceIn(0f, 1f)
+                        dragFraction = fraction
+                        val targetIdx = (fraction * (itemCount - 1)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
+                        if (targetIdx != lastHapticIndex) {
+                            lastHapticIndex = targetIdx
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        scope.launch {
+                            listState.scrollToItem((targetIdx + 1).coerceIn(0, itemCount))
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.TopEnd
+    ) {
+        // Track Background Line
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(3.5.dp)
+                .padding(vertical = 12.dp)
+                .clip(CircleShape)
+                .background(colors.surfaceHighest.copy(alpha = 0.5f))
+        )
+
+        // Draggable Thumb Slider
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(36.dp)
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val availableHeight = maxHeight - 36.dp
+                val thumbY = availableHeight * scrollFraction
+
+                // Floating Bubble showing Track Index & Title when dragging
+                if (isDragging) {
+                    Row(
+                        modifier = Modifier
+                            .offset(x = (-44).dp, y = thumbY - 8.dp)
+                            .align(Alignment.TopEnd)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(colors.surfaceHighest.copy(alpha = 0.95f))
+                            .border(1.dp, dominantColor.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(dominantColor.copy(alpha = 0.25f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${currentTargetIndex + 1}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = dominantColor
+                            )
+                        }
+                        Text(
+                            text = currentSongSnippet?.displayTitle ?: "Track ${currentTargetIndex + 1}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 130.dp)
+                        )
+                    }
+                }
+
+                // Thumb Pill
+                Box(
+                    modifier = Modifier
+                        .offset(y = thumbY)
+                        .align(Alignment.TopEnd)
+                        .size(width = 6.dp, height = 36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    dominantColor,
+                                    colors.primary
+                                )
+                            )
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = if (isDragging) 0.8f else 0.3f),
+                            shape = CircleShape
+                        )
+                )
+            }
+        }
+    }
 }
