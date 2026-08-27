@@ -514,6 +514,52 @@ object SpotifyImportService {
                 }
             }
 
+            // Extract embedded accessToken to paginate beyond 100 songs
+            val embeddedToken = extractAccessTokenFromNextData(root) ?: run {
+                val tokenRegex = Regex(""""accessToken"\s*:\s*"([A-Za-z0-9_.\-]{30,})"""")
+                tokenRegex.find(html)?.groupValues?.getOrNull(1)
+            }
+
+            if (!embeddedToken.isNullOrBlank() && tracks.size >= 100) {
+                android.util.Log.d("SpotifyImport", "Embed found session token. Paginating remaining tracks...")
+                var offset = tracks.size
+                var hasMore = true
+                while (hasMore && offset < 5000) {
+                    var pageConn: HttpURLConnection? = null
+                    try {
+                        val pageUrl = URL("https://api.spotify.com/v1/playlists/$playlistId/tracks?offset=$offset&limit=100")
+                        pageConn = pageUrl.openConnection() as HttpURLConnection
+                        pageConn.requestMethod = "GET"
+                        pageConn.setRequestProperty("Authorization", "Bearer $embeddedToken")
+                        pageConn.setRequestProperty("User-Agent", USER_AGENT)
+                        pageConn.setRequestProperty("App-Platform", "WebPlayer")
+                        pageConn.setRequestProperty("Referer", "https://open.spotify.com/")
+                        pageConn.connectTimeout = 8000
+                        pageConn.readTimeout = 8000
+
+                        if (pageConn.responseCode == 200) {
+                            val pageText = BufferedReader(InputStreamReader(pageConn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                            val pageRoot = JSONObject(pageText)
+                            val pItems = pageRoot.optJSONArray("items")
+                            val prevCount = tracks.size
+                            parseTrackItems(pItems, tracks)
+                            val added = tracks.size - prevCount
+                            offset += added
+                            hasMore = added > 0 && pageRoot.optString("next", "").isNotBlank()
+                            android.util.Log.d("SpotifyImport", "Paginated +$added tracks (total so far: ${tracks.size})")
+                        } else {
+                            android.util.Log.w("SpotifyImport", "Pagination response code: ${pageConn.responseCode}")
+                            break
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("SpotifyImport", "Pagination error at offset $offset: ${e.message}")
+                        break
+                    } finally {
+                        pageConn?.disconnect()
+                    }
+                }
+            }
+
             return SpotifyPlaylistDetails(
                 id = playlistId,
                 title = title,
@@ -529,46 +575,81 @@ object SpotifyImportService {
         }
     }
 
+    private fun extractAccessTokenFromNextData(root: JSONObject): String? {
+        try {
+            val props = root.optJSONObject("props") ?: return null
+            val pageProps = props.optJSONObject("pageProps") ?: return null
+            val state = pageProps.optJSONObject("state") ?: return null
+            val data = state.optJSONObject("data") ?: return null
+            return data.optJSONObject("session")?.optString("accessToken")
+                ?: data.optString("accessToken").takeIf { it.isNotBlank() }
+                ?: root.optString("accessToken").takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            return null
+        }
+    }
+
     // Configurable Spotify API Credentials (from developer.spotify.com)
-    var customClientId: String? = "e8cdf8b62ec5471e9c8730ae1da37b6a"
-    var customClientSecret: String? = "d3bc867fffe94b529676eea52c916f2d"
+    var customClientId: String? = null
+    var customClientSecret: String? = null
 
     private suspend fun obtainAccessToken(context: Context?, playlistId: String): String? {
-        // Strategy 0: Official Spotify Developer API Client Credentials (100% reliable, zero rate limits)
-        if (!customClientId.isNullOrBlank() && !customClientSecret.isNullOrBlank()) {
-            try {
-                android.util.Log.d("SpotifyImport", "Strategy 0: trying Client Credentials grant...")
-                val tokenUrl = URL("https://accounts.spotify.com/api/token")
-                val conn = tokenUrl.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                val auth = android.util.Base64.encodeToString(
-                    "${customClientId}:${customClientSecret}".toByteArray(),
-                    android.util.Base64.NO_WRAP
-                )
-                conn.setRequestProperty("Authorization", "Basic $auth")
-                conn.doOutput = true
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
+        // Strategy 1: Extract accessToken from EMBED page HTML (Unrestricted web session token)
+        try {
+            val embedUrl = URL("https://open.spotify.com/embed/playlist/$playlistId")
+            val conn = embedUrl.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
 
-                val body = "grant_type=client_credentials"
-                conn.outputStream.write(body.toByteArray())
+            if (conn.responseCode == 200) {
+                val html = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                conn.disconnect()
 
-                if (conn.responseCode == 200) {
-                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-                    conn.disconnect()
-                    val token = JSONObject(jsonStr).optString("access_token", "")
-                    if (token.isNotBlank()) {
-                        android.util.Log.d("SpotifyImport", "Strategy 0 SUCCESS: Client Credentials Token=${token.take(15)}...")
-                        return token
-                    }
-                } else {
-                    android.util.Log.w("SpotifyImport", "Strategy 0: returned ${conn.responseCode}")
-                    conn.disconnect()
+                val tokenRegex = Regex(""""accessToken"\s*:\s*"([A-Za-z0-9_.\-]{30,})"""")
+                val match = tokenRegex.find(html)
+                if (match != null && match.groupValues[1].isNotBlank()) {
+                    val token = match.groupValues[1]
+                    android.util.Log.d("SpotifyImport", "Embed session token SUCCESS: token=${token.take(15)}...")
+                    return token
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("SpotifyImport", "Strategy 0 failed", e)
+            } else {
+                conn.disconnect()
             }
+        } catch (e: Exception) {
+            android.util.Log.w("SpotifyImport", "Embed token fetch error: ${e.message}")
+        }
+
+        // Strategy 2: Direct Web Player Token request
+        try {
+            val tokenUrl = URL("https://open.spotify.com/get_access_token?reason=transport&productType=web_player")
+            val conn = tokenUrl.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Referer", "https://open.spotify.com/")
+            conn.setRequestProperty("Origin", "https://open.spotify.com")
+            conn.setRequestProperty("App-Platform", "WebPlayer")
+            conn.setRequestProperty("Spotify-App-Version", "1.2.35.0")
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+
+            if (conn.responseCode == 200) {
+                val tokenJson = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                val accessToken = JSONObject(tokenJson).optString("accessToken", "")
+                conn.disconnect()
+                if (accessToken.isNotBlank()) {
+                    android.util.Log.d("SpotifyImport", "Direct Web Player token SUCCESS: ${accessToken.take(15)}...")
+                    return accessToken
+                }
+            } else {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SpotifyImport", "Direct token endpoint failed: ${e.message}")
         }
 
         // Strategy 1: Background WebView Web Player Session Token (Unrestricted session token)
