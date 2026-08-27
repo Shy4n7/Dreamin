@@ -12,6 +12,8 @@ import com.shyan.dreamin.data.local.entity.DownloadedSongEntity
 import com.shyan.dreamin.data.local.entity.FavoriteEntity
 import com.shyan.dreamin.data.local.entity.PlayHistoryEntity
 import com.shyan.dreamin.data.local.entity.PlaylistEntity
+import com.shyan.dreamin.data.local.dao.ImportMatchDao
+import com.shyan.dreamin.data.local.entity.ImportMatchEntity
 import com.shyan.dreamin.data.local.entity.PlaylistSongEntity
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -24,9 +26,10 @@ import kotlinx.coroutines.launch
         FavoriteEntity::class,
         PlaylistEntity::class,
         PlaylistSongEntity::class,
-        DownloadedSongEntity::class
+        DownloadedSongEntity::class,
+        ImportMatchEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun importMatchDao(): ImportMatchDao
 
     companion object {
         @Volatile

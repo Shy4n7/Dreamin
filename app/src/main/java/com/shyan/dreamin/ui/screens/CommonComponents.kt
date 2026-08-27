@@ -1012,7 +1012,8 @@ fun CreatePlaylistDialog(
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
     onResetSpotifyImport: () -> Unit = {},
-    onSearchOnline: ((String) -> Unit)? = null
+    onSearchOnline: ((String) -> Unit)? = null,
+    onAddSuggestedTrack: ((Long, Song, String) -> Unit)? = null
 ) {
     val colors = LocalDreaminColors.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -1334,48 +1335,94 @@ fun CreatePlaylistDialog(
                                         ) {
                                             itemsIndexed(st.unmatchedTracks) { _, track ->
                                                 val query = "${track.title} ${track.artist}".trim()
-                                                Row(
+                                                Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .background(colors.surfaceHigh)
-                                                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    Column(modifier = Modifier.weight(1f)) {
-                                                        Text(
-                                                            track.title,
-                                                            color = colors.onSurface,
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                        Text(
-                                                            track.artist,
-                                                            color = colors.onSurfaceVariant,
-                                                            fontSize = 10.sp,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                track.title,
+                                                                color = colors.onSurface,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                            Text(
+                                                                track.artist,
+                                                                color = colors.onSurfaceVariant,
+                                                                fontSize = 10.sp,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+
+                                                        if (onSearchOnline != null) {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    onSearchOnline(query)
+                                                                    onResetSpotifyImport()
+                                                                    onDismiss()
+                                                                },
+                                                                modifier = Modifier.size(26.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    Icons.Outlined.Search,
+                                                                    contentDescription = "Search",
+                                                                    tint = colors.primary,
+                                                                    modifier = Modifier.size(15.dp)
+                                                                )
+                                                            }
+                                                        }
                                                     }
 
-                                                    if (onSearchOnline != null) {
-                                                        IconButton(
-                                                            onClick = {
-                                                                onSearchOnline(query)
-                                                                onResetSpotifyImport()
-                                                                onDismiss()
-                                                            },
-                                                            modifier = Modifier.size(26.dp)
+                                                    // 🧠 Smart Alternative Suggestion Chip
+                                                    if (track.suggestedCandidate != null && onAddSuggestedTrack != null) {
+                                                        var isAdded by remember { mutableStateOf(false) }
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clip(RoundedCornerShape(6.dp))
+                                                                .background(colors.surfaceHighest)
+                                                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                         ) {
-                                                            Icon(
-                                                                Icons.Outlined.Search,
-                                                                contentDescription = "Search",
-                                                                tint = colors.primary,
-                                                                modifier = Modifier.size(15.dp)
+                                                            Text(
+                                                                "💡 Match: ${track.suggestedCandidate.title}",
+                                                                color = colors.primary,
+                                                                fontSize = 9.5.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                modifier = Modifier.weight(1f)
                                                             )
+                                                            if (isAdded) {
+                                                                Text("Added ✓", color = Color(0xFF1DB954), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                                            } else {
+                                                                Text(
+                                                                    "+ Add",
+                                                                    color = Color(0xFF1DB954),
+                                                                    fontSize = 9.5.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    modifier = Modifier
+                                                                        .clip(RoundedCornerShape(4.dp))
+                                                                        .clickable {
+                                                                            onAddSuggestedTrack(st.playlistId, track.suggestedCandidate, track.title)
+                                                                            isAdded = true
+                                                                        }
+                                                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }

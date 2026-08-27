@@ -62,6 +62,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val statsRepo = StatsRepository(db.playHistoryDao())
     private val playlistRepo = com.shyan.dreamin.data.local.PlaylistRepository(db.playlistDao())
     val downloadRepo = DownloadRepository(getApplication(), db.downloadDao())
+    private val importMatchDao = db.importMatchDao()
 
     private var isListenerAttached = false
     private var searchJob: Job? = null
@@ -358,6 +359,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val total = tracks.size
         val matchedArray = arrayOfNulls<Song>(total)
+        val suggestedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val semaphore = kotlinx.coroutines.sync.Semaphore(6)
@@ -368,7 +370,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     semaphore.acquire()
                     try {
                         kotlinx.coroutines.delay((index % 6) * 30L)
-                        val matched = matchSpotifyTrack(track, playlistLang)
+                        val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
                             val finalArtwork = when {
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
@@ -378,6 +380,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             val songWithArt = matched.copy(artworkUrl = finalArtwork)
                             matchedArray[index] = songWithArt
                             matchedCounter.incrementAndGet()
+                        } else if (suggestion != null) {
+                            suggestedArray[index] = suggestion
                         }
                     } catch (e: Exception) {
                         android.util.Log.w("MusicVM", "Failed to match track: ${track.title} - ${e.message}")
@@ -405,7 +409,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         val matchedSongs = matchedArray.filterNotNull()
-        val unmatchedTracks = tracks.filterIndexed { index, _ -> matchedArray[index] == null }
+        val unmatchedTracks = tracks.mapIndexedNotNull { index, originalTrack ->
+            if (matchedArray[index] == null) {
+                originalTrack.copy(suggestedCandidate = suggestedArray[index])
+            } else null
+        }
 
         if (matchedSongs.isEmpty()) {
             _uiState.update {
@@ -434,7 +442,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private suspend fun matchSpotifyTrack(
         track: com.shyan.dreamin.data.service.SpotifyImportedTrack,
         playlistLanguage: String
-    ): Song? = withContext(Dispatchers.IO) {
+    ): Pair<Song?, Song?> = withContext(Dispatchers.IO) {
         val rawTitle = track.title
         val rawArtist = track.artist
 
@@ -443,119 +451,114 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val trackLangMatch = langRegex.find(rawTitle)
         val targetLang = trackLangMatch?.value?.lowercase() ?: playlistLanguage.ifBlank { "tamil" }
 
-        // 2. Multi-tier Clean Title Extraction:
-        // A. Strip nested bracket structures repeatedly to prevent stray trailing quotes or brackets
-        var bracketCleaned = rawTitle
-        var prevBracketCleaned = ""
-        while (prevBracketCleaned != bracketCleaned) {
-            prevBracketCleaned = bracketCleaned
-            bracketCleaned = bracketCleaned
-                .replace(Regex("\\([^()]*\\)"), "")
-                .replace(Regex("\\[[^\\[\\]]*\\]"), "")
-                .replace(Regex("\\{[^{}]*\\}"), "")
-        }
-        val fullClean = bracketCleaned.replace(Regex("[\"\'“”‘’]"), "").trim().ifBlank { rawTitle.trim() }
-
-        // B. Extract base title before subtitles (e.g. "Idhazhin Oram - The Innocence of Love" -> "Idhazhin Oram")
-        val subtitleParts = fullClean.split(Regex("\\s+[-–—:]\\s+"))
-        val cleanBaseTitle = subtitleParts.firstOrNull()?.trim()?.ifBlank { fullClean } ?: fullClean
-
+        val (cleanBaseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(rawTitle)
         val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
+        val signature = "${cleanBaseTitle.lowercase().trim()}|${primaryArtist.lowercase().trim()}"
 
-        // 3. Multi-Pass Search Strategy
-        // Pass 1: Direct Clean Base Title (matches catalog & soundtrack records immediately)
-        var candidates = searchOnDevice(cleanBaseTitle, limit = 8)
+        // Tier 0: Learning Match Memory (Room DB Cache hit in 0ms)
+        try {
+            val cached = importMatchDao.getMatch(signature)
+            if (cached != null) {
+                val cachedSong = Song(
+                    id = cached.songId,
+                    title = cached.songTitle,
+                    artist = cached.songArtist,
+                    artworkUrl = cached.artworkUrl,
+                    duration = cached.duration
+                )
+                return@withContext Pair(cachedSong, null)
+            }
+        } catch (_: Exception) {}
 
-        // Pass 2: Base Title + Primary Artist (for disambiguation if Pass 1 had no hits)
-        if (candidates.isEmpty() && primaryArtist.isNotBlank()) {
-            val query = "$cleanBaseTitle $primaryArtist".trim()
-            candidates = searchOnDevice(query, limit = 8)
+        // Tier 1 & 2: Multi-Pass Search
+        val allCandidates = mutableListOf<Song>()
+
+        // Pass 1: Direct Clean Base Title
+        val p1 = searchOnDevice(cleanBaseTitle, limit = 8)
+        allCandidates.addAll(p1)
+
+        // Pass 2: Base Title + Primary Artist (for disambiguation)
+        if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
+            allCandidates.addAll(searchOnDevice("$cleanBaseTitle $primaryArtist", limit = 8))
         }
 
-        // Pass 3: Full Clean Title (if title had subtitle text that was actually relevant)
-        if (candidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
-            candidates = searchOnDevice(fullClean, limit = 8)
+        // Pass 3: Full Clean Title
+        if (allCandidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
+            allCandidates.addAll(searchOnDevice(fullClean, limit = 8))
         }
 
-        // Pass 4: Secondary Fallback: Server / YouTube Music Engine for Indie & Non-Catalog Releases
-        if (candidates.isEmpty()) {
+        // Pass 4: Secondary Engine / Server Fallback
+        if (allCandidates.isEmpty()) {
             try {
                 val serverResp = api.search(cleanBaseTitle, page = 1, limit = 8)
-                if (serverResp.results.isNotEmpty()) {
-                    candidates = serverResp.results.filter { cand ->
-                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
-                    }
-                }
+                allCandidates.addAll(serverResp.results.filter { OfficialSongFilter.isOfficial(it, rejectHindi = false) })
             } catch (_: Exception) {}
         }
-        if (candidates.isEmpty() && primaryArtist.isNotBlank()) {
+        if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
             try {
                 val serverResp = api.search("$cleanBaseTitle $primaryArtist", page = 1, limit = 8)
-                if (serverResp.results.isNotEmpty()) {
-                    candidates = serverResp.results.filter { cand ->
-                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
-                    }
-                }
+                allCandidates.addAll(serverResp.results.filter { OfficialSongFilter.isOfficial(it, rejectHindi = false) })
             } catch (_: Exception) {}
         }
 
-        if (candidates.isEmpty()) return@withContext null
+        if (allCandidates.isEmpty()) return@withContext Pair(null, null)
 
-        // 4. Multi-Factor Scoring with Punctuation-Agnostic Artist Matching & Relaxed Duration
-        val spotifyArtistsNormalized = rawArtist.lowercase()
-            .split(",", "&", "feat.", "ft.", "/", ";")
-            .map { it.replace(Regex("[^a-z0-9]"), "").trim() }
-            .filter { it.length >= 2 }
+        // Tier 3: IntelliMatch Fuzzy Scoring & Confidence Classifier
+        val matchResult = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.findBestMatch(
+            targetTitle = rawTitle,
+            targetArtist = rawArtist,
+            targetDurationMs = track.durationMs,
+            candidates = allCandidates.distinctBy { it.id },
+            targetLanguage = targetLang
+        )
 
-        val cleanSpotifyBaseKey = cleanBaseTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
-        val cleanSpotifyFullKey = fullClean.lowercase().replace(Regex("[^a-z0-9]"), "")
-
-        val bestMatch = candidates.maxByOrNull { candidate ->
-            var score = 1000
-            val candTitle = candidate.title.lowercase()
-            val candCleanKey = candidate.displayTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
-            val candArtistNormalized = candidate.artist.lowercase().replace(Regex("[^a-z0-9]"), "")
-
-            // Title Match Score
-            if (candCleanKey == cleanSpotifyBaseKey || candCleanKey == cleanSpotifyFullKey) {
-                score += 700
-            } else if (candCleanKey.contains(cleanSpotifyBaseKey) || cleanSpotifyBaseKey.contains(candCleanKey)) {
-                score += 450
+        if (matchResult != null) {
+            if (matchResult.confidence == com.shyan.dreamin.data.recommendation.IntelliMatchEngine.MatchConfidence.HIGH ||
+                matchResult.confidence == com.shyan.dreamin.data.recommendation.IntelliMatchEngine.MatchConfidence.MEDIUM
+            ) {
+                // Cache confirmed match to Room DB learning memory
+                try {
+                    importMatchDao.insertMatch(
+                        com.shyan.dreamin.data.local.entity.ImportMatchEntity(
+                            spotifySignature = signature,
+                            songId = matchResult.song.id,
+                            songTitle = matchResult.song.title,
+                            songArtist = matchResult.song.artist,
+                            artworkUrl = matchResult.song.artworkUrl,
+                            duration = matchResult.song.duration,
+                            confidenceScore = matchResult.score
+                        )
+                    )
+                } catch (_: Exception) {}
+                return@withContext Pair(matchResult.song, null)
+            } else {
+                // Low confidence: offer as intelligent suggestion
+                return@withContext Pair(null, matchResult.song)
             }
-
-            // Language Penalty & Bonus
-            val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLang }
-            for (other in otherLanguages) {
-                if (candTitle.contains("($other)") || candTitle.contains("[$other]")) {
-                    score -= 300
-                }
-            }
-            if (candTitle.contains("($targetLang)") || candTitle.contains("[$targetLang]")) {
-                score += 350
-            }
-
-            // Punctuation-Agnostic Artist Overlap Score (e.g. "gvprakashkumar" matches "g.v. prakash kumar")
-            var artistHits = 0
-            for (sa in spotifyArtistsNormalized) {
-                if (candArtistNormalized.contains(sa) || sa.contains(candArtistNormalized)) {
-                    artistHits++
-                    score += 200
-                }
-            }
-            if (artistHits > 0) score += 250
-
-            // Duration Match Score (Relaxed ±25s tolerance for soundtrack/movie master cuts)
-            if (track.durationMs > 0 && candidate.duration > 0) {
-                val diffSec = kotlin.math.abs(track.durationMs - candidate.duration) / 1000
-                if (diffSec <= 6) score += 250
-                else if (diffSec <= 20) score += 120
-                else if (diffSec > 60) score -= 300
-            }
-
-            score
         }
 
-        return@withContext bestMatch
+        return@withContext Pair(null, null)
+    }
+
+    fun addSuggestedTrackToPlaylist(playlistId: Long, song: Song, originalTrackTitle: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            addSongToPlaylist(playlistId, song)
+            val (cleanBase, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(originalTrackTitle)
+            val signature = "${cleanBase.lowercase().trim()}|${song.artist.lowercase().trim()}"
+            try {
+                importMatchDao.insertMatch(
+                    com.shyan.dreamin.data.local.entity.ImportMatchEntity(
+                        spotifySignature = signature,
+                        songId = song.id,
+                        songTitle = song.title,
+                        songArtist = song.artist,
+                        artworkUrl = song.artworkUrl,
+                        duration = song.duration,
+                        confidenceScore = 2000
+                    )
+                )
+            } catch (_: Exception) {}
+        }
     }
 
 

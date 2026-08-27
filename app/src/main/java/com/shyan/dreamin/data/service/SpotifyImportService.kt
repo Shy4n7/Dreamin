@@ -14,6 +14,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.regex.Pattern
 
+import com.shyan.dreamin.data.model.Song
 import com.shyan.dreamin.data.network.NetworkService
 import okhttp3.Request
 
@@ -21,7 +22,8 @@ data class SpotifyImportedTrack(
     val title: String,
     val artist: String,
     val durationMs: Long = 0L,
-    val artworkUrl: String = ""
+    val artworkUrl: String = "",
+    val suggestedCandidate: Song? = null
 )
 
 data class SpotifyPlaylistDetails(

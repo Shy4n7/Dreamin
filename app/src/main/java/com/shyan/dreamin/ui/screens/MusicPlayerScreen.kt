@@ -272,6 +272,7 @@ private fun MainAppScaffold(
                             onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
                             onResetSpotifyImportState = vm::resetSpotifyImportState,
                             onSearchOnline           = vm::searchSongsDirect,
+                            onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
                             onPlayNext               = vm::playNext,
                             onAddToQueue             = vm::addToQueue
                         )

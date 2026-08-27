@@ -134,6 +134,7 @@ fun LibraryScreen(
     onImportSpotifyPlaylist: (String) -> Unit = {},
     onResetSpotifyImportState: () -> Unit = {},
     onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
+    onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {}
 ) {
@@ -196,7 +197,8 @@ fun LibraryScreen(
                     spotifyImportState = state.spotifyImportState,
                     onImportSpotify = onImportSpotifyPlaylist,
                     onResetSpotifyImport = onResetSpotifyImportState,
-                    onSearchOnline = onSearchOnline
+                    onSearchOnline = onSearchOnline,
+                    onAddSuggestedTrack = onAddSuggestedTrack
                 )
                 1 -> FavoritesTab(
                     favorites = state.favorites,
@@ -367,7 +369,8 @@ fun PlaylistsTab(
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
     onResetSpotifyImport: () -> Unit = {},
-    onSearchOnline: suspend (String) -> List<Song> = { emptyList() }
+    onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
+    onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> }
 ) {
     val colors = LocalDreaminColors.current
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -450,7 +453,8 @@ fun PlaylistsTab(
             spotifyImportState = spotifyImportState,
             onImportSpotify = onImportSpotify,
             onResetSpotifyImport = onResetSpotifyImport,
-            onSearchOnline = { q -> scope.launch { onSearchOnline(q) } }
+            onSearchOnline = { q -> scope.launch { onSearchOnline(q) } },
+            onAddSuggestedTrack = onAddSuggestedTrack
         )
     }
 }
