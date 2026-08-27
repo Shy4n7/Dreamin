@@ -1900,39 +1900,42 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         paletteColorCache.evictAll()
     }
 
+    private suspend fun resolveRadioCandidates(currentSong: Song, limit: Int): List<Song> = withContext(Dispatchers.IO) {
+        val ytSongs = mutableListOf<Song>()
+        try {
+            val pairs = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(currentSong)
+            if (pairs.isNotEmpty()) {
+                val deferredSearches = pairs.take(limit).map { (t, a) ->
+                    async {
+                        val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+                        val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil").firstOrNull()
+                            ?: searchOnDevice(cleanT, limit = 1, targetLanguage = "tamil").firstOrNull()
+                        if (cand != null && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
+                            cand
+                        } else null
+                    }
+                }
+                deferredSearches.forEach { def ->
+                    val res = def.await()
+                    if (res != null) {
+                        ytSongs.add(res)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MusicVM", "Radio candidate error: ${e.message}")
+        }
+        ytSongs
+    }
+
     private fun fetchUpNext(songId: String) {
         if (_uiState.value.playlistQueueActive) return
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isFetchingUpNext = true) }
             try {
                 val currentSong = _uiState.value.currentSong ?: return@launch
-
-                // 🎯 100% Official YouTube Music Radio Queue (Highest Fidelity Affinity)
-                val ytSongs = mutableListOf<Song>()
-                try {
-                    val pairs = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(currentSong)
-                    if (pairs.isNotEmpty()) {
-                        val deferredSearches = pairs.take(16).map { (t, a) ->
-                            async {
-                                val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                                val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                                val cand = searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil").firstOrNull()
-                                    ?: searchOnDevice(cleanT, limit = 1, targetLanguage = "tamil").firstOrNull()
-                                if (cand != null && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
-                                    cand
-                                } else null
-                            }
-                        }
-                        deferredSearches.forEach { def ->
-                            val res = def.await()
-                            if (res != null) {
-                                ytSongs.add(res)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w("MusicVM", "YouTube Radio fetch error: ${e.message}")
-                }
+                val ytSongs = resolveRadioCandidates(currentSong, limit = 16)
 
                 val finalQueueTracks = if (ytSongs.isNotEmpty()) {
                     SmartQueueEngine.buildQueue(
@@ -1943,7 +1946,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         limit = 18
                     )
                 } else {
-                    // Fallback only when YouTube Radio is offline / unreachable
                     val primaryArtist = currentSong.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
                     val related = fetchJioSaavnRelated(songId)
                     val artistHits = if (primaryArtist.isNotBlank()) searchOnDevice("$primaryArtist hits", limit = 10) else emptyList()
@@ -1963,7 +1965,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val newUnique = finalQueueTracks.filter { it.id !in existingIds }
                         state.copy(queue = state.queue + newUnique)
                     }
-                    // Proactively resolve official posters
                     finalQueueTracks.forEach { qSong ->
                         launch(Dispatchers.IO) {
                             try {
@@ -1989,29 +1990,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val currentSong = _uiState.value.currentSong ?: return@launch
                 val primaryArtist = currentSong.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-
-                val ytRecSongs = mutableListOf<Song>()
-                try {
-                    val pairs = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(currentSong)
-                    if (pairs.isNotEmpty()) {
-                        val deferredSearches = pairs.take(12).map { (t, a) ->
-                            async {
-                                val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                                val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                                val cand = searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil").firstOrNull()
-                                if (cand != null && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
-                                    cand
-                                } else null
-                            }
-                        }
-                        deferredSearches.forEach { def ->
-                            val res = def.await()
-                            if (res != null) {
-                                ytRecSongs.add(res)
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
+                val ytRecSongs = resolveRadioCandidates(currentSong, limit = 12)
 
                 val finalRecs = if (ytRecSongs.isNotEmpty()) {
                     OfficialSongFilter.cleanOfficialList(ytRecSongs, rejectHindi = true)
@@ -2023,7 +2002,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 _uiState.update { it.copy(recommendations = finalRecs, recommendationSeedTitle = seedTitle) }
-                // Proactively resolve official movie posters for recommendations
                 finalRecs.forEach { recSong ->
                     launch(Dispatchers.IO) {
                         try {

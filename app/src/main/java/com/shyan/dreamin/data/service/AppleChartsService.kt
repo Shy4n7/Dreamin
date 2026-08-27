@@ -47,7 +47,8 @@ object AppleChartsService {
 
         // 2. Apple Music Real-Time Tamil Top Hits Feed
         try {
-            val url = URL("https://itunes.apple.com/search?term=Top+Tamil+Songs+2025&entity=song&country=IN&limit=25")
+            val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+            val url = URL("https://itunes.apple.com/search?term=Top+Tamil+Songs+$currentYear&entity=song&country=IN&limit=25")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
                 connectTimeout = 5000
