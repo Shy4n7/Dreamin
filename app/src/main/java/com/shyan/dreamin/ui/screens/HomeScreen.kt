@@ -316,10 +316,21 @@ fun HomeScreen(
                     exit = fadeOut(tween(160)) + scaleOut(targetScale = 0.97f, animationSpec = tween(160)),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    val pullRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
                     PullToRefreshBox(
                         isRefreshing = isLoadingChart,
                         onRefresh = onRefresh,
-                        modifier = Modifier.fillMaxSize()
+                        state = pullRefreshState,
+                        modifier = Modifier.fillMaxSize(),
+                        indicator = {
+                            androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(
+                                state = pullRefreshState,
+                                isRefreshing = isLoadingChart,
+                                containerColor = colors.surfaceHighest,
+                                color = colors.primary,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
+                        }
                     ) {
                         if (isLoadingChart && trendingCharts.isEmpty() && recommendations.isEmpty()) {
                             ShimmerFeedSkeleton()

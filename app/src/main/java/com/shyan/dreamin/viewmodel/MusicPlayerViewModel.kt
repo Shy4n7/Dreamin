@@ -1727,8 +1727,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun refreshData() {
-        android.util.Log.d("MusicVM", "Refreshing data...")
-        loadChart()
+        android.util.Log.d("MusicVM", "Refreshing all data...")
+        clearAllCaches()
+        loadChart(forceRefresh = true)
+        loadRecentlyPlayed()
+        loadTopSongs()
+        loadFavorites()
+        loadPlaylists()
+        loadDownloads()
+        _uiState.value.currentSong?.let { fetchRecommendations(it.id) }
     }
 
     private suspend fun fetchTrendingChartOnDevice(): List<Song> = withContext(Dispatchers.IO) {
@@ -1760,15 +1767,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         OfficialSongFilter.cleanOfficialList(allSongs)
     }
 
-    private fun loadChart() {
+    private fun loadChart(forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val cached = userPrefs.cachedChart.first()
-            val hasStaleJunk = cached.any { it.title.contains("Scooty", ignoreCase = true) || it.title.contains("Don'u", ignoreCase = true) }
-            if (cached.isNotEmpty() && !hasStaleJunk && cached.any { it.artist.isNotBlank() }) {
-                _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
-                prefetchTopTrendingArtworks(cached)
-            } else {
+            if (forceRefresh) {
                 _uiState.update { it.copy(isLoadingChart = true) }
+            } else {
+                val cached = userPrefs.cachedChart.first()
+                val hasStaleJunk = cached.any { it.title.contains("Scooty", ignoreCase = true) || it.title.contains("Don'u", ignoreCase = true) }
+                if (cached.isNotEmpty() && !hasStaleJunk && cached.any { it.artist.isNotBlank() }) {
+                    _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
+                    prefetchTopTrendingArtworks(cached)
+                } else {
+                    _uiState.update { it.copy(isLoadingChart = true) }
+                }
             }
 
             // 1. Fetch Real-Time Live Top 50 Chart from Apple Music Official Feed
