@@ -74,17 +74,31 @@ object SpotifyImportService {
 
     /**
      * Fetches metadata and tracklist for a given Spotify Playlist ID.
-     * Tries anonymous Spotify Web Token API first with full pagination, then falls back to Embed scraping.
+     * Uses multi-tiered resolvers with full pagination to fetch all tracks (100–1000+ songs).
      */
     suspend fun fetchPlaylistDetails(playlistId: String, context: Context? = null): SpotifyPlaylistDetails? = withContext(Dispatchers.IO) {
-        // Strategy 1: Official API Client Credentials Grant with Full Multi-Page Pagination
+        // Strategy 1: Official API / Session Token Grant with Full Multi-Page Pagination
         val fromApi = fetchFromWebApi(playlistId, context)
-        if (fromApi != null && (fromApi.tracks.size >= fromApi.totalTracks || fromApi.tracks.size > 100)) {
+        if (fromApi != null && fromApi.tracks.size >= fromApi.totalTracks && fromApi.tracks.isNotEmpty()) {
             android.util.Log.d("SpotifyImport", "Web API Full Success: ${fromApi.tracks.size}/${fromApi.totalTracks} tracks fetched!")
             return@withContext fromApi
         }
 
-        // Strategy 2: Background WebView DOM Scroll Scraper (bypasses Premium/API restrictions, gets ALL 300+ tracks)
+        // Strategy 2: Multi-Page SpotifyDown Gateway Resolver
+        val fromSpotifyDown = fetchViaSpotifyDownPaginated(playlistId)
+        if (fromSpotifyDown != null && fromSpotifyDown.tracks.isNotEmpty()) {
+            android.util.Log.d("SpotifyImport", "SpotifyDown Gateway SUCCESS: ${fromSpotifyDown.tracks.size} tracks fetched!")
+            return@withContext fromSpotifyDown
+        }
+
+        // Strategy 3: SpotiSongDownloader Public Gateway Resolver
+        val fromSpotiSong = fetchViaSpotiSongDownloader(playlistId)
+        if (fromSpotiSong != null && fromSpotiSong.tracks.isNotEmpty()) {
+            android.util.Log.d("SpotifyImport", "SpotiSongDownloader SUCCESS: ${fromSpotiSong.tracks.size} tracks fetched!")
+            return@withContext fromSpotiSong
+        }
+
+        // Strategy 4: Background WebView DOM Scroll Scraper (bypasses restrictions, gets ALL 300+ tracks)
         if (context != null) {
             val fromDom = fetchPlaylistViaWebViewDom(context, playlistId)
             if (fromDom != null && fromDom.tracks.isNotEmpty()) {
@@ -93,63 +107,160 @@ object SpotifyImportService {
             }
         }
 
-        // Strategy 3: Public Open Converter API Gateway (automatically parses all 300+ songs for free)
-        val fromConverter = fetchViaOpenConverter(playlistId)
-        if (fromConverter != null && fromConverter.tracks.isNotEmpty()) {
-            android.util.Log.d("SpotifyImport", "Open Converter SUCCESS: ${fromConverter.tracks.size} tracks fetched automatically!")
-            return@withContext fromConverter
-        }
-
-        // Strategy 4: Public Embed Page Scraping fallback (100 tracks cap fallback)
+        // Strategy 5: Embed Page Scraping fallback
         val fromEmbed = fetchFromEmbed(playlistId)
         fromApi ?: fromEmbed
     }
 
-    private fun fetchViaOpenConverter(playlistId: String): SpotifyPlaylistDetails? {
+    /**
+     * SpotifyDown Multi-Page Gateway: Queries metadata and loops through all track batches.
+     */
+    private fun fetchViaSpotifyDownPaginated(playlistId: String): SpotifyPlaylistDetails? {
         try {
-            val url = URL("https://api.spotifydown.com/tracklist/playlist/$playlistId")
+            var playlistTitle = "Spotify Playlist"
+            var playlistCover = ""
+
+            // 1. Fetch metadata
+            try {
+                val metaUrl = URL("https://api.spotifydown.com/metadata/playlist/$playlistId")
+                val metaConn = metaUrl.openConnection() as HttpURLConnection
+                metaConn.requestMethod = "GET"
+                metaConn.setRequestProperty("User-Agent", USER_AGENT)
+                metaConn.setRequestProperty("Origin", "https://spotifydown.com")
+                metaConn.setRequestProperty("Referer", "https://spotifydown.com/")
+                metaConn.connectTimeout = 8000
+                metaConn.readTimeout = 8000
+                if (metaConn.responseCode == 200) {
+                    val metaJson = metaConn.inputStream.bufferedReader().use { it.readText() }
+                    val metaObj = JSONObject(metaJson)
+                    if (metaObj.optBoolean("success", true)) {
+                        val title = metaObj.optString("title", "").ifBlank { metaObj.optString("name", "") }
+                        if (title.isNotBlank()) playlistTitle = title
+                        playlistCover = metaObj.optString("cover", "").ifBlank { metaObj.optString("coverUrl", "") }
+                    }
+                }
+                metaConn.disconnect()
+            } catch (_: Exception) {}
+
+            // 2. Fetch tracks in pagination loop (offset = 0, 100, 200...)
+            val allTracks = mutableListOf<SpotifyImportedTrack>()
+            var offset = 0
+            var hasNext = true
+
+            while (hasNext && offset < 5000) {
+                val trackUrl = if (offset == 0) {
+                    URL("https://api.spotifydown.com/trackList/playlist/$playlistId")
+                } else {
+                    URL("https://api.spotifydown.com/trackList/playlist/$playlistId?offset=$offset")
+                }
+
+                val conn = trackUrl.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", USER_AGENT)
+                conn.setRequestProperty("Origin", "https://spotifydown.com")
+                conn.setRequestProperty("Referer", "https://spotifydown.com/")
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+
+                if (conn.responseCode != 200) {
+                    conn.disconnect()
+                    break
+                }
+
+                val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+
+                val obj = JSONObject(jsonStr)
+                if (!obj.optBoolean("success", true)) break
+
+                val tracksArray = obj.optJSONArray("trackList") ?: obj.optJSONArray("tracks") ?: JSONArray()
+                if (tracksArray.length() == 0) break
+
+                for (i in 0 until tracksArray.length()) {
+                    val item = tracksArray.getJSONObject(i)
+                    val tTitle = item.optString("title", "").ifBlank { item.optString("name", "") }.trim()
+                    val tArtist = item.optString("artists", "").ifBlank { item.optString("artist", "Unknown Artist") }.trim()
+                    val tCover = item.optString("cover", "").ifBlank { item.optString("coverUrl", "") }
+                    if (tTitle.isNotBlank()) {
+                        allTracks.add(SpotifyImportedTrack(title = tTitle, artist = tArtist, artworkUrl = tCover))
+                    }
+                    if (playlistCover.isBlank() && tCover.isNotBlank()) {
+                        playlistCover = tCover
+                    }
+                }
+
+                val nextOffset = obj.optInt("nextOffset", -1)
+                if (nextOffset > offset) {
+                    offset = nextOffset
+                } else {
+                    offset += tracksArray.length()
+                }
+
+                hasNext = tracksArray.length() >= 100 || nextOffset > 0
+            }
+
+            if (allTracks.isNotEmpty()) {
+                return SpotifyPlaylistDetails(
+                    id = playlistId,
+                    title = playlistTitle,
+                    coverUrl = playlistCover,
+                    totalTracks = allTracks.size,
+                    tracks = allTracks
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SpotifyImport", "fetchViaSpotifyDownPaginated failed: ${e.message}")
+        }
+        return null
+    }
+
+    /**
+     * SpotiSongDownloader Public Gateway: Resolves playlist items via xtracklist endpoint.
+     */
+    private fun fetchViaSpotiSongDownloader(playlistId: String): SpotifyPlaylistDetails? {
+        try {
+            val url = URL("https://spotisongdownloader.com/api/composer/spotify/xtracklist.php?url=https://open.spotify.com/playlist/$playlistId")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("User-Agent", USER_AGENT)
-            conn.setRequestProperty("Origin", "https://spotifydown.com")
-            conn.setRequestProperty("Referer", "https://spotifydown.com/")
+            conn.setRequestProperty("Referer", "https://spotisongdownloader.com/")
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
 
             if (conn.responseCode == 200) {
                 val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
-                val obj = JSONObject(jsonStr)
-                if (obj.optBoolean("success", true)) {
-                    val tracksArray = obj.optJSONArray("trackList") ?: obj.optJSONArray("tracks") ?: JSONArray()
-                    val tracks = mutableListOf<SpotifyImportedTrack>()
-                    var title = "Spotify Playlist"
-                    var coverUrl = ""
+                conn.disconnect()
 
-                    for (i in 0 until tracksArray.length()) {
-                        val item = tracksArray.getJSONObject(i)
-                        val tTitle = item.optString("title", "").ifBlank { item.optString("name", "") }
-                        val tArtist = item.optString("artists", "").ifBlank { item.optString("artist", "Unknown Artist") }
-                        if (tTitle.isNotBlank()) {
-                            tracks.add(SpotifyImportedTrack(title = tTitle, artist = tArtist))
-                        }
-                        if (i == 0) {
-                            coverUrl = item.optString("cover", "").ifBlank { item.optString("coverUrl", "") }
-                        }
-                    }
+                val root = JSONObject(jsonStr)
+                val tracksArray = root.optJSONArray("tracks") ?: root.optJSONArray("trackList") ?: JSONArray()
+                val tracks = mutableListOf<SpotifyImportedTrack>()
+                var title = root.optString("playlist_name", "Spotify Playlist")
+                val coverUrl = root.optString("playlist_cover", "")
 
-                    if (tracks.isNotEmpty()) {
-                        return SpotifyPlaylistDetails(
-                            id = playlistId,
-                            title = title,
-                            coverUrl = coverUrl,
-                            totalTracks = tracks.size,
-                            tracks = tracks
-                        )
+                for (i in 0 until tracksArray.length()) {
+                    val item = tracksArray.getJSONObject(i)
+                    val tTitle = item.optString("song_name", "").ifBlank { item.optString("name", "") }.trim()
+                    val tArtist = item.optString("artist_name", "").ifBlank { item.optString("artist", "Unknown Artist") }.trim()
+                    val tCover = item.optString("song_cover", "")
+                    if (tTitle.isNotBlank()) {
+                        tracks.add(SpotifyImportedTrack(title = tTitle, artist = tArtist, artworkUrl = tCover))
                     }
                 }
+
+                if (tracks.isNotEmpty()) {
+                    return SpotifyPlaylistDetails(
+                        id = playlistId,
+                        title = title,
+                        coverUrl = coverUrl,
+                        totalTracks = tracks.size,
+                        tracks = tracks
+                    )
+                }
+            } else {
+                conn.disconnect()
             }
         } catch (e: Exception) {
-            android.util.Log.w("SpotifyImport", "fetchViaOpenConverter failed: ${e.message}")
+            android.util.Log.w("SpotifyImport", "fetchViaSpotiSongDownloader failed: ${e.message}")
         }
         return null
     }
