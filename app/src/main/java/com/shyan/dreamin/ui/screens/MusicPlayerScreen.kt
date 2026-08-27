@@ -271,7 +271,11 @@ private fun MainAppScaffold(
                             onDeleteDownload         = vm::deleteDownload,
                             onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
                             onResetSpotifyImportState = vm::resetSpotifyImportState,
-                            onSearchOnline           = vm::searchSongsDirect,
+                            onSearchOnline           = { query ->
+                                onScreenChange(Screen.Home)
+                                vm.activateSearch()
+                                vm.setSearchQuery(query)
+                            },
                             onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
                             onPlayNext               = vm::playNext,
                             onAddToQueue             = vm::addToQueue

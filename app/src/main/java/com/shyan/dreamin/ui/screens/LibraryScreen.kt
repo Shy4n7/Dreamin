@@ -133,7 +133,7 @@ fun LibraryScreen(
     onDeleteDownload: (String) -> Unit = {},
     onImportSpotifyPlaylist: (String) -> Unit = {},
     onResetSpotifyImportState: () -> Unit = {},
-    onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
+    onSearchOnline: (String) -> Unit = {},
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {}
@@ -369,7 +369,7 @@ fun PlaylistsTab(
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
     onResetSpotifyImport: () -> Unit = {},
-    onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
+    onSearchOnline: (String) -> Unit = {},
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> }
 ) {
     val colors = LocalDreaminColors.current
@@ -453,7 +453,7 @@ fun PlaylistsTab(
             spotifyImportState = spotifyImportState,
             onImportSpotify = onImportSpotify,
             onResetSpotifyImport = onResetSpotifyImport,
-            onSearchOnline = { q -> scope.launch { onSearchOnline(q) } },
+            onSearchOnline = onSearchOnline,
             onAddSuggestedTrack = onAddSuggestedTrack
         )
     }
