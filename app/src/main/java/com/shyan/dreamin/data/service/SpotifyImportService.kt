@@ -3,6 +3,9 @@ package com.shyan.dreamin.data.service
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -163,51 +166,49 @@ object SpotifyImportService {
                 }
             }
 
-            // Extract dynamic session accessToken to paginate beyond 100 songs
-            val sessionToken = data.optJSONObject("session")?.optString("accessToken")
+            // Extract dynamic session accessToken to paginate beyond 100 songs via spclient
+            val tokenRegex = Regex(""""accessToken"\s*:\s*"([A-Za-z0-9_.\-]{30,})"""")
+            val sessionToken = tokenRegex.find(html)?.groupValues?.getOrNull(1)
+                ?: data.optJSONObject("session")?.optString("accessToken")
                 ?: data.optString("accessToken").takeIf { it.isNotBlank() }
-                ?: run {
-                    val tokenRegex = Regex(""""accessToken"\s*:\s*"([A-Za-z0-9_.\-]{30,})"""")
-                    tokenRegex.find(html)?.groupValues?.getOrNull(1)
-                }
 
             if (!sessionToken.isNullOrBlank() && tracks.size >= 100) {
-                android.util.Log.d("SpotifyImport", "Paginating tracks using Spotify Web session token...")
-                var offset = tracks.size
-                var hasMore = true
-                while (hasMore && offset < 5000) {
-                    var pageConn: HttpURLConnection? = null
-                    try {
-                        val pageUrl = URL("https://api.spotify.com/v1/playlists/$playlistId/tracks?offset=$offset&limit=100")
-                        pageConn = pageUrl.openConnection() as HttpURLConnection
-                        pageConn.requestMethod = "GET"
-                        pageConn.setRequestProperty("Authorization", "Bearer $sessionToken")
-                        pageConn.setRequestProperty("User-Agent", USER_AGENT)
-                        pageConn.setRequestProperty("App-Platform", "WebPlayer")
-                        pageConn.setRequestProperty("Referer", "https://open.spotify.com/")
-                        pageConn.connectTimeout = 8000
-                        pageConn.readTimeout = 8000
+                var spConn: HttpURLConnection? = null
+                try {
+                    val spUrl = URL("https://spclient.wg.spotify.com/playlist/v2/playlist/$playlistId")
+                    spConn = spUrl.openConnection() as HttpURLConnection
+                    spConn.requestMethod = "GET"
+                    spConn.setRequestProperty("Authorization", "Bearer $sessionToken")
+                    spConn.setRequestProperty("User-Agent", USER_AGENT)
+                    spConn.setRequestProperty("Accept", "application/json")
+                    spConn.setRequestProperty("Referer", "https://open.spotify.com/")
+                    spConn.connectTimeout = 8000
+                    spConn.readTimeout = 8000
 
-                        if (pageConn.responseCode == 200) {
-                            val pageText = BufferedReader(InputStreamReader(pageConn.inputStream, Charsets.UTF_8)).use { it.readText() }
-                            val pageRoot = JSONObject(pageText)
-                            val pItems = pageRoot.optJSONArray("items")
-                            val prevCount = tracks.size
-                            parseTrackItems(pItems, tracks)
-                            val added = tracks.size - prevCount
-                            offset += added
-                            hasMore = added > 0 && pageRoot.optString("next", "").isNotBlank()
-                            android.util.Log.d("SpotifyImport", "Paginated +$added tracks (accumulated: ${tracks.size})")
-                        } else {
-                            android.util.Log.w("SpotifyImport", "Pagination stopped at code ${pageConn.responseCode}")
-                            break
+                    if (spConn.responseCode == 200) {
+                        val spText = BufferedReader(InputStreamReader(spConn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                        val spRoot = JSONObject(spText)
+                        val items = spRoot.optJSONObject("contents")?.optJSONArray("items")
+                        if (items != null && items.length() > tracks.size) {
+                            val remainingUris = mutableListOf<String>()
+                            for (i in tracks.size until items.length()) {
+                                val u = items.optJSONObject(i)?.optString("uri", "") ?: ""
+                                if (u.startsWith("spotify:track:")) {
+                                    remainingUris.add(u.removePrefix("spotify:track:"))
+                                }
+                            }
+
+                            if (remainingUris.isNotEmpty()) {
+                                android.util.Log.d("SpotifyImport", "Fetching ${remainingUris.size} tracks beyond 100 concurrently...")
+                                val fetchedTracks = fetchTracksConcurrently(remainingUris)
+                                tracks.addAll(fetchedTracks)
+                            }
                         }
-                    } catch (e: Exception) {
-                        android.util.Log.w("SpotifyImport", "Pagination exception: ${e.message}")
-                        break
-                    } finally {
-                        pageConn?.disconnect()
                     }
+                } catch (e: Exception) {
+                    android.util.Log.w("SpotifyImport", "spclient pagination error: ${e.message}")
+                } finally {
+                    spConn?.disconnect()
                 }
             }
 
@@ -228,35 +229,73 @@ object SpotifyImportService {
         }
     }
 
-    private fun parseTrackItems(items: JSONArray?, outList: MutableList<SpotifyImportedTrack>) {
-        if (items == null) return
-        for (i in 0 until items.length()) {
-            val item = items.optJSONObject(i) ?: continue
-            val trackObj = item.optJSONObject("track") ?: continue
-            val trackName = trackObj.optString("name", "").trim()
-            val artistsArray = trackObj.optJSONArray("artists")
+    private suspend fun fetchTracksConcurrently(trackIds: List<String>): List<SpotifyImportedTrack> = coroutineScope {
+        val semaphore = kotlinx.coroutines.sync.Semaphore(16)
+        trackIds.map { tid ->
+            async(Dispatchers.IO) {
+                semaphore.acquire()
+                try {
+                    fetchSingleEmbedTrack(tid)
+                } catch (e: Exception) {
+                    android.util.Log.w("SpotifyImport", "Failed to fetch track $tid: ${e.message}")
+                    null
+                } finally {
+                    semaphore.release()
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    private fun fetchSingleEmbedTrack(trackId: String): SpotifyImportedTrack? {
+        var conn: HttpURLConnection? = null
+        try {
+            val url = URL("https://open.spotify.com/embed/track/$trackId")
+            conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.connectTimeout = 6000
+            conn.readTimeout = 6000
+
+            if (conn.responseCode != 200) return null
+
+            val html = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+            val marker = "<script id=\"__NEXT_DATA__\" type=\"application/json\">"
+            val startIndex = html.indexOf(marker)
+            if (startIndex == -1) return null
+
+            val jsonStart = startIndex + marker.length
+            val jsonEnd = html.indexOf("</script>", jsonStart)
+            if (jsonEnd == -1) return null
+
+            val root = JSONObject(html.substring(jsonStart, jsonEnd).trim())
+            val entity = root.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")?.optJSONObject("data")?.optJSONObject("entity") ?: return null
+
+            val title = entity.optString("name").ifBlank { entity.optString("title", "") }.trim()
+            if (title.isBlank()) return null
+
+            val artistsArr = entity.optJSONArray("artists")
             val artists = mutableListOf<String>()
-            if (artistsArray != null) {
-                for (a in 0 until artistsArray.length()) {
-                    val name = artistsArray.optJSONObject(a)?.optString("name")
+            if (artistsArr != null) {
+                for (a in 0 until artistsArr.length()) {
+                    val name = artistsArr.optJSONObject(a)?.optString("name")
                     if (!name.isNullOrBlank()) artists.add(name)
                 }
             }
-            val durationMs = trackObj.optLong("duration_ms", 0L)
-            val albumObj = trackObj.optJSONObject("album")
-            val albumImages = albumObj?.optJSONArray("images")
-            val artworkUrl = albumImages?.optJSONObject(0)?.optString("url") ?: ""
+            val artistName = if (artists.isNotEmpty()) artists.joinToString(", ") else entity.optString("subtitle", "Unknown Artist")
+            val duration = entity.optLong("duration", 0L)
+            val coverSources = entity.optJSONObject("coverArt")?.optJSONArray("sources")
+            val coverUrl = coverSources?.optJSONObject(0)?.optString("url") ?: ""
 
-            if (trackName.isNotBlank()) {
-                outList.add(
-                    SpotifyImportedTrack(
-                        title = trackName,
-                        artist = if (artists.isNotEmpty()) artists.joinToString(", ") else "Unknown Artist",
-                        durationMs = durationMs,
-                        artworkUrl = artworkUrl
-                    )
-                )
-            }
+            return SpotifyImportedTrack(
+                title = title,
+                artist = artistName,
+                durationMs = duration,
+                artworkUrl = coverUrl
+            )
+        } catch (_: Exception) {
+            return null
+        } finally {
+            conn?.disconnect()
         }
     }
 }
