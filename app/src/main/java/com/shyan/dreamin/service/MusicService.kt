@@ -195,6 +195,13 @@ class MusicService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = mediaSession?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            stopSelf()
+        }
+    }
+
     override fun onDestroy() {
         AudioFxManager.release()
         mediaSession?.run { player.release(); release(); mediaSession = null }

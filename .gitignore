@@ -49,6 +49,10 @@ base_icon.png
 
 # Planning docs (internal)
 .planning/
+.agents/
+scratch/
+scratch_*/
+app/src/main/java/com/shyan/dreamin/scratch/
 
 # Claude
 .claude/

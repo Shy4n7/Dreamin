@@ -239,8 +239,37 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun createPlaylist(name: String) {
-        viewModelScope.launch { playlistRepo.createPlaylist(name.trim()) }
+    private suspend fun saveImageToInternalStorage(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
+        try {
+            val app = getApplication<Application>()
+            val coversDir = java.io.File(app.filesDir, "playlist_covers")
+            if (!coversDir.exists()) coversDir.mkdirs()
+            val file = java.io.File(coversDir, "cover_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(6)}.jpg")
+            app.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            android.util.Log.e("MusicVM", "Failed to save cover image: ${e.message}")
+            uri.toString()
+        }
+    }
+
+    fun createPlaylist(name: String, coverUri: android.net.Uri? = null) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val savedCover = if (coverUri != null) saveImageToInternalStorage(coverUri) else null
+            playlistRepo.createPlaylist(name.trim(), coverUrl = savedCover)
+        }
+    }
+
+    fun updatePlaylistCover(playlistId: Long, coverUri: android.net.Uri?) {
+        viewModelScope.launch {
+            val savedCover = if (coverUri != null) saveImageToInternalStorage(coverUri) else null
+            playlistRepo.updatePlaylistCover(playlistId, savedCover)
+        }
     }
 
     fun saveQueueAsPlaylist(name: String) {
@@ -248,7 +277,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (songs.isEmpty()) return
         viewModelScope.launch {
             val playlistId = playlistRepo.createPlaylist(name.trim())
-            songs.forEachIndexed { index, song -> playlistRepo.addSong(playlistId, song, index) }
+            playlistRepo.addSongs(playlistId, songs)
         }
     }
 
@@ -307,7 +336,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
 
-            val details = com.shyan.dreamin.data.service.SpotifyImportService.fetchPlaylistDetails(playlistId)
+            val details = com.shyan.dreamin.data.service.SpotifyImportService.fetchPlaylistDetails(playlistId, getApplication())
             if (details == null || details.tracks.isEmpty()) {
                 _uiState.update {
                     it.copy(spotifyImportState = SpotifyImportState.Error("Could not fetch playlist tracks. Make sure the Spotify playlist is public."))
@@ -315,62 +344,106 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
 
-            // Detect playlist-level language hint (e.g. "Tamil Hits", "Telugu Party", "Bollywood Hindi")
-            val langRegex = Regex("(?i)\\b(tamil|telugu|hindi|malayalam|kannada|punjabi|english)\\b")
-            val playlistLang = langRegex.find(details.title)?.value?.lowercase() ?: "tamil"
+            processTrackMatching(details.title, details.coverUrl, details.tracks)
+        }
+    }
 
-            val matchedSongs = mutableListOf<Song>()
-            val total = details.tracks.size
-
-            details.tracks.forEachIndexed { index, track ->
+    fun importSongsFromTextList(text: String, title: String = "Imported Playlist") {
+        viewModelScope.launch(Dispatchers.IO) {
+            val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+            if (lines.isEmpty()) {
                 _uiState.update {
-                    it.copy(
-                        spotifyImportState = SpotifyImportState.MatchingTracks(
-                            playlistTitle = details.title,
-                            coverUrl = details.coverUrl,
-                            currentTrackIndex = index + 1,
-                            totalTracks = total,
-                            matchedCount = matchedSongs.size,
-                            currentTrackName = track.title
-                        )
-                    )
-                }
-
-                try {
-                    val matched = matchSpotifyTrack(track, playlistLang)
-                    if (matched != null) {
-                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched)
-                        val songWithOfficialCover = if (!official.isNullOrBlank()) matched.copy(artworkUrl = official) else matched
-                        matchedSongs.add(songWithOfficialCover)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w("MusicVM", "Failed to match track: ${track.title} - ${e.message}")
-                }
-            }
-
-            if (matchedSongs.isEmpty()) {
-                _uiState.update {
-                    it.copy(spotifyImportState = SpotifyImportState.Error("No matching tracks could be found in the catalog."))
+                    it.copy(spotifyImportState = SpotifyImportState.Error("Text list is empty. Please paste valid track names."))
                 }
                 return@launch
             }
 
-            // Create new playlist in local Room DB with exact name and Spotify cover image
-            val newPlaylistId = playlistRepo.createPlaylist(name = details.title, coverUrl = details.coverUrl.takeIf { it.isNotBlank() })
-            matchedSongs.forEachIndexed { pos, song ->
-                playlistRepo.addSong(newPlaylistId, song, pos)
-            }
-
-            _uiState.update {
-                it.copy(
-                    spotifyImportState = SpotifyImportState.Success(
-                        playlistId = newPlaylistId,
-                        playlistTitle = details.title,
-                        matchedCount = matchedSongs.size,
-                        totalTracks = total
-                    )
+            val tracks = lines.map { line ->
+                val cleanLine = line.replace(Regex("^\\d+[\\.\\)\\-]\\s*"), "")
+                val parts = cleanLine.split(" - ", " – ", " by ", ",")
+                val trackTitle = parts.firstOrNull()?.trim() ?: cleanLine
+                val artist = if (parts.size > 1) parts.drop(1).joinToString(", ").trim() else "Unknown Artist"
+                com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                    title = trackTitle,
+                    artist = artist
                 )
             }
+
+            _uiState.update { it.copy(spotifyImportState = SpotifyImportState.FetchingMetadata(title)) }
+            processTrackMatching(title.ifBlank { "Imported Playlist" }, "", tracks)
+        }
+    }
+
+    private suspend fun processTrackMatching(title: String, coverUrl: String, tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>) {
+        val langRegex = Regex("(?i)\\b(tamil|telugu|hindi|malayalam|kannada|punjabi|english)\\b")
+        val playlistLang = langRegex.find(title)?.value?.lowercase() ?: "tamil"
+
+        val total = tracks.size
+        val matchedArray = arrayOfNulls<Song>(total)
+        val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
+        val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(12)
+
+        kotlinx.coroutines.coroutineScope {
+            tracks.forEachIndexed { index, track ->
+                launch {
+                    semaphore.acquire()
+                    try {
+                        val matched = matchSpotifyTrack(track, playlistLang)
+                        if (matched != null) {
+                            val finalArtwork = when {
+                                track.artworkUrl.isNotBlank() -> track.artworkUrl
+                                matched.artworkUrl.isNotBlank() -> matched.artworkUrl
+                                else -> ""
+                            }
+                            val songWithArt = matched.copy(artworkUrl = finalArtwork)
+                            matchedArray[index] = songWithArt
+                            matchedCounter.incrementAndGet()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MusicVM", "Failed to match track: ${track.title} - ${e.message}")
+                    } finally {
+                        semaphore.release()
+                        val currDone = progressCounter.incrementAndGet()
+                        val currMatched = matchedCounter.get()
+                        _uiState.update {
+                            it.copy(
+                                spotifyImportState = SpotifyImportState.MatchingTracks(
+                                    playlistTitle = title,
+                                    coverUrl = coverUrl,
+                                    currentTrackIndex = currDone,
+                                    totalTracks = total,
+                                    matchedCount = currMatched,
+                                    currentTrackName = track.title
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val matchedSongs = matchedArray.filterNotNull()
+
+        if (matchedSongs.isEmpty()) {
+            _uiState.update {
+                it.copy(spotifyImportState = SpotifyImportState.Error("No matching tracks could be found in the catalog."))
+            }
+            return
+        }
+
+        val newPlaylistId = playlistRepo.createPlaylist(name = title, coverUrl = coverUrl.takeIf { it.isNotBlank() })
+        playlistRepo.addSongs(newPlaylistId, matchedSongs)
+
+        _uiState.update {
+            it.copy(
+                spotifyImportState = SpotifyImportState.Success(
+                    playlistId = newPlaylistId,
+                    playlistTitle = title,
+                    matchedCount = matchedSongs.size,
+                    totalTracks = total
+                )
+            )
         }
     }
 
@@ -388,15 +461,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         // 2. Clean track title for search query
         val cleanTitle = rawTitle
-            .replace(Regex("(?i)\\s*[\\[\\(].*?(?:tamil|telugu|hindi|malayalam|kannada|punjabi|english|version|audio|original|lyric|video).*?[\\]\\)]"), "")
+            .replace(Regex("(?i)\\s*[\\[\\(].*?(?:tamil|telugu|hindi|malayalam|kannada|punjabi|english|version|audio|original|lyric|video|remaster|mix|feat|from|ost|soundtrack).*?[\\]\\)]"), "")
+            .replace(Regex("(?i)\\s*-\\s*(from|soundtrack|ost|remastered|version|single|ep|lyric|audio).*"), "")
             .replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
             .trim()
             .ifBlank { rawTitle.trim() }
 
-        val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+        val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
         val query = "$cleanTitle $primaryArtist".trim()
 
-        // 3. Search with targetLanguage constraint first
+        // 3. Multi-Pass Search Fallbacks
         var candidates = searchOnDevice(query, limit = 8, targetLanguage = targetLang)
         if (candidates.isEmpty()) {
             candidates = searchOnDevice(query, limit = 8, targetLanguage = "")
@@ -406,6 +480,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         if (candidates.isEmpty()) {
             candidates = searchOnDevice(cleanTitle, limit = 8, targetLanguage = "")
+        }
+        if (candidates.isEmpty()) {
+            candidates = searchOnDevice(rawTitle, limit = 8, targetLanguage = targetLang)
+        }
+        if (candidates.isEmpty()) {
+            candidates = searchOnDevice(rawTitle, limit = 8, targetLanguage = "")
+        }
+        if (candidates.isEmpty()) {
+            val alphaTitle = rawTitle.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
+            if (alphaTitle.isNotBlank() && alphaTitle != cleanTitle && alphaTitle != rawTitle) {
+                candidates = searchOnDevice(alphaTitle, limit = 8, targetLanguage = "")
+            }
+        }
+        if (candidates.isEmpty()) {
+            // Pass 8: First 2 words of clean title (handles long titles with movie names/credits)
+            val firstTwoWords = cleanTitle.split(" ").take(2).joinToString(" ").trim()
+            if (firstTwoWords.isNotBlank() && firstTwoWords.length >= 3) {
+                candidates = searchOnDevice(firstTwoWords, limit = 12, targetLanguage = "")
+            }
         }
         if (candidates.isEmpty()) return@withContext null
 
@@ -426,11 +519,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 score += 300
             }
 
-            // Language Penalty & Bonus
+            // Language Penalty & Bonus (softened penalty so un-language-tagged tracks still match)
             val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "punjabi").filter { it != targetLang }
             for (other in otherLanguages) {
-                if (candTitle.contains("($other)") || candTitle.contains("[$other]") || candTitle.contains(" $other ")) {
-                    score -= 800 // Heavy penalty: reject dubs in wrong languages
+                if (candTitle.contains("($other)") || candTitle.contains("[$other]")) {
+                    score -= 300
                 }
             }
             if (candTitle.contains("($targetLang)") || candTitle.contains("[$targetLang]")) {
@@ -598,7 +691,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state == Player.STATE_READY && controller?.isPlaying == true -> PlaybackState.Playing
                 state == Player.STATE_READY -> PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
-                    viewModelScope.launch { playNext() }
+                    viewModelScope.launch { playNext(isAutoEnd = true) }
                     PlaybackState.Idle
                 }
                 else -> PlaybackState.Idle
@@ -760,6 +853,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&#39;", "'")
+    }
+
+    suspend fun searchSongsDirect(query: String): List<Song> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        try {
+            searchOnDevice(query.trim(), limit = 20)
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private suspend fun searchOnDevice(
@@ -1338,9 +1440,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var lastSkipTimestampMs: Long = 0L
 
-    fun playNext() {
+    fun playNext(isAutoEnd: Boolean = false) {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSkipTimestampMs < 350L) return
+        if (!isAutoEnd && now - lastSkipTimestampMs < 350L) return
         lastSkipTimestampMs = now
 
         val state = _uiState.value
@@ -1360,17 +1462,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        // 2. Shuffle mode
-        if (state.isShuffle) {
-            val unplayedPool = queue.filter { it.id != current.id }
-            if (unplayedPool.isNotEmpty()) {
-                val nextSong = unplayedPool.random()
-                playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true)
+        // 2. Single song playlist or queue: loop smoothly without dropping playback
+        if (queue.size <= 1) {
+            if (state.playlistQueueActive || state.repeatMode != TrackRepeatMode.OFF) {
+                controller?.seekTo(0L)
+                controller?.play()
                 return
             }
         }
 
-        // 3. Next song in active queue
+        // 3. Next song in active queue (respects shuffled queue order without repeats)
         if (idx >= 0 && idx + 1 < queue.size) {
             val nextSong = queue[idx + 1]
             playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true)
@@ -1383,11 +1484,55 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        // 4. Repeat ALL mode
-        if (state.repeatMode == TrackRepeatMode.ALL && queue.isNotEmpty()) {
-            val nextSong = queue.first()
+        // 4. Repeat ALL mode or Playlist Loop (loops playlist so playback never dies in background)
+        if ((state.repeatMode == TrackRepeatMode.ALL || state.playlistQueueActive) && queue.isNotEmpty()) {
+            val nextQueue = if (state.isShuffle && queue.size > 1) {
+                val unplayed = queue.filter { it.id != current.id }.shuffled()
+                listOf(current) + unplayed
+            } else {
+                queue
+            }
+            if (state.isShuffle && queue.size > 1) {
+                _uiState.update { it.copy(queue = nextQueue) }
+            }
+            val nextSong = if (state.isShuffle && queue.size > 1) nextQueue.getOrNull(1) ?: nextQueue.first() else nextQueue.first()
             playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true)
             return
+        }
+
+        // 5. Seamless Continuous Autoplay (Infinite Radio) when queue ends
+        if (!state.playlistQueueActive) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val pairs = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(current)
+                    for ((t, a) in pairs.take(8)) {
+                        val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+                        val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
+                            ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
+                        if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
+                            withContext(Dispatchers.Main) {
+                                playSong(cand, fromPlaylist = false, preserveQueue = false)
+                            }
+                            return@launch
+                        }
+                    }
+
+                    // Fallback to related / artist hits if YouTube Radio hits were exhausted
+                    val primaryArtist = current.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+                    if (primaryArtist.isNotBlank()) {
+                        val artistHits = searchOnDevice("$primaryArtist hits", limit = 6).filter { it.id != current.id }
+                        if (artistHits.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                playSong(artistHits.first(), fromPlaylist = false, preserveQueue = false)
+                            }
+                            return@launch
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicVM", "Continuous autoplay radio error: ${e.message}")
+                }
+            }
         }
     }
 
@@ -1410,7 +1555,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val prevSong = if (idx > 0) {
             queue[idx - 1]
-        } else if (state.repeatMode == TrackRepeatMode.ALL && queue.isNotEmpty()) {
+        } else if ((state.repeatMode == TrackRepeatMode.ALL || state.playlistQueueActive) && queue.isNotEmpty()) {
             queue.last()
         } else {
             null

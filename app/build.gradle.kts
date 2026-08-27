@@ -43,6 +43,9 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
         arg("room.incremental", "true")
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -93,4 +96,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.13.12")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
 }
