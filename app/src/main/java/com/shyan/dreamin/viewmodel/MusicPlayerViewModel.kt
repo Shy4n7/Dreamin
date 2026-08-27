@@ -501,6 +501,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {}
         }
 
+        // Pass 5: Relaxed Search for tracks where only Acoustic/Single cuts exist (e.g. Veesum Velichathile)
+        if (allCandidates.isEmpty()) {
+            val relaxed = searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false)
+            allCandidates.addAll(relaxed)
+        }
+
         if (allCandidates.isEmpty()) return@withContext Pair(null, null)
 
         // Tier 3: IntelliMatch Fuzzy Scoring & Confidence Classifier
@@ -513,6 +519,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
 
         if (matchResult != null) {
+            val matchedSong = if (matchResult.song.artworkUrl.isNotBlank()) matchResult.song
+                              else matchResult.song.copy(artworkUrl = track.artworkUrl)
             if (matchResult.confidence == com.shyan.dreamin.data.recommendation.IntelliMatchEngine.MatchConfidence.HIGH ||
                 matchResult.confidence == com.shyan.dreamin.data.recommendation.IntelliMatchEngine.MatchConfidence.MEDIUM
             ) {
@@ -521,19 +529,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     importMatchDao.insertMatch(
                         com.shyan.dreamin.data.local.entity.ImportMatchEntity(
                             spotifySignature = signature,
-                            songId = matchResult.song.id,
-                            songTitle = matchResult.song.title,
-                            songArtist = matchResult.song.artist,
-                            artworkUrl = matchResult.song.artworkUrl,
-                            duration = matchResult.song.duration,
+                            songId = matchedSong.id,
+                            songTitle = matchedSong.title,
+                            songArtist = matchedSong.artist,
+                            artworkUrl = matchedSong.artworkUrl,
+                            duration = matchedSong.duration,
                             confidenceScore = matchResult.score
                         )
                     )
                 } catch (_: Exception) {}
-                return@withContext Pair(matchResult.song, null)
+                return@withContext Pair(matchedSong, null)
             } else {
                 // Low confidence: offer as intelligent suggestion
-                return@withContext Pair(null, matchResult.song)
+                return@withContext Pair(null, matchedSong)
             }
         }
 
@@ -871,6 +879,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun decryptJioSaavnMediaUrl(encUrl: String): String? {
+        if (encUrl.isBlank()) return null
+        return try {
+            val cipher = javax.crypto.Cipher.getInstance("DES/ECB/PKCS5Padding")
+            val keySpec = javax.crypto.spec.SecretKeySpec("38343638".toByteArray(Charsets.UTF_8), "DES")
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec)
+            val decoded = android.util.Base64.decode(encUrl, android.util.Base64.DEFAULT)
+            val decryptedBytes = cipher.doFinal(decoded)
+            val decryptedUrl = String(decryptedBytes, Charsets.UTF_8).trim()
+            if (decryptedUrl.startsWith("http")) {
+                decryptedUrl.replace(Regex("_(?:96|160)\\.mp4"), "_320.mp4")
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun searchOnDevice(
         query: String, 
         limit: Int = 15, 
@@ -879,12 +904,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         rejectHindi: Boolean = false
     ): List<Song> = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
+        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=android&q=$encoded&n=$limit&p=$page"
         
         for (attempt in 0..1) {
             try {
                 val req = okhttp3.Request.Builder()
                     .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Origin", "https://www.jiosaavn.com")
+                    .header("Referer", "https://www.jiosaavn.com/")
                     .build()
                 val resp = NetworkService.httpClient.newCall(req).execute()
                 val text = resp.body?.string().orEmpty()
@@ -907,7 +936,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                     val songs = mutableListOf<Song>()
                     for ((_, items) in grouped) {
-                        // 1. Detect movie from title tags: (From "Movie"), (From 'Movie'), (From Movie), [From "Movie"], etc.
+                        // 1. Detect movie from title tags
                         var movieDetected = ""
                         for (it in items) {
                             val m = Regex("(?i)\\(?\\s*(?:from|movie)\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*\\)?").find(it.optString("title"))
@@ -920,7 +949,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             }
                         }
 
-                        // 2. Select best candidate release from the provider by prioritizing genuine movie soundtrack album artwork
+                        // 2. Select best candidate release from the provider
                         val bestItem = items.minByOrNull { item ->
                             val alb = unescapeHtml(item.optJSONObject("more_info")?.optString("album", "")?.trim() ?: "").lowercase()
                             val itemImage = item.optString("image", "").lowercase()
@@ -929,7 +958,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             var score = 1000
                             val isComp = compilationRegex.containsMatchIn(alb)
                             if (isComp) {
-                                score += 8000 // Reject compilation releases (e.g. Fire & Desire, Hits of...)
+                                score += 8000
                             } else {
                                 score -= 400
                                 if (alb.contains("soundtrack") || alb.contains("original motion picture")) {
@@ -937,10 +966,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                                 }
                             }
                             if (movieDetected.isNotBlank() && (alb == movieDetected || alb.contains(movieDetected) || movieDetected.contains(alb))) {
-                                score -= 1000 // Exact movie album match!
+                                score -= 1000
                             }
                             if (!isEditorialOrPlaylist) {
-                                score -= 200 // Real original album cover (not generic playlist collage)
+                                score -= 200
                             }
                             score
                         } ?: items.first()
@@ -991,7 +1020,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun extractDominantColor(artworkUrl: String) {
         if (artworkUrl.isBlank()) return
 
-        // 1. Instant 0ms RAM cache hit: apply colors immediately without background decoding
+        // 1. Instant 0ms RAM cache hit
         paletteColorCache.get(artworkUrl)?.let { (cachedDom, cachedSec, cachedAcc) ->
             _uiState.update {
                 it.copy(
@@ -1048,7 +1077,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         prefetchJob?.cancel()
         prefetchJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                delay(2500) // Delay prefetch so it never starves current song's initial buffer
+                delay(2500)
                 val queue = _uiState.value.queue
                 val idx = if (currentSongId != null) queue.indexOfFirst { it.id == currentSongId } else -1
                 val upNextTracks = if (idx >= 0) queue.drop(idx + 1).take(1) else queue.take(1)
@@ -1081,38 +1110,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return@withContext localPath
         }
 
-        // Attempt 1: Direct on-device JioSaavn API by PID
+        // Attempt 1: Direct on-device JioSaavn API by PID with native 0ms DES decryption
         try {
-            val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=$songId"
+            val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId"
             val req1 = okhttp3.Request.Builder()
                 .url(detailsUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                 .header("Referer", "https://www.jiosaavn.com/")
                 .build()
             val text1 = NetworkService.httpClient.newCall(req1).execute().use { it.body?.string().orEmpty() }
             val details = JSONObject(text1)
-            val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "") ?: ""
+            val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "")
+                ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
             if (encUrl.isNotBlank()) {
-                val enc = URLEncoder.encode(encUrl, "UTF-8")
-                val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=web6dot0&_marker=0"
-                val req2 = okhttp3.Request.Builder()
-                    .url(authUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                    .header("Referer", "https://www.jiosaavn.com/")
-                    .build()
-                val text2 = NetworkService.httpClient.newCall(req2).execute().use { it.body?.string().orEmpty() }
-                val authResp = JSONObject(text2)
-                val streamUrl = authResp.optString("auth_url", "")
-                if (streamUrl.isNotBlank() && streamUrl != "false") {
-                    streamUrlCache.put(songId, streamUrl)
-                    return@withContext streamUrl
+                val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
+                if (!directDecrypted.isNullOrBlank()) {
+                    streamUrlCache.put(songId, directDecrypted)
+                    return@withContext directDecrypted
                 }
             }
         } catch (e: Exception) {
             android.util.Log.w("MusicVM", "Direct PID stream resolution for $songId failed (${e.message}), attempting search fallback...")
         }
 
-        // Attempt 2: Direct Search Fallback (resolves songs where ID is non-numeric/YouTube/external/Spotify)
+        // Attempt 2: Search Fallback with direct DES decryption
         try {
             val queries = mutableListOf(
                 "${song.displayTitle} ${song.artist}".trim(),
@@ -1123,10 +1144,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             for (qText in queries) {
                 val encodedQuery = URLEncoder.encode(qText, "UTF-8")
-                val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&p=1&n=8&q=$encodedQuery"
+                val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&ctx=android&api_version=4&p=1&n=8&q=$encodedQuery"
                 val reqSearch = okhttp3.Request.Builder()
                     .url(searchUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                     .header("Referer", "https://www.jiosaavn.com/")
                     .build()
                 val textSearch = NetworkService.httpClient.newCall(reqSearch).execute().use { it.body?.string().orEmpty() }
@@ -1136,20 +1157,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     for (i in 0 until results.length()) {
                         val match = results.getJSONObject(i)
                         val encUrl = match.optString("encrypted_media_url", "")
+                            .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
                         if (encUrl.isNotBlank()) {
-                            val enc = URLEncoder.encode(encUrl, "UTF-8")
-                            val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=web6dot0&_marker=0"
-                            val reqAuth = okhttp3.Request.Builder()
-                                .url(authUrl)
-                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                                .header("Referer", "https://www.jiosaavn.com/")
-                                .build()
-                            val textAuth = NetworkService.httpClient.newCall(reqAuth).execute().use { it.body?.string().orEmpty() }
-                            val authResp = JSONObject(textAuth)
-                            val streamUrl = authResp.optString("auth_url", "")
-                            if (streamUrl.isNotBlank() && streamUrl != "false") {
-                                streamUrlCache.put(songId, streamUrl)
-                                return@withContext streamUrl
+                            val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
+                            if (!directDecrypted.isNullOrBlank()) {
+                                streamUrlCache.put(songId, directDecrypted)
+                                return@withContext directDecrypted
                             }
                         }
                     }
@@ -1159,7 +1172,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             android.util.Log.w("MusicVM", "Search fallback failed for ${song.title}: ${e.message}")
         }
 
-        // Attempt 3: Backend server resolution fallback (reliable host network connection)
+        // Attempt 3: Backend server resolution fallback
         try {
             val playResp = api.recordPlay(id = songId, artist = song.artist, title = song.title)
             val streamUrl = playResp.streamUrl
