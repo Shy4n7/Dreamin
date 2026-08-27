@@ -270,7 +270,6 @@ private fun MainAppScaffold(
                             onDownloadSong           = vm::downloadSong,
                             onDeleteDownload         = vm::deleteDownload,
                             onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
-                            onImportTextList         = vm::importSongsFromTextList,
                             onResetSpotifyImportState = vm::resetSpotifyImportState,
                             onSearchOnline           = vm::searchSongsDirect,
                             onPlayNext               = vm::playNext,

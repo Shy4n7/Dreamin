@@ -132,7 +132,6 @@ fun LibraryScreen(
     onDownloadSong: (Song) -> Unit = {},
     onDeleteDownload: (String) -> Unit = {},
     onImportSpotifyPlaylist: (String) -> Unit = {},
-    onImportTextList: (String, String) -> Unit = { _, _ -> },
     onResetSpotifyImportState: () -> Unit = {},
     onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
     onPlayNext: (Song) -> Unit = {},
@@ -196,7 +195,6 @@ fun LibraryScreen(
                     onOpenPlaylist = onOpenPlaylist,
                     spotifyImportState = state.spotifyImportState,
                     onImportSpotify = onImportSpotifyPlaylist,
-                    onImportTextList = onImportTextList,
                     onResetSpotifyImport = onResetSpotifyImportState,
                     onSearchOnline = onSearchOnline
                 )
@@ -368,7 +366,6 @@ fun PlaylistsTab(
     onOpenPlaylist: (Long) -> Unit = {},
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
-    onImportTextList: (String, String) -> Unit = { _, _ -> },
     onResetSpotifyImport: () -> Unit = {},
     onSearchOnline: suspend (String) -> List<Song> = { emptyList() }
 ) {
@@ -452,7 +449,6 @@ fun PlaylistsTab(
             },
             spotifyImportState = spotifyImportState,
             onImportSpotify = onImportSpotify,
-            onImportTextList = onImportTextList,
             onResetSpotifyImport = onResetSpotifyImport,
             onSearchOnline = { q -> scope.launch { onSearchOnline(q) } }
         )

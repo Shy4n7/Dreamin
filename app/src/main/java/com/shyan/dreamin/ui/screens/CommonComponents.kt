@@ -1011,7 +1011,6 @@ fun CreatePlaylistDialog(
     onCreate: (String, android.net.Uri?) -> Unit,
     spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     onImportSpotify: (String) -> Unit = {},
-    onImportTextList: (String, String) -> Unit = { _, _ -> },
     onResetSpotifyImport: () -> Unit = {},
     onSearchOnline: ((String) -> Unit)? = null
 ) {
@@ -1019,8 +1018,6 @@ fun CreatePlaylistDialog(
     var selectedTab by remember { mutableIntStateOf(0) }
     var name by remember { mutableStateOf("") }
     var spotifyUrl by remember { mutableStateOf("") }
-    var textImportTitle by remember { mutableStateOf("") }
-    var textImportContent by remember { mutableStateOf("") }
     var pickedCoverUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val photoPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -1042,7 +1039,7 @@ fun CreatePlaylistDialog(
                     fontWeight = FontWeight.Bold,
                     fontSize = 19.sp
                 )
-                // 3-Tab Switcher
+                // 2-Tab Switcher
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1061,15 +1058,15 @@ fun CreatePlaylistDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Blank",
+                            "Blank Playlist",
                             color = if (selectedTab == 0) colors.primary else colors.onSurfaceVariant,
-                            fontSize = 11.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .weight(1.15f)
+                            .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (selectedTab == 1) colors.surfaceHigh else Color.Transparent)
                             .clickable { selectedTab = 1 }
@@ -1077,26 +1074,10 @@ fun CreatePlaylistDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Spotify URL",
+                            "Spotify Import",
                             color = if (selectedTab == 1) Color(0xFF1DB954) else colors.onSurfaceVariant,
-                            fontSize = 11.5.sp,
+                            fontSize = 12.sp,
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (selectedTab == 2) colors.surfaceHigh else Color.Transparent)
-                            .clickable { selectedTab = 2 }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Text List",
-                            color = if (selectedTab == 2) colors.secondary else colors.onSurfaceVariant,
-                            fontSize = 11.5.sp,
-                            fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 }
@@ -1104,16 +1085,63 @@ fun CreatePlaylistDialog(
         },
         text = {
             if (selectedTab == 0) {
+                // Tab 0: Blank Playlist Creation
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.surfaceHighest)
+                            .border(1.5.dp, colors.surfaceHigh, RoundedCornerShape(16.dp))
+                            .clickable {
+                                photoPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (pickedCoverUri != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(pickedCoverUri)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.AddPhotoAlternate,
+                                    contentDescription = "Pick Cover",
+                                    tint = colors.onSurfaceVariant,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Text(
+                                    "Add Cover",
+                                    fontSize = 11.sp,
+                                    color = colors.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = { Text("Playlist name", color = colors.onSurfaceVariant) },
+                        placeholder = { Text("Playlist name", color = colors.onSurfaceVariant.copy(alpha = 0.6f)) },
                         singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colors.primary,
                             unfocusedBorderColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
@@ -1125,77 +1153,15 @@ fun CreatePlaylistDialog(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    // 📷 Optional Custom Cover Photo Picker
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(colors.surfaceHighest)
-                            .clickable {
-                                photoPickerLauncher.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(
-                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
-                                    )
-                                )
-                            }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (pickedCoverUri != null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                            ) {
-                                AsyncImage(
-                                    model = pickedCoverUri,
-                                    contentDescription = "Selected cover",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Cover Selected", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
-                                Text("Tap to change photo", fontSize = 11.5.sp, color = colors.onSurfaceVariant)
-                            }
-                            IconButton(
-                                onClick = { pickedCoverUri = null },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Filled.Close, contentDescription = "Remove photo", tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(colors.surfaceHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Outlined.AddPhotoAlternate,
-                                    contentDescription = "Pick cover",
-                                    tint = colors.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Cover Image", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
-                                Text("Optional • Choose from gallery", fontSize = 11.5.sp, color = colors.onSurfaceVariant)
-                            }
-                        }
-                    }
                 }
-            } else if (selectedTab == 1) {
-                // Spotify Import
+            } else {
+                // Tab 1: Spotify Playlist Import
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        "Paste a Spotify playlist link to import its songs into Dreamin.",
+                        "Paste a public Spotify playlist link. Dreamin will import all songs automatically.",
                         fontSize = 12.5.sp,
                         color = colors.onSurfaceVariant,
                         lineHeight = 17.sp
@@ -1204,9 +1170,9 @@ fun CreatePlaylistDialog(
                     OutlinedTextField(
                         value = spotifyUrl,
                         onValueChange = { spotifyUrl = it },
-                        placeholder = { Text("https://open.spotify.com/playlist/...", color = colors.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.5.sp) },
+                        placeholder = { Text("https://open.spotify.com/playlist/...", color = colors.onSurfaceVariant.copy(alpha = 0.5f), fontSize = 12.sp) },
                         singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         trailingIcon = {
                             if (spotifyUrl.isEmpty()) {
                                 TextButton(
@@ -1219,7 +1185,7 @@ fun CreatePlaylistDialog(
                                 }
                             } else {
                                 IconButton(onClick = { spotifyUrl = "" }) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Clear", tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.Close, contentDescription = "Clear", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
                                 }
                             }
                         },
@@ -1334,32 +1300,7 @@ fun CreatePlaylistDialog(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (st.coverUrl.isNotBlank()) {
-                                    Box(contentAlignment = Alignment.BottomEnd) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(st.coverUrl)
-                                                .crossfade(true)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .clip(RoundedCornerShape(14.dp))
-                                                .border(1.5.dp, Color(0xFF1DB954).copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                        )
-                                        Icon(
-                                            Icons.Filled.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Color(0xFF1DB954),
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .offset(x = 3.dp, y = 3.dp)
-                                        )
-                                    }
-                                } else {
-                                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(34.dp))
-                                }
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(34.dp))
 
                                 Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Text(
@@ -1370,9 +1311,6 @@ fun CreatePlaylistDialog(
                                 )
 
                                 if (st.unmatchedTracks.isNotEmpty()) {
-                                    var copiedIndex by remember { mutableIntStateOf(-1) }
-                                    val haptic = LocalHapticFeedback.current
-
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1381,35 +1319,12 @@ fun CreatePlaylistDialog(
                                             .padding(10.dp),
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                "⚠️ ${st.unmatchedTracks.size} songs not found",
-                                                color = Color(0xFFFFB74D),
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            TextButton(
-                                                onClick = {
-                                                    val allNames = st.unmatchedTracks.joinToString("\n") { "${it.title} - ${it.artist}" }
-                                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(allNames))
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    copiedIndex = -99
-                                                },
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(24.dp)
-                                            ) {
-                                                Text(
-                                                    if (copiedIndex == -99) "Copied All!" else "Copy All",
-                                                    color = Color(0xFF1DB954),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                        }
+                                        Text(
+                                            "⚠️ ${st.unmatchedTracks.size} songs not found",
+                                            color = Color(0xFFFFB74D),
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
 
                                         LazyColumn(
                                             modifier = Modifier
@@ -1417,7 +1332,7 @@ fun CreatePlaylistDialog(
                                                 .heightIn(max = 140.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            itemsIndexed(st.unmatchedTracks) { idx, track ->
+                                            itemsIndexed(st.unmatchedTracks) { _, track ->
                                                 val query = "${track.title} ${track.artist}".trim()
                                                 Row(
                                                     modifier = Modifier
@@ -1446,26 +1361,9 @@ fun CreatePlaylistDialog(
                                                         )
                                                     }
 
-                                                    IconButton(
-                                                        onClick = {
-                                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(query))
-                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                            copiedIndex = idx
-                                                        },
-                                                        modifier = Modifier.size(26.dp)
-                                                    ) {
-                                                        Icon(
-                                                            if (copiedIndex == idx) Icons.Filled.Check else Icons.Outlined.ContentCopy,
-                                                            contentDescription = "Copy",
-                                                            tint = if (copiedIndex == idx) Color(0xFF1DB954) else colors.onSurfaceVariant,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                    }
-
                                                     if (onSearchOnline != null) {
                                                         IconButton(
                                                             onClick = {
-                                                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(query))
                                                                 onSearchOnline(query)
                                                                 onResetSpotifyImport()
                                                                 onDismiss()
@@ -1498,140 +1396,6 @@ fun CreatePlaylistDialog(
                         else -> {}
                     }
                 }
-            } else {
-                // Tab 2: Text List Import
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "Paste a list of songs (one per line, e.g. 'Song - Artist'). Dreamin will match and import them automatically.",
-                        fontSize = 12.sp,
-                        color = colors.onSurfaceVariant,
-                        lineHeight = 16.sp
-                    )
-
-                    OutlinedTextField(
-                        value = textImportTitle,
-                        onValueChange = { textImportTitle = it },
-                        placeholder = { Text("Playlist name (optional)", color = colors.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 12.5.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.secondary,
-                            unfocusedBorderColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
-                            cursorColor = colors.secondary,
-                            focusedTextColor = colors.onSurface,
-                            unfocusedTextColor = colors.onSurface,
-                            focusedContainerColor = colors.surfaceHighest,
-                            unfocusedContainerColor = colors.surfaceHighest
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = textImportContent,
-                        onValueChange = { textImportContent = it },
-                        placeholder = { Text("1. Song Title - Artist\n2. Another Song by Artist\n...", color = colors.onSurfaceVariant.copy(alpha = 0.4f), fontSize = 12.sp) },
-                        minLines = 4,
-                        maxLines = 6,
-                        shape = RoundedCornerShape(14.dp),
-                        trailingIcon = {
-                            if (textImportContent.isEmpty()) {
-                                TextButton(
-                                    onClick = {
-                                        val clip = clipboardManager.getText()?.text
-                                        if (!clip.isNullOrBlank()) textImportContent = clip.trim()
-                                    }
-                                ) {
-                                    Text("Paste", color = colors.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.secondary,
-                            unfocusedBorderColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
-                            cursorColor = colors.secondary,
-                            focusedTextColor = colors.onSurface,
-                            unfocusedTextColor = colors.onSurface,
-                            focusedContainerColor = colors.surfaceHighest,
-                            unfocusedContainerColor = colors.surfaceHighest
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // Text Import Progress State
-                    when (val st = spotifyImportState) {
-                        is SpotifyImportState.MatchingTracks -> {
-                            val progress = if (st.totalTracks > 0) st.currentTrackIndex.toFloat() / st.totalTracks.toFloat() else 0f
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(colors.surfaceHighest)
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        "Searching & Matching Songs...",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.5.sp,
-                                        color = colors.onSurface
-                                    )
-                                    Text(
-                                        "${st.currentTrackIndex}/${st.totalTracks}",
-                                        fontSize = 12.sp,
-                                        color = colors.secondary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(5.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                    color = colors.secondary,
-                                    trackColor = colors.surfaceHigh
-                                )
-                                Text(
-                                    "Matching: ${st.currentTrackName}",
-                                    color = colors.onSurfaceVariant,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        is SpotifyImportState.Success -> {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(36.dp))
-                                Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text(
-                                    "Imported ${st.matchedCount} of ${st.totalTracks} songs into '${st.playlistTitle}'",
-                                    color = colors.onSurfaceVariant,
-                                    fontSize = 12.5.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                        is SpotifyImportState.Error -> {
-                            Text(st.message, color = Color(0xFFFF5252), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        }
-                        else -> {}
-                    }
-                }
             }
         },
         confirmButton = {
@@ -1644,7 +1408,7 @@ fun CreatePlaylistDialog(
                 ) {
                     Text("Create", color = if (name.isNotBlank()) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
                 }
-            } else if (selectedTab == 1) {
+            } else {
                 when (spotifyImportState) {
                     is SpotifyImportState.Idle -> {
                         TextButton(
@@ -1667,37 +1431,6 @@ fun CreatePlaylistDialog(
                     is SpotifyImportState.Error -> {
                         TextButton(onClick = onResetSpotifyImport) {
                             Text("Try Again", color = Color(0xFF1DB954), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    else -> {}
-                }
-            } else {
-                // Tab 2: Text List
-                when (spotifyImportState) {
-                    is SpotifyImportState.Idle -> {
-                        TextButton(
-                            onClick = {
-                                if (textImportContent.isNotBlank()) {
-                                    val title = textImportTitle.ifBlank { "Imported List" }
-                                    onImportTextList(textImportContent, title)
-                                }
-                            },
-                            enabled = textImportContent.isNotBlank()
-                        ) {
-                            Text("Import List", color = if (textImportContent.isNotBlank()) colors.secondary else colors.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    is SpotifyImportState.Success -> {
-                        TextButton(onClick = {
-                            onResetSpotifyImport()
-                            onDismiss()
-                        }) {
-                            Text("Done", color = colors.secondary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    is SpotifyImportState.Error -> {
-                        TextButton(onClick = onResetSpotifyImport) {
-                            Text("Try Again", color = colors.secondary, fontWeight = FontWeight.Bold)
                         }
                     }
                     else -> {}

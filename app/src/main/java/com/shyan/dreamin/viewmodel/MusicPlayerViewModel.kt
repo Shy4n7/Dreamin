@@ -352,32 +352,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun importSongsFromTextList(text: String, title: String = "Imported Playlist") {
-        viewModelScope.launch(Dispatchers.IO) {
-            val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
-            if (lines.isEmpty()) {
-                _uiState.update {
-                    it.copy(spotifyImportState = SpotifyImportState.Error("Text list is empty. Please paste valid track names."))
-                }
-                return@launch
-            }
-
-            val tracks = lines.map { line ->
-                val cleanLine = line.replace(Regex("^\\d+[\\.\\)\\-]\\s*"), "")
-                val parts = cleanLine.split(" - ", " – ", " by ", ",")
-                val trackTitle = parts.firstOrNull()?.trim() ?: cleanLine
-                val artist = if (parts.size > 1) parts.drop(1).joinToString(", ").trim() else "Unknown Artist"
-                com.shyan.dreamin.data.service.SpotifyImportedTrack(
-                    title = trackTitle,
-                    artist = artist
-                )
-            }
-
-            _uiState.update { it.copy(spotifyImportState = SpotifyImportState.FetchingMetadata(title)) }
-            processTrackMatching(title.ifBlank { "Imported Playlist" }, "", tracks)
-        }
-    }
-
     private suspend fun processTrackMatching(title: String, coverUrl: String, tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>) {
         val langRegex = Regex("(?i)\\b(tamil|telugu|hindi|malayalam|kannada|punjabi|english)\\b")
         val playlistLang = langRegex.find(title)?.value?.lowercase() ?: "tamil"
@@ -477,21 +451,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             .ifBlank { rawTitle.trim() }
 
         val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
-        val query = "$cleanTitle $primaryArtist".trim()
 
-        // 3. Fast High-Efficiency Search (Pass 1: Title + Artist, Pass 2: Clean Title)
-        var candidates = searchOnDevice(query, limit = 6, targetLanguage = targetLang)
-        if (candidates.isEmpty() && targetLang.isNotBlank()) {
-            candidates = searchOnDevice(query, limit = 6, targetLanguage = "")
-        }
-        if (candidates.isEmpty()) {
-            candidates = searchOnDevice(cleanTitle, limit = 6, targetLanguage = "")
+        // 3. Title-First Search Strategy (Parity with Manual Search)
+        // Pass 1: Direct Clean Title - matches exact catalog & movie records immediately without artist pollution
+        var candidates = searchOnDevice(cleanTitle, limit = 8)
+
+        // Pass 2: Title + Primary Artist (for disambiguation if Pass 1 had no hits)
+        if (candidates.isEmpty() && primaryArtist.isNotBlank()) {
+            val query = "$cleanTitle $primaryArtist".trim()
+            candidates = searchOnDevice(query, limit = 8)
         }
 
-        // 4. Secondary Fallback: Server / YouTube Music Engine for Indie & Non-Catalog Releases
+        // Pass 3: Secondary Fallback: Server / YouTube Music Engine for Indie & Non-Catalog Releases
         if (candidates.isEmpty()) {
             try {
-                val serverResp = api.search(query, page = 1, limit = 8)
+                val serverResp = api.search(cleanTitle, page = 1, limit = 8)
+                if (serverResp.results.isNotEmpty()) {
+                    candidates = serverResp.results.filter { cand ->
+                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (candidates.isEmpty() && primaryArtist.isNotBlank()) {
+            try {
+                val serverResp = api.search("$cleanTitle $primaryArtist", page = 1, limit = 8)
                 if (serverResp.results.isNotEmpty()) {
                     candidates = serverResp.results.filter { cand ->
                         OfficialSongFilter.isOfficial(cand, rejectHindi = false)
@@ -502,7 +486,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         if (candidates.isEmpty()) return@withContext null
 
-        // 5. Multi-Factor Scoring with Strict Duration Verification
+        // 4. Multi-Factor Scoring with Soft Duration Variance (±25s for soundtrack masters)
         val spotifyArtists = rawArtist.lowercase().split(",", "&", "feat.", "ft.", "/", ";").map { it.trim() }.filter { it.length >= 2 }
         val cleanSpotifyTitle = cleanTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
 
@@ -514,9 +498,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             // Title Match Score
             if (candCleanTitle == cleanSpotifyTitle) {
-                score += 500
+                score += 600
             } else if (candCleanTitle.contains(cleanSpotifyTitle) || cleanSpotifyTitle.contains(candCleanTitle)) {
-                score += 300
+                score += 350
             }
 
             // Language Penalty & Bonus
@@ -540,12 +524,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             if (artistHits > 0) score += 200
 
-            // Duration Match Score (±4s is golden)
+            // Duration Match Score (Relaxed ±25s tolerance for soundtrack/movie masters)
             if (track.durationMs > 0 && candidate.duration > 0) {
                 val diffSec = kotlin.math.abs(track.durationMs - candidate.duration) / 1000
                 if (diffSec <= 4) score += 250
-                else if (diffSec <= 10) score += 100
-                else if (diffSec > 35) score -= 300
+                else if (diffSec <= 15) score += 120
+                else if (diffSec > 45) score -= 300
             }
 
             score
