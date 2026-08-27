@@ -839,7 +839,11 @@ fun HorizontalSongCardsRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(vertical = 6.dp)
     ) {
-        itemsIndexed(songs, key = { idx, song -> "${song.id}_$idx" }) { index, song ->
+        itemsIndexed(
+            items = songs,
+            key = { idx, song -> "${song.id}_$idx" },
+            contentType = { _, _ -> "HorizontalSongCard" }
+        ) { index, song ->
             Box(modifier = Modifier.staggeredHorizontalEntry(index)) {
                 HorizontalSongCard(
                     song = song,
@@ -935,9 +939,39 @@ fun HorizontalSongCard(
                         verticalAlignment = Alignment.Bottom,
                         modifier = Modifier.height(20.dp)
                     ) {
-                        Box(modifier = Modifier.width(3.5.dp).height(20.dp * bar1).clip(RoundedCornerShape(2.dp)).background(colors.primary))
-                        Box(modifier = Modifier.width(3.5.dp).height(20.dp * bar2).clip(RoundedCornerShape(2.dp)).background(colors.primary))
-                        Box(modifier = Modifier.width(3.5.dp).height(20.dp * bar3).clip(RoundedCornerShape(2.dp)).background(colors.primary))
+                        Box(
+                            modifier = Modifier
+                                .width(3.5.dp)
+                                .height(20.dp)
+                                .graphicsLayer {
+                                    scaleY = bar1
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1.0f)
+                                }
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(colors.primary)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(3.5.dp)
+                                .height(20.dp)
+                                .graphicsLayer {
+                                    scaleY = bar2
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1.0f)
+                                }
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(colors.primary)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(3.5.dp)
+                                .height(20.dp)
+                                .graphicsLayer {
+                                    scaleY = bar3
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1.0f)
+                                }
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(colors.primary)
+                        )
                     }
                 }
             }
@@ -977,8 +1011,6 @@ fun HorizontalSongCard(
     }
 }
 
-
-
 @Composable
 fun FeaturedHeroCarousel(
     songs: List<Song>,
@@ -990,7 +1022,11 @@ fun FeaturedHeroCarousel(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(vertical = 4.dp)
     ) {
-        itemsIndexed(songs, key = { index, song -> "${song.id}_$index" }) { index, song ->
+        itemsIndexed(
+            items = songs,
+            key = { index, song -> "${song.id}_$index" },
+            contentType = { _, _ -> "FeaturedHeroCard" }
+        ) { index, song ->
             val isPlaying = currentSongId == song.id
             val heroInteraction = remember { MutableInteractionSource() }
             val isPressed by heroInteraction.collectIsPressedAsState()
