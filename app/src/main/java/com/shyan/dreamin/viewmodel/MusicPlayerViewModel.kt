@@ -483,51 +483,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val primaryArtist = rawArtist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
         val query = "$cleanTitle $primaryArtist".trim()
 
-        // 3. Multi-Pass Primary Search (JioSaavn / Local Catalog)
-        var candidates = searchOnDevice(query, limit = 8, targetLanguage = targetLang)
-        if (candidates.isEmpty()) {
-            candidates = searchOnDevice(query, limit = 8, targetLanguage = "")
+        // 3. Fast High-Efficiency Search (Pass 1: Title + Artist, Pass 2: Clean Title)
+        var candidates = searchOnDevice(query, limit = 6, targetLanguage = targetLang)
+        if (candidates.isEmpty() && targetLang.isNotBlank()) {
+            candidates = searchOnDevice(query, limit = 6, targetLanguage = "")
         }
         if (candidates.isEmpty()) {
-            candidates = searchOnDevice(cleanTitle, limit = 8, targetLanguage = targetLang)
-        }
-        if (candidates.isEmpty()) {
-            candidates = searchOnDevice(cleanTitle, limit = 8, targetLanguage = "")
-        }
-        if (candidates.isEmpty()) {
-            candidates = searchOnDevice(rawTitle, limit = 8, targetLanguage = targetLang)
-        }
-        if (candidates.isEmpty()) {
-            candidates = searchOnDevice(rawTitle, limit = 8, targetLanguage = "")
-        }
-        if (candidates.isEmpty()) {
-            val alphaTitle = rawTitle.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
-            if (alphaTitle.isNotBlank() && alphaTitle != cleanTitle && alphaTitle != rawTitle) {
-                candidates = searchOnDevice(alphaTitle, limit = 8, targetLanguage = "")
-            }
-        }
-        if (candidates.isEmpty()) {
-            // Pass 8: First 2 words of clean title (handles long titles with movie names/credits)
-            val firstTwoWords = cleanTitle.split(" ").take(2).joinToString(" ").trim()
-            if (firstTwoWords.isNotBlank() && firstTwoWords.length >= 3) {
-                candidates = searchOnDevice(firstTwoWords, limit = 12, targetLanguage = "")
-            }
+            candidates = searchOnDevice(cleanTitle, limit = 6, targetLanguage = "")
         }
 
         // 4. Secondary Fallback: Server / YouTube Music Engine for Indie & Non-Catalog Releases
         if (candidates.isEmpty()) {
             try {
-                val serverResp = api.search(query, page = 1, limit = 10)
-                if (serverResp.results.isNotEmpty()) {
-                    candidates = serverResp.results.filter { cand ->
-                        OfficialSongFilter.isOfficial(cand, rejectHindi = false)
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        if (candidates.isEmpty()) {
-            try {
-                val serverResp = api.search(cleanTitle, page = 1, limit = 10)
+                val serverResp = api.search(query, page = 1, limit = 8)
                 if (serverResp.results.isNotEmpty()) {
                     candidates = serverResp.results.filter { cand ->
                         OfficialSongFilter.isOfficial(cand, rejectHindi = false)
