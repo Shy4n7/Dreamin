@@ -719,10 +719,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 pendingResumePositionMs = 0L
                 controller?.seekTo(pos)
             }
+            val c = controller
+            val isPlaying = c?.isPlaying == true
+            val playWhenReady = c?.playWhenReady == true
             val playbackState = when {
                 state == Player.STATE_BUFFERING -> PlaybackState.Loading
-                state == Player.STATE_READY && controller?.isPlaying == true -> PlaybackState.Playing
-                state == Player.STATE_READY -> PlaybackState.Paused
+                state == Player.STATE_READY -> if (playWhenReady || isPlaying) PlaybackState.Playing else PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
                     viewModelScope.launch {
                         delay(1500L) // 1.5s natural breathing gap between songs
@@ -736,9 +738,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            val c = controller
+            val playWhenReady = c?.playWhenReady == true
+            val pState = c?.playbackState
             _uiState.update {
                 it.copy(
-                    playbackState = if (isPlaying) PlaybackState.Playing else PlaybackState.Paused
+                    playbackState = when {
+                        isPlaying -> PlaybackState.Playing
+                        pState == Player.STATE_BUFFERING -> PlaybackState.Loading
+                        playWhenReady -> PlaybackState.Playing
+                        else -> PlaybackState.Paused
+                    }
                 )
             }
         }
@@ -746,19 +756,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val meta = mediaItem?.mediaMetadata
             val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
-            val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
             val duration = controller?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-            _uiState.update { state ->
-                state.copy(
-                    currentSong = if (id != null && title != null) {
-                        Song(
-                            id = id,
-                            title = title,
-                            artist = meta?.artist?.toString() ?: "",
-                            artworkUrl = meta?.artworkUri?.toString() ?: ""
-                        )
-                    } else state.currentSong
-                )
+            if (id != null) {
+                _uiState.update { state ->
+                    val matching = state.queue.find { it.id == id }
+                    if (matching != null) {
+                        state.copy(currentSong = matching)
+                    } else {
+                        val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
+                        if (title != null) {
+                            state.copy(
+                                currentSong = Song(
+                                    id = id,
+                                    title = title,
+                                    artist = meta.artist?.toString() ?: "",
+                                    artworkUrl = meta.artworkUri?.toString() ?: ""
+                                )
+                            )
+                        } else state
+                    }
+                }
             }
             _progress.value = PlaybackProgress(0L, duration)
             _uiState.value.currentSong?.let { activeSong ->
@@ -1231,6 +1248,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 activeController?.apply {
+                    playWhenReady = true
                     setMediaItem(mediaItem)
                     prepare()
                     play()

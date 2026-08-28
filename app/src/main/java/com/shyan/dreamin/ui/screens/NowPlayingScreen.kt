@@ -808,12 +808,12 @@ fun NowPlayingScreen(
 
             // Artist + title with basicMarquee and Download + Favorite actions
             AnimatedContent(
-                targetState = song,
+                targetState = song.id,
                 transitionSpec = {
-                    fadeIn(tween(300)) togetherWith fadeOut(tween(200))
+                    fadeIn(tween(180)) togetherWith fadeOut(tween(130))
                 },
                 label = "song_meta_crossfade"
-            ) { currentSong ->
+            ) { _ ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -821,7 +821,7 @@ fun NowPlayingScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            currentSong.displayTitle,
+                            song.displayTitle,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
@@ -830,7 +830,7 @@ fun NowPlayingScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            currentSong.artist,
+                            song.artist,
                             fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.68f),
                             fontWeight = FontWeight.Medium,
@@ -838,14 +838,14 @@ fun NowPlayingScreen(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .clickable { onArtistClick(currentSong.artist) }
+                                .clickable { onArtistClick(song.artist) }
                         )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    val isDownloaded = state.downloadedSongs.any { it.id == currentSong.id }
-                    val isDownloading = state.downloadingSongIds.contains(currentSong.id)
+                    val isDownloaded = state.downloadedSongs.any { it.id == song.id }
+                    val isDownloading = state.downloadingSongIds.contains(song.id)
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -874,8 +874,8 @@ fun NowPlayingScreen(
 
                         IconButton(
                             onClick = {
-                                if (isDownloaded) onDeleteDownload(currentSong.id)
-                                else onDownload(currentSong)
+                                if (isDownloaded) onDeleteDownload(song.id)
+                                else onDownload(song)
                             },
                             modifier = Modifier
                                 .size(44.dp)
