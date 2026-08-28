@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
@@ -791,38 +792,36 @@ fun PlaylistDetailScreen(
                             val isDownloaded = downloadedSongIds.contains(song.id)
                             val isDownloading = downloadingSongIds.contains(song.id)
 
-                            Box(modifier = Modifier.staggeredEntry(idx)) {
-                                PlaylistSongRow(
-                                    song = song,
-                                    index = idx + 1,
-                                    isPlaying = playingId == song.id,
-                                    isDownloaded = isDownloaded,
-                                    isDownloading = isDownloading,
-                                    onClick = { onSongClick(song) },
-                                    onPlayNext = { onPlayNext(song) },
-                                    onAddToQueue = { onAddToQueue(song) },
-                                    onDownload = {
-                                        if (isDownloaded) onDeleteDownload(song.id)
-                                        else onDownloadSong(song)
-                                    },
-                                    onRemove = {
-                                        val removedSong = song
-                                        val title = removedSong.displayTitle
-                                        onRemoveSong(removedSong.id)
-                                        scope.launch {
-                                            snackbarHostState.currentSnackbarData?.dismiss()
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "\"$title\" removed from playlist",
-                                                actionLabel = "Undo",
-                                                duration = SnackbarDuration.Short
-                                            )
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                onAddSong(removedSong)
-                                            }
+                            PlaylistSongRow(
+                                song = song,
+                                index = idx + 1,
+                                isPlaying = playingId == song.id,
+                                isDownloaded = isDownloaded,
+                                isDownloading = isDownloading,
+                                onClick = { onSongClick(song) },
+                                onPlayNext = { onPlayNext(song) },
+                                onAddToQueue = { onAddToQueue(song) },
+                                onDownload = {
+                                    if (isDownloaded) onDeleteDownload(song.id)
+                                    else onDownloadSong(song)
+                                },
+                                onRemove = {
+                                    val removedSong = song
+                                    val title = removedSong.displayTitle
+                                    onRemoveSong(removedSong.id)
+                                    scope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "\"$title\" removed from playlist",
+                                            actionLabel = "Undo",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            onAddSong(removedSong)
                                         }
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
 
                         item {
@@ -1424,43 +1423,43 @@ fun PlaylistFastScroller(
     dominantColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (itemCount <= 1) return
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var isDragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
     var lastHapticIndex by remember { mutableIntStateOf(-1) }
+    var containerHeightPx by remember { mutableFloatStateOf(1f) }
 
     val isScrollInProgress = listState.isScrollInProgress
-    val firstVisibleIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
 
     val scrollFraction by remember {
         derivedStateOf {
             if (isDragging) dragFraction
-            else if (itemCount > 1) {
-                val effectiveIdx = (firstVisibleIndex - 1).coerceAtLeast(0)
+            else {
+                val effectiveIdx = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
                 (effectiveIdx.toFloat() / (itemCount - 1).coerceAtLeast(1)).coerceIn(0f, 1f)
-            } else 0f
+            }
         }
     }
 
     val alphaAnim by animateFloatAsState(
-        targetValue = if (isDragging || isScrollInProgress) 1f else 0.30f,
-        animationSpec = tween(if (isDragging || isScrollInProgress) 150 else 500),
+        targetValue = if (isDragging || isScrollInProgress) 1f else 0.25f,
+        animationSpec = tween(if (isDragging || isScrollInProgress) 120 else 400),
         label = "fast_scroll_alpha"
     )
 
-    val currentTargetIndex = remember(scrollFraction, itemCount) {
-        (scrollFraction * (itemCount - 1).coerceAtLeast(0)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
-    }
-    val currentSongSnippet = remember(currentTargetIndex, songs) {
-        songs.getOrNull(currentTargetIndex)
-    }
+    val currentTargetIndex = if (isDragging) {
+        (dragFraction * (itemCount - 1)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
+    } else 0
+    val currentSongSnippet = if (isDragging) songs.getOrNull(currentTargetIndex) else null
 
     Box(
         modifier = modifier
             .width(42.dp)
             .graphicsLayer { alpha = alphaAnim }
+            .onSizeChanged { containerHeightPx = it.height.toFloat().coerceAtLeast(1f) }
             .pointerInput(itemCount) {
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
@@ -1491,88 +1490,80 @@ fun PlaylistFastScroller(
             },
         contentAlignment = Alignment.TopEnd
     ) {
-        // Track Background Line
+        // Track Line
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .width(3.5.dp)
+                .width(3.dp)
                 .padding(vertical = 12.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceHighest.copy(alpha = 0.5f))
+                .background(colors.surfaceHighest.copy(alpha = 0.45f))
         )
 
-        // Draggable Thumb Slider
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(36.dp)
-        ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val availableHeight = maxHeight - 36.dp
-                val thumbY = availableHeight * scrollFraction
-
-                // Floating Bubble showing Track Index & Title when dragging
-                if (isDragging) {
-                    Row(
-                        modifier = Modifier
-                            .offset(x = (-44).dp, y = thumbY - 8.dp)
-                            .align(Alignment.TopEnd)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(colors.surfaceHighest.copy(alpha = 0.95f))
-                            .border(1.dp, dominantColor.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(dominantColor.copy(alpha = 0.25f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${currentTargetIndex + 1}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = dominantColor
-                            )
-                        }
-                        Text(
-                            text = currentSongSnippet?.displayTitle ?: "Track ${currentTargetIndex + 1}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 130.dp)
-                        )
+        // Floating Bubble showing Track Index & Title when dragging
+        if (isDragging) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .graphicsLayer {
+                        val availableH = (containerHeightPx - 100f).coerceAtLeast(0f)
+                        translationY = availableH * scrollFraction
+                        translationX = -120f
                     }
-                }
-
-                // Thumb Pill
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.surfaceHighest.copy(alpha = 0.95f))
+                    .border(1.dp, dominantColor.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .offset(y = thumbY)
-                        .align(Alignment.TopEnd)
-                        .size(width = 6.dp, height = 36.dp)
+                        .size(20.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    dominantColor,
-                                    colors.primary
-                                )
-                            )
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = if (isDragging) 0.8f else 0.3f),
-                            shape = CircleShape
-                        )
+                        .background(dominantColor.copy(alpha = 0.25f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${currentTargetIndex + 1}",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = dominantColor
+                    )
+                }
+                Text(
+                    text = currentSongSnippet?.displayTitle ?: "Track ${currentTargetIndex + 1}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 130.dp)
                 )
             }
         }
+
+        // Thumb Pill (Phase-Deferred Translation, zero recomposition during scrolling)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(width = 6.dp, height = 36.dp)
+                .graphicsLayer {
+                    val availableH = (containerHeightPx - 100f).coerceAtLeast(0f)
+                    translationY = availableH * scrollFraction
+                }
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(dominantColor, colors.primary)
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = if (isDragging) 0.8f else 0.3f),
+                    shape = CircleShape
+                )
+        )
     }
 }
