@@ -158,6 +158,7 @@ data class PlayerUiState(
     val openPlaylistId: Long? = null,
     val openPlaylistSongs: List<Song> = emptyList(),
     val playlistQueueActive: Boolean = false,
+    val userQueuedSongIds: List<String> = emptyList(),
     val searchError: String? = null,
     val isSearching: Boolean = false,
     // Lyrics, Downloads & Artist Profile extensions
