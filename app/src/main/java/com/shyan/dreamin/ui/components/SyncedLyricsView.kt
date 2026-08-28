@@ -154,12 +154,10 @@ fun SyncedLyricsView(
                     return@Box
                 }
 
-                val currentMs = progress.currentPositionMs
-
                 // If playback is before the first line, activeIndex = -1 (instrumental intro)
-                val activeIndex by remember(currentMs, lines) {
+                val activeIndex by remember(lines) {
                     derivedStateOf {
-                        lines.indexOfLast { it.timestampMs <= currentMs }
+                        lines.indexOfLast { it.timestampMs <= progress.currentPositionMs }
                     }
                 }
 

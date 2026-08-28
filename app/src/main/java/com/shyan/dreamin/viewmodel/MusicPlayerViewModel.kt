@@ -1059,7 +1059,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val result = (loader.execute(request) as? coil.request.SuccessResult)?.drawable
                 val bitmap = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
                 if (bitmap != null) {
-                    val palette = androidx.palette.graphics.Palette.from(bitmap).generate()
+                    val scaledBitmap = if (bitmap.width > 32 || bitmap.height > 32) {
+                        android.graphics.Bitmap.createScaledBitmap(bitmap, 24, 24, true)
+                    } else bitmap
+                    val palette = androidx.palette.graphics.Palette.from(scaledBitmap).generate()
                     val dominant = palette.getVibrantColor(
                         palette.getDominantColor(
                             palette.getMutedColor(0xFF6C5CE7.toInt())
@@ -1994,7 +1997,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     ?.drawable
                     ?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap }
                 bitmap?.let { bmp ->
-                    val palette = androidx.palette.graphics.Palette.from(bmp).generate()
+                    val scaledBmp = if (bmp.width > 32 || bmp.height > 32) {
+                        android.graphics.Bitmap.createScaledBitmap(bmp, 24, 24, true)
+                    } else bmp
+                    val palette = androidx.palette.graphics.Palette.from(scaledBmp).generate()
                     updateDominantColor(palette.getDominantColor(0xFF1A1A2E.toInt()))
                 } ?: updateDominantColor(0xFF1A1A2E.toInt())
             } catch (e: Exception) {

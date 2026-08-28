@@ -1,9 +1,13 @@
 package com.shyan.dreamin.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "play_history")
+@Entity(
+    tableName = "play_history",
+    indices = [Index("playedAt")]
+)
 data class PlayHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val songId: String,

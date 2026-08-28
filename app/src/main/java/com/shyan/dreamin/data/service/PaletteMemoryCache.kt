@@ -37,7 +37,10 @@ object PaletteMemoryCache {
             if (result is coil.request.SuccessResult) {
                 val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                 if (bmp != null) {
-                    val palette = Palette.from(bmp).generate()
+                    val scaledBmp = if (bmp.width > 32 || bmp.height > 32) {
+                        android.graphics.Bitmap.createScaledBitmap(bmp, 24, 24, true)
+                    } else bmp
+                    val palette = Palette.from(scaledBmp).generate()
                     val dominantRgb = palette.dominantSwatch?.rgb
                         ?: palette.vibrantSwatch?.rgb
                         ?: palette.mutedSwatch?.rgb
