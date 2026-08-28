@@ -189,7 +189,13 @@ object OfficialArtworkService {
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
             
             val searchQueries = mutableListOf<String>()
-            if (artist.isNotBlank()) searchQueries.add("$cleanTitle $artist")
+            val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
+            for (a in artistTokens.take(2)) {
+                searchQueries.add("$cleanTitle $a")
+            }
+            if (artist.isNotBlank() && !searchQueries.contains("$cleanTitle $artist")) {
+                searchQueries.add("$cleanTitle $artist")
+            }
             searchQueries.add("$cleanTitle $langHint")
             searchQueries.add(cleanTitle)
 
@@ -240,7 +246,7 @@ object OfficialArtworkService {
 
                     // Language Affinity Guard
                     val textCombined = "$trackName $collectionName".lowercase()
-                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
+                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
                         .filter { it != targetLanguage.lowercase() }
                     for (other in otherLangs) {
                         if (textCombined.contains("($other)") || 
@@ -273,9 +279,9 @@ object OfficialArtworkService {
                         bestCover = rawArtwork.replace("100x100bb.jpg", "1000x1000bb.jpg")
                     }
                 }
-
-                if (bestCover != null && bestScore > 0) return Pair(bestCover, bestScore)
             }
+
+            if (bestCover != null && bestScore > 0) return Pair(bestCover, bestScore)
         } catch (_: Exception) {}
         return null
     }
@@ -328,7 +334,13 @@ object OfficialArtworkService {
         try {
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
             val searchQueries = mutableListOf<String>()
-            if (artist.isNotBlank()) searchQueries.add("$title $artist")
+            val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
+            for (a in artistTokens.take(2)) {
+                searchQueries.add("$title $a")
+            }
+            if (artist.isNotBlank() && !searchQueries.contains("$title $artist")) {
+                searchQueries.add("$title $artist")
+            }
             searchQueries.add("$title $langHint")
             searchQueries.add(title)
 
@@ -387,7 +399,7 @@ object OfficialArtworkService {
 
                     // Language Affinity Guard
                     val textCombined = "$resTitle $alb".lowercase()
-                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
+                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
                         .filter { it != targetLanguage.lowercase() }
                     for (other in otherLangs) {
                         if (textCombined.contains("($other)") || 
@@ -419,9 +431,9 @@ object OfficialArtworkService {
                         bestCover = img
                     }
                 }
-
-                if (bestCover != null && bestScore > 0) return Pair(toHighResCover(bestCover), bestScore)
             }
+
+            if (bestCover != null && bestScore > 0) return Pair(toHighResCover(bestCover), bestScore)
         } catch (_: Exception) {}
         return null
     }

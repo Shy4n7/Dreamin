@@ -60,6 +60,21 @@ class OfficialArtworkServiceTest {
     }
 
     @Test
+    fun testMalareKarnaTheatricalPosterResolution() = runBlocking {
+        val song = Song(
+            id = "malare_karna_test",
+            title = "Malare",
+            artist = "Vidyasagar, S.P. Balasubrahmanyam",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+        assertFalse("Poster should reject Power dubbed album", poster.contains("Power-Tamil", ignoreCase = true))
+    }
+
+    @Test
     fun testCompilationRegexDetectsNewPatterns() {
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("A. R. Rahman Vibration"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("AR RAHMAN Hit Songs"))
