@@ -725,7 +725,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state == Player.STATE_READY && controller?.isPlaying == true -> PlaybackState.Playing
                 state == Player.STATE_READY -> PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
-                    viewModelScope.launch { playNext(isAutoEnd = true) }
+                    viewModelScope.launch {
+                        delay(1500L) // 1.5s natural breathing gap between songs
+                        playNext(isAutoEnd = true)
+                    }
                     PlaybackState.Idle
                 }
                 else -> PlaybackState.Idle
