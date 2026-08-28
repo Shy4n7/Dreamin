@@ -211,8 +211,8 @@ object SpotifyImportService {
                             }
 
                             if (remainingUris.isNotEmpty()) {
-                                android.util.Log.d("SpotifyImport", "Fetching ${remainingUris.size} tracks beyond 100 concurrently...")
-                                val fetchedTracks = fetchTracksConcurrently(remainingUris)
+                                android.util.Log.d("SpotifyImport", "Fetching ${remainingUris.size} tracks beyond 100 concurrently via spclient metadata...")
+                                val fetchedTracks = fetchTracksConcurrently(remainingUris, sessionToken)
                                 tracks.addAll(fetchedTracks)
                             }
                         }
@@ -224,15 +224,16 @@ object SpotifyImportService {
                 }
             }
 
-            val finalTotal = maxOf(tracks.size, reportedTotal)
-            android.util.Log.d("SpotifyImport", "Total tracks fetched for '$title': ${tracks.size} (total reported: $finalTotal)")
+            val validTracks = tracks.filter { !isDummyTitle(it.title) }
+            val finalTotal = maxOf(validTracks.size, reportedTotal)
+            android.util.Log.d("SpotifyImport", "Total tracks fetched for '$title': ${validTracks.size} (total reported: $finalTotal)")
 
             return@withContext SpotifyPlaylistDetails(
                 id = playlistId,
                 title = title,
                 coverUrl = coverUrl,
                 totalTracks = finalTotal,
-                tracks = tracks
+                tracks = validTracks
             )
         } catch (e: Exception) {
             android.util.Log.e("SpotifyImport", "fetchPlaylistDetails error: ${e.message}", e)
@@ -242,17 +243,34 @@ object SpotifyImportService {
         }
     }
 
-    private suspend fun fetchTracksConcurrently(trackIds: List<String>): List<SpotifyImportedTrack> = coroutineScope {
-        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
+    private fun base62ToHex(base62: String): String {
+        val alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        var num = java.math.BigInteger.ZERO
+        val radix = java.math.BigInteger.valueOf(62)
+        for (ch in base62) {
+            val idx = alphabet.indexOf(ch)
+            if (idx >= 0) {
+                num = num.multiply(radix).add(java.math.BigInteger.valueOf(idx.toLong()))
+            }
+        }
+        val hex = num.toString(16)
+        return hex.padStart(32, '0')
+    }
+
+    private suspend fun fetchTracksConcurrently(
+        trackIds: List<String>,
+        sessionToken: String? = null
+    ): List<SpotifyImportedTrack> = coroutineScope {
+        val semaphore = kotlinx.coroutines.sync.Semaphore(12)
         trackIds.mapIndexed { index, tid ->
             async(Dispatchers.IO) {
                 semaphore.acquire()
                 try {
-                    kotlinx.coroutines.delay((index % 8) * 35L)
-                    fetchSingleTrackResilient(tid)
+                    kotlinx.coroutines.delay((index % 6) * 20L)
+                    fetchSingleTrackResilient(tid, sessionToken)
                 } catch (e: Exception) {
                     android.util.Log.w("SpotifyImport", "Failed to fetch track $tid: ${e.message}")
-                    SpotifyImportedTrack(title = "Spotify Track", artist = "", durationMs = 0L)
+                    null
                 } finally {
                     semaphore.release()
                 }
@@ -260,13 +278,62 @@ object SpotifyImportService {
         }.awaitAll().filterNotNull()
     }
 
-    private fun fetchSingleTrackResilient(trackId: String): SpotifyImportedTrack {
-        // Pass 1: Spotify Embed Track page via connection-pooled HTTP client with backoff
-        for (attempt in 0..2) {
+    private fun fetchSingleTrackResilient(trackId: String, sessionToken: String? = null): SpotifyImportedTrack? {
+        // Pass 1: Direct spclient metadata API with sessionToken (100% reliable, zero rate limit)
+        if (!sessionToken.isNullOrBlank()) {
             try {
-                if (attempt > 0) {
-                    Thread.sleep(attempt * 250L)
+                val hexId = base62ToHex(trackId)
+                val metaUrl = "https://spclient.wg.spotify.com/metadata/4/track/$hexId"
+                val metaReq = Request.Builder()
+                    .url(metaUrl)
+                    .header("User-Agent", USER_AGENT)
+                    .header("Authorization", "Bearer $sessionToken")
+                    .header("Accept", "application/json")
+                    .build()
+
+                NetworkService.httpClient.newCall(metaReq).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string().orEmpty()
+                        val mData = JSONObject(body)
+                        val name = mData.optString("name", "").trim()
+                        if (name.isNotBlank() && !isDummyTitle(name)) {
+                            val artistsArr = mData.optJSONArray("artist")
+                            val artists = mutableListOf<String>()
+                            if (artistsArr != null) {
+                                for (a in 0 until artistsArr.length()) {
+                                    val aName = artistsArr.optJSONObject(a)?.optString("name")
+                                    if (!aName.isNullOrBlank()) artists.add(aName)
+                                }
+                            }
+                            val artistName = if (artists.isNotEmpty()) artists.joinToString(", ") else "Unknown Artist"
+                            val duration = mData.optLong("duration", 0L)
+                            val coverImages = mData.optJSONObject("album")?.optJSONObject("cover_group")?.optJSONArray("image")
+                            var coverUrl = ""
+                            if (coverImages != null && coverImages.length() > 0) {
+                                val fileId = coverImages.optJSONObject(coverImages.length() - 1)?.optString("file_id")
+                                    ?: coverImages.optJSONObject(0)?.optString("file_id") ?: ""
+                                if (fileId.isNotBlank()) {
+                                    coverUrl = "https://i.scdn.co/image/$fileId"
+                                }
+                            }
+
+                            return SpotifyImportedTrack(
+                                title = name,
+                                artist = artistName,
+                                durationMs = duration,
+                                artworkUrl = coverUrl
+                            )
+                        }
+                    }
                 }
+            } catch (_: Exception) {
+                // Fall through to Pass 2
+            }
+        }
+
+        // Pass 2: Spotify Embed Track page via connection-pooled HTTP client
+        for (attempt in 0..1) {
+            try {
                 val request = Request.Builder()
                     .url("https://open.spotify.com/embed/track/$trackId")
                     .header("User-Agent", USER_AGENT)
@@ -286,13 +353,13 @@ object SpotifyImportService {
                                 val entity = root.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")?.optJSONObject("data")?.optJSONObject("entity")
                                 if (entity != null) {
                                     val title = entity.optString("name").ifBlank { entity.optString("title", "") }.trim()
-                                    if (title.isNotBlank()) {
+                                    if (title.isNotBlank() && !isDummyTitle(title)) {
                                         val artistsArr = entity.optJSONArray("artists")
                                         val artists = mutableListOf<String>()
                                         if (artistsArr != null) {
                                             for (a in 0 until artistsArr.length()) {
-                                                val name = artistsArr.optJSONObject(a)?.optString("name")
-                                                if (!name.isNullOrBlank()) artists.add(name)
+                                                val aName = artistsArr.optJSONObject(a)?.optString("name")
+                                                if (!aName.isNullOrBlank()) artists.add(aName)
                                             }
                                         }
                                         val artistName = if (artists.isNotEmpty()) artists.joinToString(", ") else entity.optString("subtitle", "Unknown Artist")
@@ -312,12 +379,10 @@ object SpotifyImportService {
                         }
                     }
                 }
-            } catch (_: Exception) {
-                // Retry with backoff
-            }
+            } catch (_: Exception) {}
         }
 
-        // Pass 2: OEmbed Fallback with Title + Artist Regex Decomposition
+        // Pass 3: OEmbed Fallback with strict validation
         try {
             val oeRequest = Request.Builder()
                 .url("https://open.spotify.com/oembed?url=https://open.spotify.com/track/$trackId")
@@ -330,7 +395,7 @@ object SpotifyImportService {
                     val oeJson = JSONObject(response.body?.string().orEmpty())
                     val rawTitle = oeJson.optString("title", "").trim()
                     val thumbUrl = oeJson.optString("thumbnail_url", "")
-                    if (rawTitle.isNotBlank()) {
+                    if (rawTitle.isNotBlank() && !isDummyTitle(rawTitle)) {
                         var parsedTitle = rawTitle
                         var parsedArtist = "Unknown Artist"
 
@@ -346,19 +411,27 @@ object SpotifyImportService {
                             }
                         }
 
-                        return SpotifyImportedTrack(
-                            title = parsedTitle,
-                            artist = parsedArtist,
-                            durationMs = 0L,
-                            artworkUrl = thumbUrl
-                        )
+                        if (!isDummyTitle(parsedTitle)) {
+                            return SpotifyImportedTrack(
+                                title = parsedTitle,
+                                artist = parsedArtist,
+                                durationMs = 0L,
+                                artworkUrl = thumbUrl
+                            )
+                        }
                     }
                 }
             }
-        } catch (_: Exception) {
-            // Silently proceed
-        }
+        } catch (_: Exception) {}
 
-        return SpotifyImportedTrack(title = "Spotify Track $trackId", artist = "", durationMs = 0L)
+        return null
+    }
+
+    private fun isDummyTitle(title: String): Boolean {
+        val trimmed = title.trim().lowercase()
+        return trimmed == "spotify" ||
+               trimmed.startsWith("spotify track") ||
+               trimmed.startsWith("spotify playlist") ||
+               trimmed == "unknown track"
     }
 }

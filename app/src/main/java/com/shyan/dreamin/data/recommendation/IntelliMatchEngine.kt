@@ -214,6 +214,11 @@ object IntelliMatchEngine {
         candidate: Song,
         targetLanguage: String = "tamil"
     ): MatchResult {
+        val cleanTargetLower = targetTitle.trim().lowercase()
+        if (cleanTargetLower == "spotify" || cleanTargetLower.startsWith("spotify track") || cleanTargetLower.startsWith("spotify playlist") || cleanTargetLower.isBlank()) {
+            return MatchResult(candidate, 0, MatchConfidence.LOW, "Blocked dummy track title")
+        }
+
         var score = 1000
         val (targetBase, targetFull) = decomposeTitle(targetTitle)
         val (candBase, _) = decomposeTitle(candidate.title)
