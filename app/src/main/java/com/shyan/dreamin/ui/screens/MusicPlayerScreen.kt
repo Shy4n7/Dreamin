@@ -1,6 +1,7 @@
 package com.shyan.dreamin.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -96,29 +98,6 @@ private fun MainAppScaffold(
     val keyboard = LocalSoftwareKeyboardController.current
     val hazeState = remember { HazeState() }
     val navScreens = Screen.entries
-    val pagerState = rememberPagerState(
-        initialPage = navScreens.indexOf(currentScreen).coerceAtLeast(0),
-        pageCount = { navScreens.size }
-    )
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(pagerState.settledPage) {
-        val screen = navScreens.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
-        if (screen != currentScreen) onScreenChange(screen)
-    }
-
-    LaunchedEffect(currentScreen) {
-        val targetIdx = navScreens.indexOf(currentScreen)
-        if (targetIdx >= 0 && pagerState.currentPage != targetIdx) {
-            pagerState.animateScrollToPage(
-                page = targetIdx,
-                animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = Spring.StiffnessMedium
-                )
-            )
-        }
-    }
-
     val trendingCharts = state.trendingCharts
     val onHomeSongClick = remember(onOpenNowPlaying) {
         { song: Song -> vm.playSong(song); onOpenNowPlaying() }
@@ -184,97 +163,82 @@ private fun MainAppScaffold(
                 }
             }
         ) { padding ->
-            HorizontalPager(
-                state                  = pagerState,
-                modifier               = Modifier
+            AnimatedContent(
+                targetState = currentScreen,
+                transitionSpec = {
+                    fadeIn(tween(150)) togetherWith fadeOut(tween(110))
+                },
+                modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(state = hazeState)
                     .padding(bottom = padding.calculateBottomPadding()),
-                userScrollEnabled      = !state.isSearchActive,
-                beyondViewportPageCount = 1,
-                key                    = { navScreens[it].name }
-            ) { page ->
-                val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
-                val absOffset = kotlin.math.abs(pageOffset)
-                val pageScale = 1f - (absOffset * 0.035f).coerceIn(0f, 0.035f)
-                val pageAlpha = 1f - (absOffset * 0.35f).coerceIn(0f, 0.35f)
-
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(colors.background)
-                        .graphicsLayer {
-                            scaleX = pageScale
-                            scaleY = pageScale
-                            alpha = pageAlpha
-                        }
-                ) {
-                    when (navScreens[page]) {
-                        Screen.Home -> HomeScreen(
-                            trendingCharts           = trendingCharts,
-                            recommendations          = state.recommendations,
-                            recentlyPlayed           = state.recentlyPlayed,
-                            topSongs                 = state.topSongs,
-                            currentSong              = state.currentSong,
-                            isPlaying                = state.playbackState is PlaybackState.Playing,
-                            isSearchActive           = state.isSearchActive,
-                            searchQuery              = state.searchQuery,
-                            searchResults            = state.searchResults,
-                            isSearching              = state.isSearching,
-                            isLoadingChart           = state.isLoadingChart,
-                            isLoadingMoreSearch      = state.isLoadingMoreSearch,
-                            hasMoreSearchResults     = state.hasMoreSearchResults,
-                            recommendationSeedTitle  = state.recommendationSeedTitle,
-                            userName                 = state.userName.orEmpty(),
-                            playlists                = state.playlists,
-                            recentSearches           = state.recentSearches,
-                            lastSession              = state.lastSession,
-                            onSongClick              = onHomeSongClick,
-                            onSongClickFromList      = onSongClickFromList,
-                            onShuffleFab             = onHomeShuffleFab,
-                            onAddToQueue             = vm::addToQueue,
-                            onPlayNext               = vm::playNext,
-                            onSearchChange           = vm::setSearchQuery,
-                            onClearSearch            = vm::clearSearch,
-                            onActivateSearch         = vm::activateSearch,
-                            onRefresh                = vm::refreshData,
-                            onLoadMoreSearch         = vm::loadMoreSearchResults,
-                            onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
-                            onOpenPlaylist           = vm::openPlaylist,
-                            onEditName               = vm::saveUserName,
-                            onClearRecentSearches    = vm::clearRecentSearches,
-                            onResumeLastSession      = onResumeSession,
-                            searchError              = state.searchError
-                        )
-                        Screen.Library -> LibraryScreen(
-                            state                    = state,
-                            onSongClick              = onLibrarySongClick,
-                            onCreatePlaylist         = { name, coverUri -> vm.createPlaylist(name, coverUri) },
-                            onDeletePlaylist         = vm::deletePlaylist,
-                            onPlayPlaylist           = onLibraryPlayPlaylist,
-                            onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
-                            onOpenPlaylist           = vm::openPlaylist,
-                            onClosePlaylist          = vm::closePlaylist,
-                            onRemoveSongFromPlaylist = vm::removeSongFromPlaylist,
-                            onRenamePlaylist         = vm::renamePlaylist,
-                            onUpdatePlaylistCover    = vm::updatePlaylistCover,
-                            onSongClickFromPlaylist  = { song, songs -> vm.playSongFromPlaylist(song, songs); onOpenNowPlaying() },
-                            onShufflePlaylist        = { songs -> vm.shuffleAndPlayPlaylist(songs); onOpenNowPlaying() },
-                            onDownloadPlaylist       = vm::downloadAllSongsInPlaylist,
-                            onDownloadSong           = vm::downloadSong,
-                            onDeleteDownload         = vm::deleteDownload,
-                            onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
-                            onResetSpotifyImportState = vm::resetSpotifyImportState,
-                            onSearchOnline           = { query ->
-                                onScreenChange(Screen.Home)
-                                vm.activateSearch()
-                                vm.setSearchQuery(query)
-                            },
-                            onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
-                            onPlayNext               = vm::playNext,
-                            onAddToQueue             = vm::addToQueue
-                        )
-                    }
+                label = "root_tab_switch"
+            ) { screen ->
+                when (screen) {
+                    Screen.Home -> HomeScreen(
+                        trendingCharts           = trendingCharts,
+                        recommendations          = state.recommendations,
+                        recentlyPlayed           = state.recentlyPlayed,
+                        topSongs                 = state.topSongs,
+                        currentSong              = state.currentSong,
+                        isPlaying                = state.playbackState is PlaybackState.Playing,
+                        isSearchActive           = state.isSearchActive,
+                        searchQuery              = state.searchQuery,
+                        searchResults            = state.searchResults,
+                        isSearching              = state.isSearching,
+                        isLoadingChart           = state.isLoadingChart,
+                        isLoadingMoreSearch      = state.isLoadingMoreSearch,
+                        hasMoreSearchResults     = state.hasMoreSearchResults,
+                        recommendationSeedTitle  = state.recommendationSeedTitle,
+                        userName                 = state.userName.orEmpty(),
+                        playlists                = state.playlists,
+                        recentSearches           = state.recentSearches,
+                        lastSession              = state.lastSession,
+                        onSongClick              = onHomeSongClick,
+                        onSongClickFromList      = onSongClickFromList,
+                        onShuffleFab             = onHomeShuffleFab,
+                        onAddToQueue             = vm::addToQueue,
+                        onPlayNext               = vm::playNext,
+                        onSearchChange           = vm::setSearchQuery,
+                        onClearSearch            = vm::clearSearch,
+                        onActivateSearch         = vm::activateSearch,
+                        onRefresh                = vm::refreshData,
+                        onLoadMoreSearch         = vm::loadMoreSearchResults,
+                        onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                        onOpenPlaylist           = vm::openPlaylist,
+                        onEditName               = vm::saveUserName,
+                        onClearRecentSearches    = vm::clearRecentSearches,
+                        onResumeLastSession      = onResumeSession,
+                        searchError              = state.searchError
+                    )
+                    Screen.Library -> LibraryScreen(
+                        state                    = state,
+                        onSongClick              = onLibrarySongClick,
+                        onCreatePlaylist         = { name, coverUri -> vm.createPlaylist(name, coverUri) },
+                        onDeletePlaylist         = vm::deletePlaylist,
+                        onPlayPlaylist           = onLibraryPlayPlaylist,
+                        onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                        onOpenPlaylist           = vm::openPlaylist,
+                        onClosePlaylist          = vm::closePlaylist,
+                        onRemoveSongFromPlaylist = vm::removeSongFromPlaylist,
+                        onRenamePlaylist         = vm::renamePlaylist,
+                        onUpdatePlaylistCover    = vm::updatePlaylistCover,
+                        onSongClickFromPlaylist  = { song, songs -> vm.playSongFromPlaylist(song, songs); onOpenNowPlaying() },
+                        onShufflePlaylist        = { songs -> vm.shuffleAndPlayPlaylist(songs); onOpenNowPlaying() },
+                        onDownloadPlaylist       = vm::downloadAllSongsInPlaylist,
+                        onDownloadSong           = vm::downloadSong,
+                        onDeleteDownload         = vm::deleteDownload,
+                        onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
+                        onResetSpotifyImportState = vm::resetSpotifyImportState,
+                        onSearchOnline           = { query ->
+                            onScreenChange(Screen.Home)
+                            vm.activateSearch()
+                            vm.setSearchQuery(query)
+                        },
+                        onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
+                        onPlayNext               = vm::playNext,
+                        onAddToQueue             = vm::addToQueue
+                    )
                 }
             }
         }

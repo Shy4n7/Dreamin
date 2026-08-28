@@ -191,6 +191,7 @@ fun LibraryScreen(
             state = tabPagerState,
             modifier = Modifier.fillMaxSize(),
             userScrollEnabled = true,
+            beyondViewportPageCount = 1,
             key = { tabs[it] }
         ) { page ->
             val pageOffset = ((tabPagerState.currentPage - page) + tabPagerState.currentPageOffsetFraction)
