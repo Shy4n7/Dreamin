@@ -1201,6 +1201,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 fromPlaylist -> {
                     if (it.queue.none { s -> s.id == song.id }) listOf(song) + it.queue else it.queue
                 }
+                it.queue.isNotEmpty() -> {
+                    val currentIdx = it.queue.indexOfFirst { s -> s.id == it.currentSong?.id }
+                    val mutable = it.queue.toMutableList()
+                    mutable.removeAll { s -> s.id == song.id }
+                    val insertAt = if (currentIdx >= 0) (currentIdx + 1).coerceAtMost(mutable.size) else 0
+                    mutable.add(insertAt, song)
+                    mutable.toList()
+                }
                 else -> {
                     listOf(song)
                 }
@@ -1533,7 +1541,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
                         if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
                             withContext(Dispatchers.Main) {
-                                playSong(cand, fromPlaylist = false, preserveQueue = false)
+                                playSong(cand, fromPlaylist = false, preserveQueue = true)
                             }
                             return@launch
                         }
@@ -1545,7 +1553,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val artistHits = searchOnDevice("$primaryArtist hits", limit = 6).filter { it.id != current.id }
                         if (artistHits.isNotEmpty()) {
                             withContext(Dispatchers.Main) {
-                                playSong(artistHits.first(), fromPlaylist = false, preserveQueue = false)
+                                playSong(artistHits.first(), fromPlaylist = false, preserveQueue = true)
                             }
                             return@launch
                         }
@@ -1592,10 +1600,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun addToQueue(song: Song) {
         _uiState.update { state ->
             val queue = state.queue.toMutableList()
-            val currentIdx = queue.indexOfFirst { it.id == state.currentSong?.id }
-            val insertAt = if (currentIdx >= 0) currentIdx + 1 else 0
+            if (state.currentSong != null && queue.none { it.id == state.currentSong.id }) {
+                queue.add(0, state.currentSong)
+            }
             queue.removeAll { it.id == song.id }
-            queue.add(insertAt.coerceAtMost(queue.size), song)
+            queue.add(song)
             state.copy(queue = queue.toList())
         }
     }
@@ -1603,6 +1612,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun playNext(song: Song) {
         _uiState.update { state ->
             val queue = state.queue.toMutableList()
+            if (state.currentSong != null && queue.none { it.id == state.currentSong.id }) {
+                queue.add(0, state.currentSong)
+            }
             val currentIdx = queue.indexOfFirst { it.id == state.currentSong?.id }
             val insertAt = if (currentIdx >= 0) currentIdx + 1 else 0
             queue.removeAll { it.id == song.id }
@@ -1663,7 +1675,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
         pendingResumePositionMs = session.positionMs
-        playSong(session.song)
+        val recent = _uiState.value.recentlyPlayed
+        if (recent.any { it.id == session.song.id }) {
+            playSongFromList(session.song, recent)
+        } else {
+            _uiState.update { it.copy(queue = listOf(session.song)) }
+            playSong(session.song, preserveQueue = true)
+        }
     }
 
     fun activateSearch() {
