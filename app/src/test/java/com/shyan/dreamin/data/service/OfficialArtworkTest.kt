@@ -65,4 +65,30 @@ class OfficialArtworkTest {
         assertNotNull(resolved)
         assertTrue(resolved!!.isNotBlank())
     }
+
+    @Test
+    fun testKannukkulleResolvesPenninManathaiThottu() = runBlocking {
+        val song = Song(
+            id = "test_5",
+            title = "Kannukkulle",
+            artist = "S.A. Rajkumar, Unni Menon",
+            artworkUrl = "https://c.saavncdn.com/test_cover_version.jpg"
+        )
+        val resolved = OfficialArtworkService.resolveOfficialMoviePoster(song, "tamil")
+        assertNotNull(resolved)
+        assertTrue(resolved!!.isNotBlank())
+    }
+
+    @Test
+    fun testAasaiOruPulveliResolvesAttakathi() = runBlocking {
+        val song = Song(
+            id = "test_6",
+            title = "Aasai Oru Pulveli",
+            artist = "Santhosh Narayanan, Pradeep Kumar",
+            artworkUrl = "https://c.saavncdn.com/test_i_love_santhosh.jpg"
+        )
+        val resolved = OfficialArtworkService.resolveOfficialMoviePoster(song, "tamil")
+        assertNotNull(resolved)
+        assertTrue(resolved!!.isNotBlank())
+    }
 }

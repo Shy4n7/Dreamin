@@ -848,7 +848,7 @@ fun NowPlayingScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 AnimatedContent(
-                                    targetState = song.id,
+                                    targetState = "${song.id}_${song.displayArtworkUrl}",
                                     transitionSpec = {
                                         fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(160))
                                     },

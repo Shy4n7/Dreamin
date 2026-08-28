@@ -28,7 +28,9 @@ object OfficialArtworkService {
         "romance mix|love songs|super singer|rockstar|the girlfriend mix|the first love tapes|this is kaadhal|" +
         "latest evergreen melody|mazhai & kaadhal|dhanush dhamaka|endrendrum|pure love|sweet romance|evergreen love|" +
         "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits|" +
-        "take\\s*\\d+|take\\d+|masterworks|hits of\\s+[a-z]+|[a-z]+\\s+hits)\\b"
+        "take\\s*\\d+|take\\d+|masterworks|hits of\\s+[a-z]+|[a-z]+\\s+hits|" +
+        "cover version|cover|tribute version|tribute|acoustic cover|unplugged cover|reprise version|" +
+        "i\\s*(?:love|heart|❤️|♥)\\s+[a-z\\s]+|favourite\\s+[a-z\\s]+|favorite\\s+[a-z\\s]+)\\b"
     )
 
     private val KNOWN_LYRICISTS = setOf(
