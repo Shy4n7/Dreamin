@@ -369,18 +369,7 @@ private fun MainAppScaffold(
                     stiffness = Spring.StiffnessMediumLow
                 )
             ) { 70 } + fadeIn(tween(200)),
-            exit = scaleOut(
-                targetScale = 0.93f,
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) + slideOutVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) { 70 } + fadeOut(tween(180)),
+            exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { 50 },
             modifier = Modifier.fillMaxSize()
         ) {
             if (openPlaylist != null) {

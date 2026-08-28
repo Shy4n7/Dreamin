@@ -143,15 +143,12 @@ fun LibraryScreen(
     val tabPagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
 
-    val isPlaylistOpen = state.openPlaylistId != null
-    var wasPlaylistOpen by remember { mutableStateOf(false) }
+    var lastOpenPlaylistId by remember { mutableStateOf(state.openPlaylistId) }
     var returnSpringKey by remember { mutableIntStateOf(0) }
-    LaunchedEffect(isPlaylistOpen) {
-        if (wasPlaylistOpen && !isPlaylistOpen) {
-            returnSpringKey++
-        }
-        wasPlaylistOpen = isPlaylistOpen
+    if (lastOpenPlaylistId != null && state.openPlaylistId == null) {
+        returnSpringKey++
     }
+    lastOpenPlaylistId = state.openPlaylistId
 
     CompositionLocalProvider(LocalPlaylists provides state.playlists) {
 
