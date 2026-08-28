@@ -417,14 +417,24 @@ fun PlaylistDetailScreen(
                                     .padding(vertical = 12.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Box(contentAlignment = Alignment.BottomEnd) {
+                                Box(
+                                    contentAlignment = Alignment.BottomEnd,
+                                    modifier = Modifier.graphicsLayer {
+                                        val scrollOffset = if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat() else 400f
+                                        val fraction = (scrollOffset / 450f).coerceIn(0f, 1f)
+                                        scaleX = 1f - (fraction * 0.14f)
+                                        scaleY = 1f - (fraction * 0.14f)
+                                        translationY = scrollOffset * 0.22f
+                                        alpha = (1f - (fraction * 0.45f)).coerceIn(0.55f, 1f)
+                                        shadowElevation = (20f * (1f - fraction)).coerceAtLeast(0f)
+                                    }
+                                ) {
                                     PlaylistCoverArt(
                                         artworkUrls = songs.map { it.displayArtworkUrl },
                                         coverUrl = playlist.coverUrl,
                                         size = 164.dp,
                                         shape = RoundedCornerShape(22.dp),
                                         modifier = Modifier
-                                            .graphicsLayer { shadowElevation = 18f }
                                             .clickable {
                                                 detailCoverPickerLauncher.launch(
                                                     androidx.activity.result.PickVisualMediaRequest(
@@ -796,7 +806,9 @@ fun PlaylistDetailScreen(
                                 song = song,
                                 index = idx + 1,
                                 isPlaying = playingId == song.id,
-                                modifier = Modifier.staggeredEntry(idx),
+                                modifier = Modifier
+                                    .animateItem()
+                                    .staggeredEntry(idx),
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
                                 onClick = { onSongClick(song) },
@@ -1225,7 +1237,20 @@ fun PlaylistSongRow(
     onRemove: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
-    val bgColor = if (isPlaying) colors.primary.copy(alpha = 0.12f) else Color.Transparent
+    val rowInteractionSource = remember { MutableInteractionSource() }
+    val isPressed by rowInteractionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
+        label = "playlist_row_press"
+    )
+
+    val animatedBgAlpha by animateFloatAsState(
+        targetValue = if (isPlaying) 0.14f else 0f,
+        animationSpec = tween(300),
+        label = "playlist_row_bg"
+    )
+    val bgColor = if (animatedBgAlpha > 0f) colors.primary.copy(alpha = animatedBgAlpha) else Color.Transparent
     val textColor = if (isPlaying) colors.primary else colors.onSurface
     val textWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold
     var showOptionsSheet by remember { mutableStateOf(false) }
@@ -1233,6 +1258,10 @@ fun PlaylistSongRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
             .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -1243,7 +1272,7 @@ fun PlaylistSongRow(
                 .weight(1f)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = rowInteractionSource,
                     indication = ripple(bounded = true, color = colors.primary)
                 ) { onClick() }
                 .padding(vertical = 4.dp),
@@ -1356,7 +1385,29 @@ fun ArtworkBox(
     isPlaying: Boolean,
     colors: DreaminColors
 ) {
-    Box(modifier = Modifier.size(52.dp)) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_art")
+    val pulseScale by if (isPlaying) {
+        infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.04f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse_scale"
+        )
+    } else {
+        remember { mutableStateOf(1f) }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .graphicsLayer {
+                scaleX = pulseScale
+                scaleY = pulseScale
+            }
+    ) {
         AsyncImage(
             model = artworkUrl,
             contentDescription = null,
