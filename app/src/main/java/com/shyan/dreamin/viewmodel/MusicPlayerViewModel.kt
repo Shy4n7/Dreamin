@@ -112,15 +112,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         connectToService()
         loadChart()
 
-        // Priority 2: Stagger background DB & secondary loads to give 100% CPU priority to active screen
+        // Priority 2: Run all database warmups in parallel child coroutines on IO
         viewModelScope.launch(Dispatchers.IO) {
-            delay(150)
-            loadRecentlyPlayed()
-            loadTopSongs()
-            loadFavorites()
-            loadStats()
-            loadPlaylists()
-            loadDownloads()
+            delay(120) // Brief delay to yield main thread for 120 FPS first frame render
+            launch { loadRecentlyPlayed() }
+            launch { loadTopSongs() }
+            launch { loadFavorites() }
+            launch { loadStats() }
+            launch { loadPlaylists() }
+            launch { loadDownloads() }
         }
 
         val context = getApplication<Application>()
@@ -366,14 +366,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val suggestedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(6)
+        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
-                launch {
+                launch(Dispatchers.IO) {
                     semaphore.acquire()
                     try {
-                        kotlinx.coroutines.delay((index % 6) * 30L)
                         val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
                             val finalArtwork = when {
@@ -853,6 +852,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                         .build()
                     coil.Coil.imageLoader(context).enqueue(req)
+                }
+            }
+
+            // Also pre-resolve stream URL for the upcoming song in parallel
+            nextSongs.firstOrNull()?.let { upcomingSong ->
+                launch(Dispatchers.IO) {
+                    try {
+                        resolveStreamUrl(upcomingSong)
+                    } catch (_: Exception) {}
                 }
             }
         }
