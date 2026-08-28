@@ -216,60 +216,24 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.realtimeScrollSpring(): Modifier {
-    var itemYInRoot by remember { mutableFloatStateOf(1000f) }
-    var itemHeight by remember { mutableFloatStateOf(160f) }
-
-    return this
-        .onGloballyPositioned { coordinates ->
-            val pos = coordinates.positionInRoot()
-            itemYInRoot = pos.y
-            itemHeight = coordinates.size.height.toFloat()
-        }
-        .graphicsLayer {
-            val screenHeight = 2400f
-            val topEdgeZone = 280f
-            val bottomEdgeZone = 380f
-
-            val topDist = itemYInRoot.coerceAtLeast(0f)
-            val bottomDist = (screenHeight - (itemYInRoot + itemHeight)).coerceAtLeast(0f)
-
-            val topFactor = (topDist / topEdgeZone).coerceIn(0.88f, 1f)
-            val bottomFactor = (bottomDist / bottomEdgeZone).coerceIn(0.88f, 1f)
-            val springScale = minOf(topFactor, bottomFactor)
-
-            val alphaFactor = minOf(
-                (topDist / (topEdgeZone * 0.7f)).coerceIn(0.35f, 1f),
-                (bottomDist / (bottomEdgeZone * 0.7f)).coerceIn(0.35f, 1f)
-            )
-
-            scaleX = springScale
-            scaleY = springScale
-            alpha = alphaFactor
-            translationY = if (topDist < topEdgeZone) (1f - topFactor) * 20f else if (bottomDist < bottomEdgeZone) -(1f - bottomFactor) * 20f else 0f
-        }
-}
-
-@Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 20, maxStaggerItems: Int = 100): Modifier {
-    val animState = remember { Animatable(0.85f) }
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 12): Modifier {
+    val staggerDelay = (index.coerceAtMost(maxStaggerItems) * baseDelayMs)
+    val animState = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        val staggerDelay = ((index % 12) * baseDelayMs).toLong()
-        if (staggerDelay > 0) delay(staggerDelay)
+        delay(staggerDelay.toLong())
         animState.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = 0.76f,
+                dampingRatio = 0.82f,
                 stiffness = Spring.StiffnessMediumLow
             )
         )
     }
     return this.graphicsLayer {
-        val p = animState.value
-        alpha = ((p - 0.85f) / 0.15f).coerceIn(0f, 1f)
-        translationY = (1f - p) * 36f
-        scaleX = p
-        scaleY = p
+        alpha = animState.value
+        translationY = (1f - animState.value) * 28f
+        scaleX = 0.95f + 0.05f * animState.value
+        scaleY = 0.95f + 0.05f * animState.value
     }
 }
 

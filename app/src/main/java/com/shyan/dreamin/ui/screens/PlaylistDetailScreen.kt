@@ -802,39 +802,38 @@ fun PlaylistDetailScreen(
                             val isDownloaded = downloadedSongIds.contains(song.id)
                             val isDownloading = downloadingSongIds.contains(song.id)
 
-                            PlaylistSongRow(
-                                song = song,
-                                index = idx + 1,
-                                isPlaying = playingId == song.id,
-                                modifier = Modifier
-                                    .animateItem()
-                                    .realtimeScrollSpring(),
-                                isDownloaded = isDownloaded,
-                                isDownloading = isDownloading,
-                                onClick = { onSongClick(song) },
-                                onPlayNext = { onPlayNext(song) },
-                                onAddToQueue = { onAddToQueue(song) },
-                                onDownload = {
-                                    if (isDownloaded) onDeleteDownload(song.id)
-                                    else onDownloadSong(song)
-                                },
-                                onRemove = {
-                                    val removedSong = song
-                                    val title = removedSong.displayTitle
-                                    onRemoveSong(removedSong.id)
-                                    scope.launch {
-                                        snackbarHostState.currentSnackbarData?.dismiss()
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "\"$title\" removed from playlist",
-                                            actionLabel = "Undo",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            onAddSong(removedSong)
+                            Box(modifier = Modifier.staggeredEntry(idx)) {
+                                PlaylistSongRow(
+                                    song = song,
+                                    index = idx + 1,
+                                    isPlaying = playingId == song.id,
+                                    isDownloaded = isDownloaded,
+                                    isDownloading = isDownloading,
+                                    onClick = { onSongClick(song) },
+                                    onPlayNext = { onPlayNext(song) },
+                                    onAddToQueue = { onAddToQueue(song) },
+                                    onDownload = {
+                                        if (isDownloaded) onDeleteDownload(song.id)
+                                        else onDownloadSong(song)
+                                    },
+                                    onRemove = {
+                                        val removedSong = song
+                                        val title = removedSong.displayTitle
+                                        onRemoveSong(removedSong.id)
+                                        scope.launch {
+                                            snackbarHostState.currentSnackbarData?.dismiss()
+                                            val result = snackbarHostState.showSnackbar(
+                                                message = "\"$title\" removed from playlist",
+                                                actionLabel = "Undo",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                onAddSong(removedSong)
+                                            }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
 
                         item {
