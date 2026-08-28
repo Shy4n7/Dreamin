@@ -154,6 +154,9 @@ fun HomeScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
+    LaunchedEffect(Unit) {
+        listState.scrollToItem(0, 0)
+    }
     val scrollOffset by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex == 0) {
