@@ -371,13 +371,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         kotlinx.coroutines.delay((index % 6) * 30L)
                         val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
-                            val officialPoster = try {
-                                com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched)
-                            } catch (_: Exception) { null }
                             val finalArtwork = when {
-                                !officialPoster.isNullOrBlank() -> officialPoster
-                                matched.artworkUrl.isNotBlank() -> matched.artworkUrl
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
+                                matched.artworkUrl.isNotBlank() -> matched.artworkUrl
                                 else -> ""
                             }
                             val songWithArt = matched.copy(artworkUrl = finalArtwork)
@@ -760,13 +756,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _progress.value = PlaybackProgress(0L, duration)
             _uiState.value.currentSong?.let { activeSong ->
                 prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
-                        if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
-                            updateSongArtworkAcrossApp(activeSong.id, official)
-                        }
-                    } catch (_: Exception) {}
+                if (!activeSong.artworkUrl.contains("scdn.co") && !activeSong.artworkUrl.contains("spotifycdn")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
+                            if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
+                                updateSongArtworkAcrossApp(activeSong.id, official)
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
             }
         }
