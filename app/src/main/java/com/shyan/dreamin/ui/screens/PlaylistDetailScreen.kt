@@ -796,6 +796,7 @@ fun PlaylistDetailScreen(
                                 song = song,
                                 index = idx + 1,
                                 isPlaying = playingId == song.id,
+                                modifier = Modifier.staggeredEntry(idx),
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
                                 onClick = { onSongClick(song) },
@@ -1214,6 +1215,7 @@ fun PlaylistSongRow(
     song: Song,
     index: Int,
     isPlaying: Boolean,
+    modifier: Modifier = Modifier,
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
     onClick: () -> Unit,
@@ -1229,7 +1231,7 @@ fun PlaylistSongRow(
     var showOptionsSheet by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
@@ -1369,7 +1371,7 @@ fun ArtworkBox(
                     .background(BlackOverlay50),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
             }
         }
     }

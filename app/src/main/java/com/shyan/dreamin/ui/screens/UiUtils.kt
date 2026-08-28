@@ -215,46 +215,50 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 12): Modifier {
-    val staggerDelay = (index.coerceAtMost(maxStaggerItems) * baseDelayMs)
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 18, maxStaggerItems: Int = 10): Modifier {
+    if (index >= maxStaggerItems) return this
     val animState = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay(staggerDelay.toLong())
+        val staggerDelay = (index * baseDelayMs).toLong()
+        if (staggerDelay > 0) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = 0.82f,
+                dampingRatio = 0.8f,
                 stiffness = Spring.StiffnessMediumLow
             )
         )
     }
     return this.graphicsLayer {
-        alpha = animState.value
-        translationY = (1f - animState.value) * 28f
-        scaleX = 0.95f + 0.05f * animState.value
-        scaleY = 0.95f + 0.05f * animState.value
+        val p = animState.value
+        alpha = p
+        translationY = (1f - p) * 24f
+        scaleX = 0.96f + 0.04f * p
+        scaleY = 0.96f + 0.04f * p
     }
 }
 
 @Composable
-fun Modifier.staggeredHorizontalEntry(index: Int, baseDelayMs: Int = 25, maxStaggerItems: Int = 10): Modifier {
-    val staggerDelay = (index.coerceAtMost(maxStaggerItems) * baseDelayMs)
+fun Modifier.staggeredHorizontalEntry(index: Int, baseDelayMs: Int = 20, maxStaggerItems: Int = 8): Modifier {
+    if (index >= maxStaggerItems) return this
     val animState = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay(staggerDelay.toLong())
+        val staggerDelay = (index * baseDelayMs).toLong()
+        if (staggerDelay > 0) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = 0.82f,
+                dampingRatio = 0.8f,
                 stiffness = Spring.StiffnessMediumLow
             )
         )
     }
     return this.graphicsLayer {
-        alpha = animState.value
-        translationX = (1f - animState.value) * 36f
-        scaleX = 0.94f + 0.06f * animState.value
-        scaleY = 0.94f + 0.06f * animState.value
+        val p = animState.value
+        alpha = p
+        translationX = (1f - p) * 28f
+        scaleX = 0.96f + 0.04f * p
+        scaleY = 0.96f + 0.04f * p
     }
 }
 
