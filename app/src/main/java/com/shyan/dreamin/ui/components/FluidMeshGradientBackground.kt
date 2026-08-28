@@ -134,8 +134,8 @@ fun FluidMeshGradientBackground(
                     drawRect(color = backgroundColor)
 
                     // 1. Orb 1 (Dominant Color Aura - Radiant Upper Center/Left)
-                    val orb1X = (0.44 + 0.28 * sin(t1 * 1.0)).toFloat() * width
-                    val orb1Y = (0.18 + 0.14 * cos(t1 * 0.8)).toFloat() * height
+                    val orb1X = (0.44 + 0.24 * sin(t1)).toFloat() * width
+                    val orb1Y = (0.20 + 0.12 * cos(t1)).toFloat() * height
                     val orb1Radius = width * 0.95f * bloom * pulse1
 
                     drawCircle(
@@ -154,8 +154,8 @@ fun FluidMeshGradientBackground(
                     )
 
                     // 2. Orb 2 (Secondary Color Aura - Radiant Center Right Artwork Region)
-                    val orb2X = (0.66 + 0.24 * cos(t2 * 0.9 + 1.4)).toFloat() * width
-                    val orb2Y = (0.34 + 0.16 * sin(t2 * 1.1 + 0.9)).toFloat() * height
+                    val orb2X = (0.64 + 0.22 * cos(t2 + 1.25)).toFloat() * width
+                    val orb2Y = (0.34 + 0.14 * sin(t2 + 1.25)).toFloat() * height
                     val orb2Radius = width * 1.02f * bloom * pulse2
 
                     drawCircle(
@@ -174,8 +174,8 @@ fun FluidMeshGradientBackground(
                     )
 
                     // 3. Orb 3 (Accent Color Glow - Mid Elevation under Artwork)
-                    val orb3X = (0.30 + 0.26 * sin(t2 * 0.7 + 2.8)).toFloat() * width
-                    val orb3Y = (0.48 + 0.14 * cos(t2 * 0.85 + 2.1)).toFloat() * height
+                    val orb3X = (0.32 + 0.24 * sin(t2 + Math.PI)).toFloat() * width
+                    val orb3Y = (0.46 + 0.12 * cos(t2 + Math.PI)).toFloat() * height
                     val orb3Radius = width * 0.92f * bloom * pulse1
 
                     drawCircle(
