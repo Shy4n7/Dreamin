@@ -360,6 +360,12 @@ fun PlaylistDetailScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            val titleAlpha by remember {
+                                derivedStateOf {
+                                    if (listState.firstVisibleItemIndex > 0) 1.0f
+                                    else (listState.firstVisibleItemScrollOffset / 280f).coerceIn(0f, 1f)
+                                }
+                            }
                             Text(
                                 playlist.name,
                                 fontSize = 18.sp,
@@ -367,7 +373,13 @@ fun PlaylistDetailScreen(
                                 color = colors.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 4.dp)
+                                    .graphicsLayer {
+                                        alpha = titleAlpha
+                                        translationY = (1f - titleAlpha) * 16f
+                                    }
                             )
                             IconButton(onClick = { showAddSongsSheet = true }, modifier = Modifier.size(44.dp)) {
                                 Icon(

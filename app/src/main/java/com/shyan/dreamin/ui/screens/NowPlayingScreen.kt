@@ -297,6 +297,50 @@ fun NowPlayingProgressSlider(
 }
 
 @Composable
+fun RollingTimeText(
+    timeMs: Long,
+    color: Color,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    fontWeight: FontWeight = FontWeight.Medium,
+    modifier: Modifier = Modifier
+) {
+    val formatted = remember(timeMs) { formatDuration(timeMs) }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        formatted.forEachIndexed { index, char ->
+            if (char.isDigit()) {
+                AnimatedContent(
+                    targetState = char,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            (slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(110)))
+                                .togetherWith(slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { -it } + fadeOut(tween(110)))
+                        } else {
+                            (slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { -it } + fadeIn(tween(110)))
+                                .togetherWith(slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut(tween(110)))
+                        }
+                    },
+                    label = "rolling_digit_$index"
+                ) { digit ->
+                    Text(
+                        text = "$digit",
+                        color = color,
+                        fontSize = fontSize,
+                        fontWeight = fontWeight
+                    )
+                }
+            } else {
+                Text(
+                    text = "$char",
+                    color = color,
+                    fontSize = fontSize,
+                    fontWeight = fontWeight
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DurationLabelsRow(
     positionMsProvider: () -> Long,
     durationMs: Long,
@@ -308,16 +352,17 @@ private fun DurationLabelsRow(
     }
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = formatDuration(currentSec.value),
+        RollingTimeText(
+            timeMs = currentSec.value,
             color = textColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
-        Text(
-            text = formatDuration(durationMs),
+        RollingTimeText(
+            timeMs = durationMs,
             color = textColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium

@@ -268,3 +268,28 @@ fun formatDuration(millis: Long): String {
     val seconds = totalSeconds % 60
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
+
+/**
+ * ⚡ Tactile Tap-to-Recoil Press Physics Modifier.
+ * Compresses slightly on finger press and snaps back on release with realistic spring physics.
+ */
+@Composable
+fun Modifier.pressRecoil(
+    targetScale: Float = 0.96f,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
+): Modifier {
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isPressed) targetScale else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "press_recoil_scale"
+    )
+    return this.graphicsLayer {
+        scaleX = animatedScale
+        scaleY = animatedScale
+    }
+}
+
