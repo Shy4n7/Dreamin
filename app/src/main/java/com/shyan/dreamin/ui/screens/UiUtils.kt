@@ -216,10 +216,14 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 100, triggerKey: Any? = Unit): Modifier {
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 10, triggerKey: Any? = Unit): Modifier {
+    // Only stagger the initial visible items on screen (index < maxStaggerItems).
+    // Items scrolled into view beyond the initial viewport render immediately with full visibility!
+    if (index >= maxStaggerItems) return this
+
     val animState = remember(triggerKey) { Animatable(0f) }
     LaunchedEffect(triggerKey) {
-        val staggerDelay = (index.coerceAtMost(maxStaggerItems) * baseDelayMs).toLong()
+        val staggerDelay = (index * baseDelayMs).toLong()
         if (staggerDelay > 0L) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
