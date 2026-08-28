@@ -383,6 +383,39 @@ fun NowPlayingScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val triggerNextAnimated = remember(onNext) {
+        {
+            artworkScope.launch {
+                artworkOffsetX.animateTo(-380f, tween(130, easing = FastOutLinearInEasing))
+                onNext()
+                artworkOffsetX.snapTo(320f)
+                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+            }
+        }
+    }
+
+    val triggerPreviousAnimated = remember(onPrevious) {
+        {
+            artworkScope.launch {
+                artworkOffsetX.animateTo(380f, tween(130, easing = FastOutLinearInEasing))
+                onPrevious()
+                artworkOffsetX.snapTo(-320f)
+                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+            }
+        }
+    }
+
+    var lastObservedSongId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(song?.id) {
+        val currentId = song?.id
+        val prevId = lastObservedSongId
+        lastObservedSongId = currentId
+        if (prevId != null && currentId != null && prevId != currentId && artworkOffsetX.value == 0f) {
+            artworkOffsetX.snapTo(280f)
+            artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -607,19 +640,9 @@ fun NowPlayingScreen(
                                             if (isHorizontalDrag) {
                                                 val currentOffset = artworkOffsetX.value
                                                 if (currentOffset < -75f) {
-                                                    artworkScope.launch {
-                                                        artworkOffsetX.animateTo(-420f, tween(140, easing = FastOutLinearInEasing))
-                                                        onNext()
-                                                        artworkOffsetX.snapTo(380f)
-                                                        artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
-                                                    }
+                                                    triggerNextAnimated()
                                                 } else if (currentOffset > 75f) {
-                                                    artworkScope.launch {
-                                                        artworkOffsetX.animateTo(420f, tween(140, easing = FastOutLinearInEasing))
-                                                        onPrevious()
-                                                        artworkOffsetX.snapTo(-380f)
-                                                        artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
-                                                    }
+                                                    triggerPreviousAnimated()
                                                 } else {
                                                     artworkScope.launch {
                                                         artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
@@ -995,7 +1018,7 @@ fun NowPlayingScreen(
                             .clickable(
                                 interactionSource = prevInteraction,
                                 indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
-                            ) { onPrevious() },
+                            ) { triggerPreviousAnimated() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.onSurface, modifier = Modifier.size(32.dp))
@@ -1086,7 +1109,7 @@ fun NowPlayingScreen(
                             .clickable(
                                 interactionSource = nextInteraction,
                                 indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
-                            ) { onNext() },
+                            ) { triggerNextAnimated() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.onSurface, modifier = Modifier.size(32.dp))
