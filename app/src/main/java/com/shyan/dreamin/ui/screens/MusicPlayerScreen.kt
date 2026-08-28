@@ -3,11 +3,14 @@ package com.shyan.dreamin.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -143,9 +146,28 @@ private fun MainAppScaffold(
         }
     }
 
+    val isDetailScreenOpen = state.openPlaylistId != null || state.selectedArtistProfile != null
+    val backgroundRecoilScale by animateFloatAsState(
+        targetValue = if (isDetailScreenOpen) 0.965f else 1f,
+        animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow),
+        label = "bg_recoil_scale"
+    )
+    val backgroundRecoilAlpha by animateFloatAsState(
+        targetValue = if (isDetailScreenOpen) 0.88f else 1f,
+        animationSpec = tween(220),
+        label = "bg_recoil_alpha"
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = backgroundRecoilScale
+                    scaleY = backgroundRecoilScale
+                    alpha = backgroundRecoilAlpha
+                },
             bottomBar = {
                 Column {
                     AnimatedVisibility(
@@ -303,54 +325,69 @@ private fun MainAppScaffold(
             )
         }
 
-        state.selectedArtistProfile?.let { profile ->
-            ArtistDetailScreen(
-                profile = profile,
-                currentSongId = state.currentSong?.id,
-                onBack = vm::closeArtistProfile,
-                onSongClick = { song -> vm.playSong(song); onOpenNowPlaying() },
-                onShuffleAll = { songs ->
-                    if (songs.isNotEmpty()) {
-                        vm.shuffleAndPlayList(songs)
-                        onOpenNowPlaying()
+        AnimatedVisibility(
+            visible = state.selectedArtistProfile != null,
+            enter = slideInHorizontally(spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(220)),
+            exit = slideOutHorizontally(spring(dampingRatio = 0.90f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut(tween(180)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val profile = state.selectedArtistProfile
+            if (profile != null) {
+                ArtistDetailScreen(
+                    profile = profile,
+                    currentSongId = state.currentSong?.id,
+                    onBack = vm::closeArtistProfile,
+                    onSongClick = { song -> vm.playSong(song); onOpenNowPlaying() },
+                    onShuffleAll = { songs ->
+                        if (songs.isNotEmpty()) {
+                            vm.shuffleAndPlayList(songs)
+                            onOpenNowPlaying()
+                        }
                     }
-                }
-            )
+                )
+            }
         }
 
         // Playlist detail overlay — shown full-screen with floating MiniPlayer at bottom when playing
         val openPlaylist = state.openPlaylistId?.let { id -> state.playlists.find { it.id == id } }
-        if (openPlaylist != null) {
-            PlaylistDetailScreen(
-                playlist = openPlaylist,
-                songs = state.openPlaylistSongs,
-                currentSong = state.currentSong,
-                playbackState = state.playbackState,
-                progressFlow = vm.progressFlow,
-                onPlayPause = vm::togglePlayPause,
-                onNext = vm::playNext,
-                onPrevious = vm::playPrevious,
-                onExpandNowPlaying = onOpenNowPlaying,
-                downloadedSongIds = remember(state.downloadedSongs) { state.downloadedSongs.map { it.id }.toSet() },
-                downloadingSongIds = state.downloadingSongIds,
-                onBack = vm::closePlaylist,
-                onSongClick = { song -> vm.playSongFromPlaylist(song, state.openPlaylistSongs); onOpenNowPlaying() },
-                onPlayAll = { vm.playSongsFromPlaylist(openPlaylist.id); onOpenNowPlaying() },
-                onShuffle = { vm.shuffleAndPlayPlaylist(state.openPlaylistSongs); onOpenNowPlaying() },
-                onDownloadAll = { vm.downloadAllSongsInPlaylist(state.openPlaylistSongs) },
-                onDownloadSong = vm::downloadSong,
-                onDeleteDownload = vm::deleteDownload,
-                onRemoveSong = { songId -> vm.removeSongFromPlaylist(openPlaylist.id, songId) },
-                onRename = { newName -> vm.renamePlaylist(openPlaylist.id, newName) },
-                onUpdateCover = { uri -> vm.updatePlaylistCover(openPlaylist.id, uri) },
-                onAddSong = { song -> vm.addSongToPlaylist(openPlaylist.id, song) },
-                onSearchOnline = vm::searchSongsDirect,
-                onPlayNext = vm::playNext,
-                onAddToQueue = vm::addToQueue,
-                quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
-                    (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
-                }
-            )
+        AnimatedVisibility(
+            visible = openPlaylist != null,
+            enter = slideInHorizontally(spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(220)),
+            exit = slideOutHorizontally(spring(dampingRatio = 0.90f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut(tween(180)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            if (openPlaylist != null) {
+                PlaylistDetailScreen(
+                    playlist = openPlaylist,
+                    songs = state.openPlaylistSongs,
+                    currentSong = state.currentSong,
+                    playbackState = state.playbackState,
+                    progressFlow = vm.progressFlow,
+                    onPlayPause = vm::togglePlayPause,
+                    onNext = vm::playNext,
+                    onPrevious = vm::playPrevious,
+                    onExpandNowPlaying = onOpenNowPlaying,
+                    downloadedSongIds = remember(state.downloadedSongs) { state.downloadedSongs.map { it.id }.toSet() },
+                    downloadingSongIds = state.downloadingSongIds,
+                    onBack = vm::closePlaylist,
+                    onSongClick = { song -> vm.playSongFromPlaylist(song, state.openPlaylistSongs); onOpenNowPlaying() },
+                    onPlayAll = { vm.playSongsFromPlaylist(openPlaylist.id); onOpenNowPlaying() },
+                    onShuffle = { vm.shuffleAndPlayPlaylist(state.openPlaylistSongs); onOpenNowPlaying() },
+                    onDownloadAll = { vm.downloadAllSongsInPlaylist(state.openPlaylistSongs) },
+                    onDownloadSong = vm::downloadSong,
+                    onDeleteDownload = vm::deleteDownload,
+                    onRemoveSong = { songId -> vm.removeSongFromPlaylist(openPlaylist.id, songId) },
+                    onRename = { newName -> vm.renamePlaylist(openPlaylist.id, newName) },
+                    onUpdateCover = { uri -> vm.updatePlaylistCover(openPlaylist.id, uri) },
+                    onAddSong = { song -> vm.addSongToPlaylist(openPlaylist.id, song) },
+                    onSearchOnline = vm::searchSongsDirect,
+                    onPlayNext = vm::playNext,
+                    onAddToQueue = vm::addToQueue,
+                    quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
+                        (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
+                    }
+                )
+            }
         }
 
         // NowPlaying full-screen sheet overlay (Topmost in stack)
