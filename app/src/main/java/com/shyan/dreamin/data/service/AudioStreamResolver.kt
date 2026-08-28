@@ -34,7 +34,7 @@ object AudioStreamResolver {
 
     private val streamUrlCache = object : java.util.LinkedHashMap<String, String>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
-            return size > 500
+            return size > 256
         }
     }
 

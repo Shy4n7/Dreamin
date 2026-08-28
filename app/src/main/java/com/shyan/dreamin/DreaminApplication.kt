@@ -15,6 +15,7 @@ class DreaminApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        com.shyan.dreamin.data.network.NetworkService.prewarmSockets()
     }
 
     override fun newImageLoader(): ImageLoader {

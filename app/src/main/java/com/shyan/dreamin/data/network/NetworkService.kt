@@ -12,6 +12,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 
 interface MusicApi {
     @GET("api/mobile/health")
@@ -81,5 +82,25 @@ object NetworkService {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(MusicApi::class.java)
+    }
+
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+    fun prewarmSockets() {
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val prewarmHosts = listOf(
+                "https://www.jiosaavn.com/api.php",
+                "https://ac.cf.saavncdn.com",
+                "https://i.scdn.co"
+            )
+            for (url in prewarmHosts) {
+                runCatching {
+                    val req = okhttp3.Request.Builder()
+                        .url(url)
+                        .head()
+                        .build()
+                    httpClient.newCall(req).execute().close()
+                }
+            }
+        }
     }
 }
