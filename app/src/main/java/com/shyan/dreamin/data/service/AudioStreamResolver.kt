@@ -29,8 +29,8 @@ import javax.crypto.spec.SecretKeySpec
 object AudioStreamResolver {
 
     private const val TAG = "AudioStreamResolver"
-    private const val USER_AGENT_BROWSER =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    private const val USER_AGENT_MOBILE =
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
     private val streamUrlCache = object : java.util.LinkedHashMap<String, String>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
@@ -96,32 +96,51 @@ object AudioStreamResolver {
         }
 
         // 3. Direct On-Device JioSaavn API by PID with 320kbps CDN Token Signing
-        try {
-            val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId"
-            val req1 = Request.Builder()
-                .url(detailsUrl)
-                .header("User-Agent", USER_AGENT_BROWSER)
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val text1 = NetworkService.httpClient.newCall(req1).execute().use { it.body?.string().orEmpty() }
-            val details = JSONObject(text1)
-            val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "")
-                ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
+        val endpoints = listOf(
+            "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId",
+            "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=web6dot0&pids=$songId"
+        )
+        for (detailsUrl in endpoints) {
+            try {
+                val req1 = Request.Builder()
+                    .url(detailsUrl)
+                    .header("User-Agent", USER_AGENT_MOBILE)
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Origin", "https://www.jiosaavn.com")
+                    .header("Referer", "https://www.jiosaavn.com/")
+                    .build()
+                val text1 = NetworkService.httpClient.newCall(req1).execute().use { it.body?.string().orEmpty() }
+                if (text1.startsWith("{")) {
+                    val details = JSONObject(text1)
+                    val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "")
+                        ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
 
-            if (encUrl.isNotBlank()) {
-                val streamAuth = fetchStreamAuthUrl(encUrl)
-                if (!streamAuth.isNullOrBlank()) {
-                    putCachedStreamUrl(songId, streamAuth)
-                    return@withContext streamAuth
+                    if (encUrl.isNotBlank()) {
+                        val streamAuth = fetchStreamAuthUrl(encUrl)
+                        if (!streamAuth.isNullOrBlank()) {
+                            putCachedStreamUrl(songId, streamAuth)
+                            return@withContext streamAuth
+                        }
+                        val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
+                        if (!directDecrypted.isNullOrBlank()) {
+                            putCachedStreamUrl(songId, directDecrypted)
+                            return@withContext directDecrypted
+                        }
+                    }
+
+                    // Fallback to media_preview_url upgraded to high-quality
+                    val previewUrl = details.optJSONObject(songId)?.optString("media_preview_url", "")
+                        ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("media_preview_url", "") ?: ""
+                    if (previewUrl.isNotBlank() && previewUrl.startsWith("http")) {
+                        val upgraded = previewUrl.replace("preview.saavncdn.com", "aac.saavncdn.com")
+                            .replace("_96_p.mp4", "_320.mp4")
+                        putCachedStreamUrl(songId, upgraded)
+                        return@withContext upgraded
+                    }
                 }
-                val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
-                if (!directDecrypted.isNullOrBlank()) {
-                    putCachedStreamUrl(songId, directDecrypted)
-                    return@withContext directDecrypted
-                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct PID lookup for $songId failed (${e.message})")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Direct PID stream lookup for $songId failed (${e.message}), attempting search fallback...")
         }
 
         // 4. Multi-Query Search Fallback with CDN Token Signing
@@ -138,27 +157,31 @@ object AudioStreamResolver {
                 val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&ctx=android&api_version=4&p=1&n=8&q=$encodedQuery"
                 val reqSearch = Request.Builder()
                     .url(searchUrl)
-                    .header("User-Agent", USER_AGENT_BROWSER)
+                    .header("User-Agent", USER_AGENT_MOBILE)
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Origin", "https://www.jiosaavn.com")
                     .header("Referer", "https://www.jiosaavn.com/")
                     .build()
                 val textSearch = NetworkService.httpClient.newCall(reqSearch).execute().use { it.body?.string().orEmpty() }
-                val searchResp = JSONObject(textSearch)
-                val results = searchResp.optJSONArray("results")
-                if (results != null && results.length() > 0) {
-                    for (i in 0 until results.length()) {
-                        val match = results.getJSONObject(i)
-                        val encUrl = match.optString("encrypted_media_url", "")
-                            .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
-                        if (encUrl.isNotBlank()) {
-                            val streamAuth = fetchStreamAuthUrl(encUrl)
-                            if (!streamAuth.isNullOrBlank()) {
-                                putCachedStreamUrl(songId, streamAuth)
-                                return@withContext streamAuth
-                            }
-                            val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
-                            if (!directDecrypted.isNullOrBlank()) {
-                                putCachedStreamUrl(songId, directDecrypted)
-                                return@withContext directDecrypted
+                if (textSearch.startsWith("{")) {
+                    val searchResp = JSONObject(textSearch)
+                    val results = searchResp.optJSONArray("results")
+                    if (results != null && results.length() > 0) {
+                        for (i in 0 until results.length()) {
+                            val match = results.getJSONObject(i)
+                            val encUrl = match.optString("encrypted_media_url", "")
+                                .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
+                            if (encUrl.isNotBlank()) {
+                                val streamAuth = fetchStreamAuthUrl(encUrl)
+                                if (!streamAuth.isNullOrBlank()) {
+                                    putCachedStreamUrl(songId, streamAuth)
+                                    return@withContext streamAuth
+                                }
+                                val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
+                                if (!directDecrypted.isNullOrBlank()) {
+                                    putCachedStreamUrl(songId, directDecrypted)
+                                    return@withContext directDecrypted
+                                }
                             }
                         }
                     }
@@ -195,13 +218,17 @@ object AudioStreamResolver {
             val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=android&_marker=0"
             val req = Request.Builder()
                 .url(authUrl)
-                .header("User-Agent", USER_AGENT_BROWSER)
+                .header("User-Agent", USER_AGENT_MOBILE)
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Origin", "https://www.jiosaavn.com")
                 .header("Referer", "https://www.jiosaavn.com/")
                 .build()
             val text = NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
-            val authResp = JSONObject(text)
-            val streamUrl = authResp.optString("auth_url", "")
-            if (streamUrl.isNotBlank() && streamUrl != "false") streamUrl else null
+            if (text.startsWith("{")) {
+                val authResp = JSONObject(text)
+                val streamUrl = authResp.optString("auth_url", "")
+                if (streamUrl.isNotBlank() && streamUrl != "false") streamUrl else null
+            } else null
         } catch (e: Exception) {
             null
         }

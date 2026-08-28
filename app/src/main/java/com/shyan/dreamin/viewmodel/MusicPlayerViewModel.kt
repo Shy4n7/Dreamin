@@ -1211,10 +1211,32 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                     .build()
 
-                controller?.apply {
+                var activeController = controller
+                if (activeController == null) {
+                    kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                        while (isActive && controller == null) {
+                            val futureVal = runCatching { controllerFuture?.get() }.getOrNull()
+                            if (futureVal != null) {
+                                controller = futureVal
+                                if (!isListenerAttached) {
+                                    futureVal.addListener(playerListener)
+                                    isListenerAttached = true
+                                }
+                                break
+                            }
+                            delay(50)
+                        }
+                    }
+                    activeController = controller
+                }
+
+                activeController?.apply {
                     setMediaItem(mediaItem)
                     prepare()
                     play()
+                } ?: run {
+                    android.util.Log.e("MusicVM", "MediaController not ready after timeout for ${song.title}")
+                    _uiState.update { it.copy(playbackState = PlaybackState.Error("Player connecting... Please tap again.")) }
                 }
 
                 if (!isPlaylistActive) {
