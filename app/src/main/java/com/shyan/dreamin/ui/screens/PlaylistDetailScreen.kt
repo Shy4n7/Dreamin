@@ -252,8 +252,8 @@ fun PlaylistDetailScreen(
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
-                                    animatedDominant.copy(alpha = 0.52f),
-                                    animatedDominant.copy(alpha = 0.18f),
+                                    animatedDominant.copy(alpha = 0.42f),
+                                    animatedDominant.copy(alpha = 0.14f),
                                     Color.Transparent
                                 ),
                                 center = Offset(200f, 60f),
@@ -261,18 +261,6 @@ fun PlaylistDetailScreen(
                             )
                         )
                 )
-                if (!heroArt.isNullOrBlank()) {
-                    AsyncImage(
-                        model = heroArt,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(340.dp)
-                            .blur(64.dp)
-                            .alpha(0.30f),
-                        contentScale = ContentScale.Crop
-                    )
-                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1388,36 +1376,14 @@ fun PlaylistSongRow(
     }
 }
 
-
-
 @Composable
 fun ArtworkBox(
     artworkUrl: String,
     isPlaying: Boolean,
     colors: DreaminColors
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse_art")
-    val pulseScale by if (isPlaying) {
-        infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 1.04f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulse_scale"
-        )
-    } else {
-        remember { mutableStateOf(1f) }
-    }
-
     Box(
-        modifier = Modifier
-            .size(52.dp)
-            .graphicsLayer {
-                scaleX = pulseScale
-                scaleY = pulseScale
-            }
+        modifier = Modifier.size(52.dp)
     ) {
         AsyncImage(
             model = artworkUrl,
@@ -1445,7 +1411,7 @@ fun RenamePlaylistDialog(currentName: String, onDismiss: () -> Unit, onRename: (
     var name by remember { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text("Rename Playlist") },
         text = {
             OutlinedTextField(
                 value = name,
@@ -1477,7 +1443,7 @@ fun RenamePlaylistDialog(currentName: String, onDismiss: () -> Unit, onRename: (
 
 /**
  * Sleek, glassmorphic vertical fast-scroll slider and scrubber for playlists.
- * Allows effortless navigation across 300+ tracks with a floating index indicator and haptic feedback.
+ * Allows effortless navigation across 300+ tracks with a floating index indicator.
  */
 @Composable
 fun PlaylistFastScroller(
@@ -1489,11 +1455,9 @@ fun PlaylistFastScroller(
 ) {
     if (itemCount <= 1) return
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var isDragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
-    var lastHapticIndex by remember { mutableIntStateOf(-1) }
     var containerHeightPx by remember { mutableFloatStateOf(1f) }
 
     val isScrollInProgress = listState.isScrollInProgress
@@ -1542,10 +1506,6 @@ fun PlaylistFastScroller(
                         val fraction = (change.position.y / size.height.toFloat()).coerceIn(0f, 1f)
                         dragFraction = fraction
                         val targetIdx = (fraction * (itemCount - 1)).toInt().coerceIn(0, (itemCount - 1).coerceAtLeast(0))
-                        if (targetIdx != lastHapticIndex) {
-                            lastHapticIndex = targetIdx
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
                         scope.launch {
                             listState.scrollToItem((targetIdx + 1).coerceIn(0, itemCount))
                         }
