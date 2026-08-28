@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -327,8 +329,30 @@ private fun MainAppScaffold(
 
         AnimatedVisibility(
             visible = state.selectedArtistProfile != null,
-            enter = slideInHorizontally(spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(220)),
-            exit = slideOutHorizontally(spring(dampingRatio = 0.90f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut(tween(180)),
+            enter = scaleIn(
+                initialScale = 0.93f,
+                animationSpec = spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) + slideInVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) { 70 } + fadeIn(tween(200)),
+            exit = scaleOut(
+                targetScale = 0.94f,
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + slideOutVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) { 60 } + fadeOut(tween(160)),
             modifier = Modifier.fillMaxSize()
         ) {
             val profile = state.selectedArtistProfile
@@ -352,8 +376,30 @@ private fun MainAppScaffold(
         val openPlaylist = state.openPlaylistId?.let { id -> state.playlists.find { it.id == id } }
         AnimatedVisibility(
             visible = openPlaylist != null,
-            enter = slideInHorizontally(spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(220)),
-            exit = slideOutHorizontally(spring(dampingRatio = 0.90f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut(tween(180)),
+            enter = scaleIn(
+                initialScale = 0.93f,
+                animationSpec = spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) + slideInVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) { 70 } + fadeIn(tween(200)),
+            exit = scaleOut(
+                targetScale = 0.94f,
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + slideOutVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) { 60 } + fadeOut(tween(160)),
             modifier = Modifier.fillMaxSize()
         ) {
             if (openPlaylist != null) {

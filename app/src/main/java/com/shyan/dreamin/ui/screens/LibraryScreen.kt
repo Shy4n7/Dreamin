@@ -186,33 +186,48 @@ fun LibraryScreen(
             userScrollEnabled = true,
             key = { tabs[it] }
         ) { page ->
-            when (page) {
-                0 -> PlaylistsTab(
-                    playlists = state.playlists,
-                    playlistArtworks = state.playlistArtworks,
-                    onCreatePlaylist = onCreatePlaylist,
-                    onDeletePlaylist = onDeletePlaylist,
-                    onPlayPlaylist = onPlayPlaylist,
-                    onOpenPlaylist = onOpenPlaylist,
-                    spotifyImportState = state.spotifyImportState,
-                    onImportSpotify = onImportSpotifyPlaylist,
-                    onResetSpotifyImport = onResetSpotifyImportState,
-                    onSearchOnline = onSearchOnline,
-                    onAddSuggestedTrack = onAddSuggestedTrack
-                )
-                1 -> FavoritesTab(
-                    favorites = state.favorites,
-                    currentSong = state.currentSong,
-                    onSongClick = onSongClick,
-                    onAddToPlaylist = onAddToPlaylist
-                )
-                else -> DownloadsTab(
-                    downloadedSongs = state.downloadedSongs,
-                    currentSong = state.currentSong,
-                    onSongClick = onSongClick,
-                    onDeleteDownload = onDeleteDownload,
-                    onAddToPlaylist = onAddToPlaylist
-                )
+            val pageOffset = ((tabPagerState.currentPage - page) + tabPagerState.currentPageOffsetFraction)
+            val absOffset = kotlin.math.abs(pageOffset)
+            val pageScale = 1f - (absOffset * 0.05f).coerceIn(0f, 0.05f)
+            val pageAlpha = 1f - (absOffset * 0.40f).coerceIn(0f, 0.40f)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = pageScale
+                        scaleY = pageScale
+                        alpha = pageAlpha
+                    }
+            ) {
+                when (page) {
+                    0 -> PlaylistsTab(
+                        playlists = state.playlists,
+                        playlistArtworks = state.playlistArtworks,
+                        onCreatePlaylist = onCreatePlaylist,
+                        onDeletePlaylist = onDeletePlaylist,
+                        onPlayPlaylist = onPlayPlaylist,
+                        onOpenPlaylist = onOpenPlaylist,
+                        spotifyImportState = state.spotifyImportState,
+                        onImportSpotify = onImportSpotifyPlaylist,
+                        onResetSpotifyImport = onResetSpotifyImportState,
+                        onSearchOnline = onSearchOnline,
+                        onAddSuggestedTrack = onAddSuggestedTrack
+                    )
+                    1 -> FavoritesTab(
+                        favorites = state.favorites,
+                        currentSong = state.currentSong,
+                        onSongClick = onSongClick,
+                        onAddToPlaylist = onAddToPlaylist
+                    )
+                    else -> DownloadsTab(
+                        downloadedSongs = state.downloadedSongs,
+                        currentSong = state.currentSong,
+                        onSongClick = onSongClick,
+                        onDeleteDownload = onDeleteDownload,
+                        onAddToPlaylist = onAddToPlaylist
+                    )
+                }
             }
         }
     }
