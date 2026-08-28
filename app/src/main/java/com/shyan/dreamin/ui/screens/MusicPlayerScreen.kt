@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -163,82 +164,116 @@ private fun MainAppScaffold(
                 }
             }
         ) { padding ->
-            AnimatedContent(
-                targetState = currentScreen,
-                transitionSpec = {
-                    fadeIn(tween(150)) togetherWith fadeOut(tween(110))
-                },
+            val isHome = currentScreen == Screen.Home
+            val isLibrary = currentScreen == Screen.Library
+
+            var isLibraryPreWarmed by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                // Pre-warm the library composition tree right after first frame
+                isLibraryPreWarmed = true
+            }
+
+            val homeAlpha by animateFloatAsState(
+                targetValue = if (isHome) 1f else 0f,
+                animationSpec = tween(durationMillis = 140),
+                label = "home_tab_alpha"
+            )
+            val libraryAlpha by animateFloatAsState(
+                targetValue = if (isLibrary) 1f else 0f,
+                animationSpec = tween(durationMillis = 140),
+                label = "library_tab_alpha"
+            )
+
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(state = hazeState)
-                    .padding(bottom = padding.calculateBottomPadding()),
-                label = "root_tab_switch"
-            ) { screen ->
-                when (screen) {
-                    Screen.Home -> HomeScreen(
-                        trendingCharts           = trendingCharts,
-                        recommendations          = state.recommendations,
-                        recentlyPlayed           = state.recentlyPlayed,
-                        topSongs                 = state.topSongs,
-                        currentSong              = state.currentSong,
-                        isPlaying                = state.playbackState is PlaybackState.Playing,
-                        isSearchActive           = state.isSearchActive,
-                        searchQuery              = state.searchQuery,
-                        searchResults            = state.searchResults,
-                        isSearching              = state.isSearching,
-                        isLoadingChart           = state.isLoadingChart,
-                        isLoadingMoreSearch      = state.isLoadingMoreSearch,
-                        hasMoreSearchResults     = state.hasMoreSearchResults,
-                        recommendationSeedTitle  = state.recommendationSeedTitle,
-                        userName                 = state.userName.orEmpty(),
-                        playlists                = state.playlists,
-                        recentSearches           = state.recentSearches,
-                        lastSession              = state.lastSession,
-                        onSongClick              = onHomeSongClick,
-                        onSongClickFromList      = onSongClickFromList,
-                        onShuffleFab             = onHomeShuffleFab,
-                        onAddToQueue             = vm::addToQueue,
-                        onPlayNext               = vm::playNext,
-                        onSearchChange           = vm::setSearchQuery,
-                        onClearSearch            = vm::clearSearch,
-                        onActivateSearch         = vm::activateSearch,
-                        onRefresh                = vm::refreshData,
-                        onLoadMoreSearch         = vm::loadMoreSearchResults,
-                        onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
-                        onOpenPlaylist           = vm::openPlaylist,
-                        onEditName               = vm::saveUserName,
-                        onClearRecentSearches    = vm::clearRecentSearches,
-                        onResumeLastSession      = onResumeSession,
-                        searchError              = state.searchError
-                    )
-                    Screen.Library -> LibraryScreen(
-                        state                    = state,
-                        onSongClick              = onLibrarySongClick,
-                        onCreatePlaylist         = { name, coverUri -> vm.createPlaylist(name, coverUri) },
-                        onDeletePlaylist         = vm::deletePlaylist,
-                        onPlayPlaylist           = onLibraryPlayPlaylist,
-                        onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
-                        onOpenPlaylist           = vm::openPlaylist,
-                        onClosePlaylist          = vm::closePlaylist,
-                        onRemoveSongFromPlaylist = vm::removeSongFromPlaylist,
-                        onRenamePlaylist         = vm::renamePlaylist,
-                        onUpdatePlaylistCover    = vm::updatePlaylistCover,
-                        onSongClickFromPlaylist  = { song, songs -> vm.playSongFromPlaylist(song, songs); onOpenNowPlaying() },
-                        onShufflePlaylist        = { songs -> vm.shuffleAndPlayPlaylist(songs); onOpenNowPlaying() },
-                        onDownloadPlaylist       = vm::downloadAllSongsInPlaylist,
-                        onDownloadSong           = vm::downloadSong,
-                        onDeleteDownload         = vm::deleteDownload,
-                        onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
-                        onResetSpotifyImportState = vm::resetSpotifyImportState,
-                        onSearchOnline           = { query ->
-                            onScreenChange(Screen.Home)
-                            vm.activateSearch()
-                            vm.setSearchQuery(query)
-                        },
-                        onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
-                        onPlayNext               = vm::playNext,
-                        onAddToQueue             = vm::addToQueue
-                    )
+                    .padding(bottom = padding.calculateBottomPadding())
+            ) {
+                // 1. Home Screen (Rendered & Interactive when active)
+                if (homeAlpha > 0f || isHome) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = homeAlpha }
+                            .zIndex(if (isHome) 1f else 0f)
+                    ) {
+                        HomeScreen(
+                            trendingCharts           = trendingCharts,
+                            recommendations          = state.recommendations,
+                            recentlyPlayed           = state.recentlyPlayed,
+                            topSongs                 = state.topSongs,
+                            currentSong              = state.currentSong,
+                            isPlaying                = state.playbackState is PlaybackState.Playing,
+                            isSearchActive           = state.isSearchActive,
+                            searchQuery              = state.searchQuery,
+                            searchResults            = state.searchResults,
+                            isSearching              = state.isSearching,
+                            isLoadingChart           = state.isLoadingChart,
+                            isLoadingMoreSearch      = state.isLoadingMoreSearch,
+                            hasMoreSearchResults     = state.hasMoreSearchResults,
+                            recommendationSeedTitle  = state.recommendationSeedTitle,
+                            userName                 = state.userName.orEmpty(),
+                            playlists                = state.playlists,
+                            recentSearches           = state.recentSearches,
+                            lastSession              = state.lastSession,
+                            onSongClick              = onHomeSongClick,
+                            onSongClickFromList      = onSongClickFromList,
+                            onShuffleFab             = onHomeShuffleFab,
+                            onAddToQueue             = vm::addToQueue,
+                            onPlayNext               = vm::playNext,
+                            onSearchChange           = vm::setSearchQuery,
+                            onClearSearch            = vm::clearSearch,
+                            onActivateSearch         = vm::activateSearch,
+                            onRefresh                = vm::refreshData,
+                            onLoadMoreSearch         = vm::loadMoreSearchResults,
+                            onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                            onOpenPlaylist           = vm::openPlaylist,
+                            onEditName               = vm::saveUserName,
+                            onClearRecentSearches    = vm::clearRecentSearches,
+                            onResumeLastSession      = onResumeSession,
+                            searchError              = state.searchError
+                        )
+                    }
+                }
+
+                // 2. Library Screen (Pre-warmed on launch, stays warm in memory)
+                if (isLibrary || isLibraryPreWarmed) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = libraryAlpha }
+                            .zIndex(if (isLibrary) 1f else 0f)
+                    ) {
+                        LibraryScreen(
+                            state                    = state,
+                            onSongClick              = onLibrarySongClick,
+                            onCreatePlaylist         = { name, coverUri -> vm.createPlaylist(name, coverUri) },
+                            onDeletePlaylist         = vm::deletePlaylist,
+                            onPlayPlaylist           = onLibraryPlayPlaylist,
+                            onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                            onOpenPlaylist           = vm::openPlaylist,
+                            onClosePlaylist          = vm::closePlaylist,
+                            onRemoveSongFromPlaylist = vm::removeSongFromPlaylist,
+                            onRenamePlaylist         = vm::renamePlaylist,
+                            onUpdatePlaylistCover    = vm::updatePlaylistCover,
+                            onSongClickFromPlaylist  = { song, songs -> vm.playSongFromPlaylist(song, songs); onOpenNowPlaying() },
+                            onShufflePlaylist        = { songs -> vm.shuffleAndPlayPlaylist(songs); onOpenNowPlaying() },
+                            onDownloadPlaylist       = vm::downloadAllSongsInPlaylist,
+                            onDownloadSong           = vm::downloadSong,
+                            onDeleteDownload         = vm::deleteDownload,
+                            onImportSpotifyPlaylist  = vm::importSpotifyPlaylist,
+                            onResetSpotifyImportState = vm::resetSpotifyImportState,
+                            onSearchOnline           = { query ->
+                                onScreenChange(Screen.Home)
+                                vm.activateSearch()
+                                vm.setSearchQuery(query)
+                            },
+                            onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
+                            onPlayNext               = vm::playNext,
+                            onAddToQueue             = vm::addToQueue
+                        )
+                    }
                 }
             }
         }
