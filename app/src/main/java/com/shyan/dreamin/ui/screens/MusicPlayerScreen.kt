@@ -247,6 +247,7 @@ private fun MainAppScaffold(
                             onRefresh                = vm::refreshData,
                             onLoadMoreSearch         = vm::loadMoreSearchResults,
                             onAddToPlaylist          = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
+                            onOpenPlaylist           = vm::openPlaylist,
                             onEditName               = vm::saveUserName,
                             onClearRecentSearches    = vm::clearRecentSearches,
                             onResumeLastSession      = onResumeSession,

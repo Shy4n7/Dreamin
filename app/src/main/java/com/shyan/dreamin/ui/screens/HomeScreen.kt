@@ -144,6 +144,7 @@ fun HomeScreen(
     onRefresh: () -> Unit,
     onLoadMoreSearch: () -> Unit = {},
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    onOpenPlaylist: (Long) -> Unit = {},
     onEditName: (String) -> Unit = {},
     onClearRecentSearches: () -> Unit = {},
     onResumeLastSession: () -> Unit = {},
@@ -351,6 +352,7 @@ fun HomeScreen(
                                 isLoading = isLoadingChart,
                                 playlists = playlists,
                                 onAddToPlaylist = onAddToPlaylist,
+                                onOpenPlaylist = onOpenPlaylist,
                                 lastSession = lastSession,
                                 onResumeLastSession = onResumeLastSession
                             )
@@ -1102,7 +1104,7 @@ fun FeaturedHeroCarousel(
                                     .background(colors.primary),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -1231,6 +1233,135 @@ fun JumpBackInCard(
 }
 
 @Composable
+fun SpotifyQuickPlaylistGrid(
+    playlists: List<com.shyan.dreamin.data.local.Playlist>,
+    onPlaylistClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (playlists.isEmpty()) return
+
+    val displayPlaylists = remember(playlists) { playlists.take(6) }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val rows = displayPlaylists.chunked(2)
+        rows.forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { playlist ->
+                    SpotifyPlaylistPill(
+                        playlist = playlist,
+                        onClick = { onPlaylistClick(playlist.id) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SpotifyPlaylistPill(
+    playlist: com.shyan.dreamin.data.local.Playlist,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalDreaminColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = DreaminMotion.TactileBouncy,
+        label = "pill_scale"
+    )
+
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceContainer)
+            .border(0.6.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = true, color = colors.primary),
+                onClick = onClick
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (!playlist.coverUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(playlist.coverUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = playlist.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                colors.primary.copy(alpha = 0.6f),
+                                colors.secondary.copy(alpha = 0.4f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.QueueMusic,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp)
+        ) {
+            Text(
+                text = playlist.name,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${playlist.songCount} songs",
+                fontSize = 10.5.sp,
+                color = colors.onSurfaceVariant.copy(alpha = 0.75f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
 fun HomeFeedOnlyContent(
     trending: List<Song>,
     recommendations: List<Song>,
@@ -1246,6 +1377,7 @@ fun HomeFeedOnlyContent(
     isLoading: Boolean = false,
     playlists: List<com.shyan.dreamin.data.local.Playlist> = emptyList(),
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    onOpenPlaylist: (Long) -> Unit = {},
     onSongClickFromList: (Song, List<Song>) -> Unit = { song, _ -> onSongClick(song) },
     lastSession: com.shyan.dreamin.data.local.UserPreferencesDataStore.LastSession?,
     onResumeLastSession: () -> Unit = {}
@@ -1272,6 +1404,15 @@ fun HomeFeedOnlyContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         
+        if (playlists.isNotEmpty()) {
+            item(key = "quick_playlists") {
+                SpotifyQuickPlaylistGrid(
+                    playlists = playlists,
+                    onPlaylistClick = onOpenPlaylist
+                )
+            }
+        }
+
         if (lastSession != null && currentSong == null) {
             item(key = "jump_back_in") {
                 JumpBackInCard(
