@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shyan.dreamin.service.AudioFxManager
 import com.shyan.dreamin.service.EqualizerUiState
 import com.shyan.dreamin.ui.screens.LocalDreaminColors
@@ -32,7 +33,7 @@ import com.shyan.dreamin.ui.screens.LocalDreaminColors
 fun EqualizerBottomSheet(
     onDismiss: () -> Unit
 ) {
-    val eqState by AudioFxManager.uiState.collectAsState()
+    val eqState by AudioFxManager.uiState.collectAsStateWithLifecycle()
     val colors = LocalDreaminColors.current
 
     ModalBottomSheet(
