@@ -87,6 +87,7 @@ dependencies {
     implementation("dev.chrisbanes.haze:haze:1.3.1")
     implementation("dev.chrisbanes.haze:haze-materials:1.3.1")
     implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.8")
+    implementation("androidx.collection:collection:1.4.5")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
