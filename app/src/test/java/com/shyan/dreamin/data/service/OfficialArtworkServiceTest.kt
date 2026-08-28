@@ -43,4 +43,27 @@ class OfficialArtworkServiceTest {
         assertFalse("Poster should reject BigHits / Mixtape compilation", poster.contains("BigHits", ignoreCase = true))
         assertFalse("Poster should reject Mixtape covers", poster.contains("Mixtape", ignoreCase = true))
     }
+
+    @Test
+    fun testMunbeVaaTheatricalPosterResolution() = runBlocking {
+        val song = Song(
+            id = "munbe_vaa_test",
+            title = "Munbe Vaa",
+            artist = "Naresh Iyer, Shreya Ghoshal",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+        assertFalse("Poster should reject A.R. Rahman Vibration compilation", poster.contains("Vibration", ignoreCase = true))
+    }
+
+    @Test
+    fun testCompilationRegexDetectsNewPatterns() {
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("A. R. Rahman Vibration"))
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("AR RAHMAN Hit Songs"))
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Kollywood's Most Romantic Songs"))
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Munbe Vaa - Lofi Mix"))
+    }
 }

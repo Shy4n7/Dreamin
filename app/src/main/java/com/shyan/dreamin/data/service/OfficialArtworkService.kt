@@ -31,7 +31,9 @@ object OfficialArtworkService {
         "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits|" +
         "take\\s*\\d+|take\\d+|masterworks|hits of\\s+[a-z]+|[a-z]+\\s+hits|" +
         "cover version|cover|tribute version|tribute|acoustic cover|unplugged cover|reprise version|" +
-        "i\\s*(?:love|heart|❤️|♥)\\s+[a-z\\s]+|favourite\\s+[a-z\\s]+|favorite\\s+[a-z\\s]+)\\b"
+        "i\\s*(?:love|heart|❤️|♥)\\s+[a-z\\s]+|favourite\\s+[a-z\\s]+|favorite\\s+[a-z\\s]+|" +
+        "vibration|vibrations|hit songs|super hit songs|melody songs|love hits|sad songs|evergreen hits|hit collection|" +
+        "kollywood|most romantic|lofi mix|lofi|mashup)\\b"
     )
 
     private val KNOWN_LYRICISTS = setOf(
@@ -64,7 +66,8 @@ object OfficialArtworkService {
         val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
         artworkCache[fullKey]?.let { return it }
         val titleOnlyKey = song.displayTitle.lowercase().trim()
-        return artworkCache[titleOnlyKey]
+        artworkCache[titleOnlyKey]?.let { return it }
+        return null
     }
 
     fun putCachedPoster(song: Song, posterUrl: String): Unit = synchronized(artworkCache) {
@@ -107,16 +110,7 @@ object OfficialArtworkService {
             else -> targetLanguage
         }
 
-        // 1. Tier-1: Query Apple Music Official Movie Soundtrack Catalog (1000x1000 Official Theatrical Covers)
-        val applePoster = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, detectedLang)
-        if (!applePoster.isNullOrBlank()) {
-            artworkCache.put(cacheKey, applePoster)
-            artworkCache.put(titleKey, applePoster)
-            if (song.id.isNotBlank()) artworkCache.put(song.id, applePoster)
-            return@withContext applePoster
-        }
-
-        // 2. Try extracting movie name from title tag (e.g. From "Duet", From '3', From Paiyaa, From "24")
+        // Try extracting movie name from title tag (e.g. From "Duet", From '3', From Paiyaa, From "24")
         var movieName = ""
         val m = Regex("(?i)\\s*\\(?\\s*(?:from|movie)\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*\\)?").find(song.title)
         if (m != null) {
@@ -126,7 +120,27 @@ object OfficialArtworkService {
             }
         }
 
-        // 3. Query JioSaavn Official Movie Album API if movie name is identified
+        // Dual-Source Score Arbitration: Query both Apple Music and JioSaavn
+        val appleResult = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, detectedLang)
+        val saavnResult = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
+
+        val bestPoster = when {
+            appleResult != null && saavnResult != null -> {
+                if (appleResult.second >= saavnResult.second) appleResult.first else saavnResult.first
+            }
+            appleResult != null -> appleResult.first
+            saavnResult != null -> saavnResult.first
+            else -> null
+        }
+
+        if (!bestPoster.isNullOrBlank()) {
+            artworkCache.put(cacheKey, bestPoster)
+            artworkCache.put(titleKey, bestPoster)
+            if (song.id.isNotBlank()) artworkCache.put(song.id, bestPoster)
+            return@withContext bestPoster
+        }
+
+        // Query JioSaavn Official Movie Album API if movie name is identified
         if (movieName.isNotBlank()) {
             val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
             if (!albumPoster.isNullOrBlank()) {
@@ -137,20 +151,17 @@ object OfficialArtworkService {
             }
         }
 
-        // 4. Query JioSaavn Official Song Catalog with strict title & movie soundtrack prioritization
-        val songPoster = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
-        if (!songPoster.isNullOrBlank()) {
-            artworkCache.put(cacheKey, songPoster)
-            artworkCache.put(titleKey, songPoster)
-            if (song.id.isNotBlank()) artworkCache.put(song.id, songPoster)
-            return@withContext songPoster
-        }
-
-        // 5. Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye")
+        // Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye")
         val phoneticAlt = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(cleanTitle)
         if (!phoneticAlt.isNullOrBlank()) {
-            val altPoster = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
-                ?: fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
+            val altApple = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
+            val altSaavn = fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
+            val altPoster = when {
+                altApple != null && altSaavn != null -> if (altApple.second >= altSaavn.second) altApple.first else altSaavn.first
+                altApple != null -> altApple.first
+                altSaavn != null -> altSaavn.first
+                else -> null
+            }
             if (!altPoster.isNullOrBlank()) {
                 artworkCache.put(cacheKey, altPoster)
                 artworkCache.put(titleKey, altPoster)
@@ -171,7 +182,7 @@ object OfficialArtworkService {
             .replace("&gt;", ">")
     }
 
-    private fun fetchAppleMusicOfficialCover(title: String, artist: String, targetLanguage: String): String? {
+    private fun fetchAppleMusicOfficialCover(title: String, artist: String, targetLanguage: String): Pair<String, Int>? {
         try {
             val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(title)
             val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else title
@@ -263,7 +274,7 @@ object OfficialArtworkService {
                     }
                 }
 
-                if (bestCover != null && bestScore > 0) return bestCover
+                if (bestCover != null && bestScore > 0) return Pair(bestCover, bestScore)
             }
         } catch (_: Exception) {}
         return null
@@ -309,11 +320,11 @@ object OfficialArtworkService {
     }
 
     private fun fetchJioSaavnSongOfficialCover(
-        title: String, 
-        artist: String, 
-        movieHint: String, 
+        title: String,
+        artist: String,
+        movieHint: String,
         targetLanguage: String
-    ): String? {
+    ): Pair<String, Int>? {
         try {
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
             val searchQueries = mutableListOf<String>()
@@ -409,7 +420,7 @@ object OfficialArtworkService {
                     }
                 }
 
-                if (bestCover != null && bestScore > 0) return toHighResCover(bestCover)
+                if (bestCover != null && bestScore > 0) return Pair(toHighResCover(bestCover), bestScore)
             }
         } catch (_: Exception) {}
         return null
