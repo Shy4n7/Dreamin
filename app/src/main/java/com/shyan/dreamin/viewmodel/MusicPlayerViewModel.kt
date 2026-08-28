@@ -212,6 +212,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         } ?: false
                     )
                 }
+                com.shyan.dreamin.data.service.OfficialArtworkService.prefetchSongListArtworks(songs, viewModelScope) { id, poster ->
+                    updateSongArtworkAcrossApp(id, poster)
+                }
             }
         }
     }
@@ -317,6 +320,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         openPlaylistJob = viewModelScope.launch {
             playlistRepo.observeSongs(playlistId).collect { songs ->
                 _uiState.update { it.copy(openPlaylistSongs = songs) }
+                com.shyan.dreamin.data.service.OfficialArtworkService.prefetchSongListArtworks(songs, viewModelScope) { id, poster ->
+                    updateSongArtworkAcrossApp(id, poster)
+                }
             }
         }
     }
@@ -371,7 +377,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     try {
                         val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
-                            val finalArtwork = when {
+                            val officialPoster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang)
+                            val finalArtwork = officialPoster ?: when {
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
                                 matched.artworkUrl.isNotBlank() -> matched.artworkUrl
                                 else -> ""
@@ -916,7 +923,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private val noiseRegex = Regex("(?i)\\b(remix|8d|8d audio|bass boosted|slowed|reverb|cover|lofi|status|dialogue|teaser|trailer|jukebox|mashup|bgm|ringtone|sped up)\\b")
-    private val compilationRegex = Regex("(?i)\\b(fire & desire|fire and desire|desire|best of|this is|top |hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|for the road|romance|mashup|area boys|konjam|thamizh music|pure love|soulful|feel good|night drive|summer vibes|chill tracks|unlimited|hits of)\\b")
+    private val compilationRegex = com.shyan.dreamin.data.service.OfficialArtworkService.COMPILATION_REGEX
 
     private fun cleanArtworkUrl(url: String): String {
         if (url.isBlank()) return ""

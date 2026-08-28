@@ -2,6 +2,7 @@ package com.shyan.dreamin.data.service
 
 import com.shyan.dreamin.data.model.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -14,7 +15,7 @@ object OfficialArtworkService {
         }
     }
 
-    private val COMPILATION_REGEX = Regex(
+    val COMPILATION_REGEX = Regex(
         "(?i)\\b(mixtape|bighits|big hits|think music|thinkmusic|double delights|double delight|delights|delight|" +
         "double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|" +
         "top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|" +
@@ -38,6 +39,23 @@ object OfficialArtworkService {
         "yugabharathi", "madhan karky", "karky", "arunraja kamaraj", "rokesh", "vivek", 
         "ku. karthik", "selvaraghavan", "gkb", "eknath", "mani amudhavan"
     )
+
+    fun prefetchSongListArtworks(
+        songs: List<Song>,
+        scope: kotlinx.coroutines.CoroutineScope,
+        onResolved: ((songId: String, posterUrl: String) -> Unit)? = null
+    ) {
+        songs.forEach { song ->
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val poster = resolveOfficialMoviePoster(song)
+                    if (!poster.isNullOrBlank() && poster != song.artworkUrl) {
+                        onResolved?.invoke(song.id, poster)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
         if (song.id.isNotBlank()) {
