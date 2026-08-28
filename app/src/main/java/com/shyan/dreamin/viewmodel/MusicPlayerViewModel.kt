@@ -72,7 +72,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var prefetchJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
-    private val streamUrlCache = android.util.LruCache<String, String>(100)
     private val paletteColorCache = android.util.LruCache<String, Triple<Int, Int, Int>>(100)
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
@@ -372,9 +371,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         kotlinx.coroutines.delay((index % 6) * 30L)
                         val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
+                            val officialPoster = try {
+                                com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched)
+                            } catch (_: Exception) { null }
                             val finalArtwork = when {
-                                track.artworkUrl.isNotBlank() -> track.artworkUrl
+                                !officialPoster.isNullOrBlank() -> officialPoster
                                 matched.artworkUrl.isNotBlank() -> matched.artworkUrl
+                                track.artworkUrl.isNotBlank() -> track.artworkUrl
                                 else -> ""
                             }
                             val songWithArt = matched.copy(artworkUrl = finalArtwork)
@@ -424,6 +427,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val newPlaylistId = playlistRepo.createPlaylist(name = title, coverUrl = coverUrl.takeIf { it.isNotBlank() })
         playlistRepo.addSongs(newPlaylistId, matchedSongs)
+
+        // Preload first batch of high-resolution cinematic covers in background
+        val appCtx = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            matchedSongs.take(30).forEach { s ->
+                if (s.displayArtworkUrl.isNotBlank()) {
+                    try {
+                        val req = coil.request.ImageRequest.Builder(appCtx)
+                            .data(s.displayArtworkUrl)
+                            .build()
+                        coil.Coil.imageLoader(appCtx).enqueue(req)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
 
         _uiState.update {
             it.copy(
@@ -756,7 +774,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         override fun onPlayerError(error: PlaybackException) {
             android.util.Log.e("MusicVM", "ExoPlayer error: ${error.message}", error)
             val current = _uiState.value.currentSong ?: return
-            streamUrlCache.remove(current.id)
+            com.shyan.dreamin.data.service.AudioStreamResolver.removeCachedStreamUrl(current.id)
             viewModelScope.launch {
                 downloadRepo.deletePrefetch(current.id)
                 try {
@@ -876,23 +894,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             searchOnDevice(query.trim(), limit = 20)
         } catch (_: Exception) {
             emptyList()
-        }
-    }
-
-    private fun decryptJioSaavnMediaUrl(encUrl: String): String? {
-        if (encUrl.isBlank()) return null
-        return try {
-            val cipher = javax.crypto.Cipher.getInstance("DES/ECB/PKCS5Padding")
-            val keySpec = javax.crypto.spec.SecretKeySpec("38343638".toByteArray(Charsets.UTF_8), "DES")
-            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec)
-            val decoded = android.util.Base64.decode(encUrl, android.util.Base64.DEFAULT)
-            val decryptedBytes = cipher.doFinal(decoded)
-            val decryptedUrl = String(decryptedBytes, Charsets.UTF_8).trim()
-            if (decryptedUrl.startsWith("http")) {
-                decryptedUrl.replace(Regex("_(?:96|160)\\.mp4"), "_320.mp4")
-            } else null
-        } catch (_: Exception) {
-            null
         }
     }
 
@@ -1099,121 +1100,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         triggerSmartQueuePrefetch(nextSong?.id)
     }
 
-    private fun fetchStreamAuthUrl(encUrl: String): String? {
-        if (encUrl.isBlank()) return null
-        return try {
-            val enc = URLEncoder.encode(encUrl, "UTF-8")
-            val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=android&_marker=0"
-            val req = okhttp3.Request.Builder()
-                .url(authUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val text = NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
-            val authResp = JSONObject(text)
-            val streamUrl = authResp.optString("auth_url", "")
-            if (streamUrl.isNotBlank() && streamUrl != "false") streamUrl else null
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private suspend fun resolveStreamUrl(song: Song): String = withContext(Dispatchers.IO) {
-        val songId = song.id
-        streamUrlCache.get(songId)?.let { return@withContext it }
-
-        // Local offline download & smart prefetch check (0ms instant playback)
-        val localPath = downloadRepo.getPrefetchedOrDownloadedPath(songId)
-        if (localPath != null) {
-            streamUrlCache.put(songId, localPath)
-            return@withContext localPath
-        }
-
-        // Attempt 1: Direct on-device JioSaavn API by PID
-        try {
-            val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId"
-            val req1 = okhttp3.Request.Builder()
-                .url(detailsUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val text1 = NetworkService.httpClient.newCall(req1).execute().use { it.body?.string().orEmpty() }
-            val details = JSONObject(text1)
-            val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "")
-                ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
-            if (encUrl.isNotBlank()) {
-                val streamAuth = fetchStreamAuthUrl(encUrl)
-                if (!streamAuth.isNullOrBlank()) {
-                    streamUrlCache.put(songId, streamAuth)
-                    return@withContext streamAuth
-                }
-                val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
-                if (!directDecrypted.isNullOrBlank()) {
-                    streamUrlCache.put(songId, directDecrypted)
-                    return@withContext directDecrypted
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("MusicVM", "Direct PID stream resolution for $songId failed (${e.message}), attempting search fallback...")
-        }
-
-        // Attempt 2: Search Fallback
-        try {
-            val queries = mutableListOf(
-                "${song.displayTitle} ${song.artist}".trim(),
-                song.displayTitle.trim(),
-                "${song.displayTitle.replace(Regex("(?i)eeshu|eshu"), "eesu").replace(Regex("(?i)sh"), "s")} ${song.artist}".trim(),
-                song.displayTitle.replace(Regex("[^a-zA-Z0-9 ]"), "").trim()
-            ).distinct().filter { it.length >= 2 }
-
-            for (qText in queries) {
-                val encodedQuery = URLEncoder.encode(qText, "UTF-8")
-                val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&ctx=android&api_version=4&p=1&n=8&q=$encodedQuery"
-                val reqSearch = okhttp3.Request.Builder()
-                    .url(searchUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .header("Referer", "https://www.jiosaavn.com/")
-                    .build()
-                val textSearch = NetworkService.httpClient.newCall(reqSearch).execute().use { it.body?.string().orEmpty() }
-                val searchResp = JSONObject(textSearch)
-                val results = searchResp.optJSONArray("results")
-                if (results != null && results.length() > 0) {
-                    for (i in 0 until results.length()) {
-                        val match = results.getJSONObject(i)
-                        val encUrl = match.optString("encrypted_media_url", "")
-                            .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
-                        if (encUrl.isNotBlank()) {
-                            val streamAuth = fetchStreamAuthUrl(encUrl)
-                            if (!streamAuth.isNullOrBlank()) {
-                                streamUrlCache.put(songId, streamAuth)
-                                return@withContext streamAuth
-                            }
-                            val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
-                            if (!directDecrypted.isNullOrBlank()) {
-                                streamUrlCache.put(songId, directDecrypted)
-                                return@withContext directDecrypted
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("MusicVM", "Search fallback failed for ${song.title}: ${e.message}")
-        }
-
-        // Attempt 3: Backend server resolution fallback
-        try {
-            val playResp = api.recordPlay(id = songId, artist = song.artist, title = song.title)
-            val streamUrl = playResp.streamUrl
-            if (!streamUrl.isNullOrBlank()) {
-                streamUrlCache.put(songId, streamUrl)
-                return@withContext streamUrl
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MusicVM", "Backend stream fallback failed for $songId: ${e.message}")
-        }
-
-        throw IllegalStateException("Unable to resolve stream for song ${song.title} ($songId)")
+    private suspend fun resolveStreamUrl(song: Song): String {
+        return com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(
+            song = song,
+            downloadRepo = downloadRepo,
+            apiService = api
+        )
     }
 
     private fun parseAudioUri(streamUrl: String): android.net.Uri {
@@ -1914,7 +1806,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun clearAllCaches() {
         com.shyan.dreamin.data.service.YouTubeRadioService.clearCache()
-        streamUrlCache.evictAll()
+        com.shyan.dreamin.data.service.AudioStreamResolver.clearCache()
+        com.shyan.dreamin.data.service.OfficialArtworkService.clearCache()
         paletteColorCache.evictAll()
     }
 

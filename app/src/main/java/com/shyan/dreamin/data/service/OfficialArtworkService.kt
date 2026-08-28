@@ -8,7 +8,7 @@ import java.net.URLEncoder
 
 object OfficialArtworkService {
 
-    private val artworkCache = android.util.LruCache<String, String>(300)
+    private val artworkCache = android.util.LruCache<String, String>(1000)
 
     private val COMPILATION_REGEX = Regex(
         "(?i)\\b(double delights|double delight|delights|delight|double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|romance|mashup|area boys|konjam|thamizh music|special|tribute|celebration|magic of|voice of|golden|non stop|jukebox|rewind|finesse|starry|mazhaiyum|thooral|pure|simply|anthology|sounds of|sensational|absolute|trending version|ungaludan|dhamaka|masterworks|all about love|sun-kissed|summer vibes|my playlist|words of|mazhaikaalam|joy|saaral|special|singer special|in the words of|feel good|night drive|soulful|chill tracks|unlimited|hits of)\\b"
@@ -22,6 +22,15 @@ object OfficialArtworkService {
         artworkCache.get(fullKey)?.let { return it }
         val titleOnlyKey = song.displayTitle.lowercase().trim()
         return artworkCache.get(titleOnlyKey)
+    }
+
+    fun putCachedPoster(song: Song, posterUrl: String) {
+        if (posterUrl.isBlank()) return
+        if (song.id.isNotBlank()) artworkCache.put(song.id, posterUrl)
+        val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
+        artworkCache.put(fullKey, posterUrl)
+        val titleOnlyKey = song.displayTitle.lowercase().trim()
+        artworkCache.put(titleOnlyKey, posterUrl)
     }
 
     fun clearCache() {
