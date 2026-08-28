@@ -215,7 +215,7 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 18, maxStaggerItems: Int = 10): Modifier {
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 24, maxStaggerItems: Int = 16): Modifier {
     if (index >= maxStaggerItems) return this
     val animState = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -224,7 +224,7 @@ fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 18, maxStaggerItems: 
         animState.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = 0.8f,
+                dampingRatio = 0.76f,
                 stiffness = Spring.StiffnessMediumLow
             )
         )
@@ -232,9 +232,9 @@ fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 18, maxStaggerItems: 
     return this.graphicsLayer {
         val p = animState.value
         alpha = p
-        translationY = (1f - p) * 24f
-        scaleX = 0.96f + 0.04f * p
-        scaleY = 0.96f + 0.04f * p
+        translationY = (1f - p) * 32f
+        scaleX = 0.94f + (0.06f * p)
+        scaleY = 0.94f + (0.06f * p)
     }
 }
 
