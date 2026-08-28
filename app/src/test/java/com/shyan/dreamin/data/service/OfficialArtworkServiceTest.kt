@@ -75,10 +75,56 @@ class OfficialArtworkServiceTest {
     }
 
     @Test
+    fun testDonuDonuMaariTheatricalPosterResolution() = runBlocking {
+        val song = Song(
+            id = "donu_donu_test",
+            title = "Don'u Don'u Don'u",
+            artist = "Dhanush, Anirudh Ravichander",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+        assertFalse("Poster should reject Dhanush Mass compilation", poster.contains("Dhanush-Mass", ignoreCase = true))
+    }
+
+    @Test
+    fun testMentalManadhilOkKanmaniPosterResolution() = runBlocking {
+        val song = Song(
+            id = "mental_manadhil_test",
+            title = "Mental Manadhil",
+            artist = "A.R. Rahman, Jonita Gandhi",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+    }
+
+    @Test
+    fun testPachaiNirameAlaipayutheyPosterResolution() = runBlocking {
+        val song = Song(
+            id = "pachai_nirame_test",
+            title = "Pachai Nirame",
+            artist = "A.R. Rahman, Hariharan",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+        assertFalse("Poster should reject Trap Vibe single", poster.contains("Trap", ignoreCase = true))
+    }
+
+    @Test
     fun testCompilationRegexDetectsNewPatterns() {
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("A. R. Rahman Vibration"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("AR RAHMAN Hit Songs"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Kollywood's Most Romantic Songs"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Munbe Vaa - Lofi Mix"))
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Dhanush Mass"))
+        assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Pachai Nirame (From \"Alaipayuthey\") [Trap Vibe] - Single"))
     }
 }

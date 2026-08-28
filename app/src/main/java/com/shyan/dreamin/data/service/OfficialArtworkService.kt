@@ -29,11 +29,13 @@ object OfficialArtworkService {
         "romance mix|love songs|super singer|rockstar|the girlfriend mix|the first love tapes|this is kaadhal|" +
         "latest evergreen melody|mazhai & kaadhal|dhanush dhamaka|endrendrum|pure love|sweet romance|evergreen love|" +
         "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits|" +
+        "mass|dhanush mass|vijay mass|ajith mass|suriya mass|anirudh mass|karthi mass|rajini mass|kamal mass|" +
         "take\\s*\\d+|take\\d+|masterworks|hits of\\s+[a-z]+|[a-z]+\\s+hits|" +
         "cover version|cover|tribute version|tribute|acoustic cover|unplugged cover|reprise version|" +
         "i\\s*(?:love|heart|❤️|♥)\\s+[a-z\\s]+|favourite\\s+[a-z\\s]+|favorite\\s+[a-z\\s]+|" +
         "vibration|vibrations|hit songs|super hit songs|melody songs|love hits|sad songs|evergreen hits|hit collection|" +
-        "kollywood|most romantic|lofi mix|lofi|mashup)\\b"
+        "kollywood|most romantic|lofi mix|lofi|mashup|trap vibe|trap|drill|edm|remix|slowed|reverb|8d\\s*audio|" +
+        "chillout|unplugged|piano version|acoustic version)\\b"
     )
 
     private val KNOWN_LYRICISTS = setOf(
@@ -239,9 +241,17 @@ object OfficialArtworkService {
                         }
                     }
 
-                    // Prefer vocal original over instrumental/karaoke versions
-                    if (trackName.contains("Instrumental", ignoreCase = true) || trackName.contains("Karaoke", ignoreCase = true)) {
-                        score -= 10000
+                    // Prefer vocal original over remixes, lofi, trap, covers, instrumental/karaoke versions
+                    if (trackName.contains("Cover", ignoreCase = true) ||
+                        trackName.contains("Tribute", ignoreCase = true) ||
+                        trackName.contains("Trap", ignoreCase = true) ||
+                        trackName.contains("Remix", ignoreCase = true) ||
+                        trackName.contains("Lofi", ignoreCase = true) ||
+                        trackName.contains("Instrumental", ignoreCase = true) ||
+                        trackName.contains("Karaoke", ignoreCase = true) ||
+                        trackName.contains("Rendition", ignoreCase = true)
+                    ) {
+                        score -= 40000
                     }
 
                     // Language Affinity Guard
@@ -392,9 +402,17 @@ object OfficialArtworkService {
                         }
                     }
 
-                    // Prefer vocal original over instrumental/karaoke versions
-                    if (resTitle.contains("Instrumental", ignoreCase = true) || resTitle.contains("Karaoke", ignoreCase = true)) {
-                        score -= 10000
+                    // Prefer vocal original over remixes, lofi, trap, covers, instrumental/karaoke versions
+                    if (resTitle.contains("Cover", ignoreCase = true) ||
+                        resTitle.contains("Tribute", ignoreCase = true) ||
+                        resTitle.contains("Trap", ignoreCase = true) ||
+                        resTitle.contains("Remix", ignoreCase = true) ||
+                        resTitle.contains("Lofi", ignoreCase = true) ||
+                        resTitle.contains("Instrumental", ignoreCase = true) ||
+                        resTitle.contains("Karaoke", ignoreCase = true) ||
+                        resTitle.contains("Rendition", ignoreCase = true)
+                    ) {
+                        score -= 40000
                     }
 
                     // Language Affinity Guard
