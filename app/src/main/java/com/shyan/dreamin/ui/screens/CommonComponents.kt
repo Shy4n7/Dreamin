@@ -759,7 +759,7 @@ fun SongRow(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Filled.VolumeUp,
+                            Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = "Playing",
                             tint = colors.primary,
                             modifier = Modifier.size(22.dp)
@@ -791,7 +791,7 @@ fun SongRow(
 
             IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
                 Icon(
-                    Icons.Outlined.PlaylistAdd,
+                    Icons.AutoMirrored.Outlined.PlaylistAdd,
                     contentDescription = "Add to queue",
                     tint = colors.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
@@ -925,7 +925,7 @@ fun SongQuickActionsBottomSheet(
                     .padding(vertical = 12.dp, horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(24.dp))
+                Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text("Add to End of Queue", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
@@ -1546,29 +1546,46 @@ fun MiniEqualizerIndicator(
 ) {
     val transition = rememberInfiniteTransition(label = "mini_eq")
     val h1 by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(450, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.25f, targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq1"
     )
     val h2 by transition.animateFloat(
-        initialValue = 0.8f, targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.9f, targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(340, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq2"
     )
     val h3 by transition.animateFloat(
-        initialValue = 0.4f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(550, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.35f, targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(510, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq3"
     )
+    val h4 by transition.animateFloat(
+        initialValue = 0.75f, targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "eq4"
+    )
 
-    Row(
-        modifier = modifier.size(width = 18.dp, height = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-        verticalAlignment = Alignment.Bottom
+    androidx.compose.foundation.Canvas(
+        modifier = modifier.size(width = 20.dp, height = 16.dp)
     ) {
-        Box(modifier = Modifier.width(3.5.dp).fillMaxHeight(h1).clip(RoundedCornerShape(2.dp)).background(color))
-        Box(modifier = Modifier.width(3.5.dp).fillMaxHeight(h2).clip(RoundedCornerShape(2.dp)).background(color))
-        Box(modifier = Modifier.width(3.5.dp).fillMaxHeight(h3).clip(RoundedCornerShape(2.dp)).background(color))
+        val barWidth = 3.5.dp.toPx()
+        val spacing = 2.dp.toPx()
+        val corner = 1.5.dp.toPx()
+        val totalH = size.height
+
+        val heights = floatArrayOf(h1, h2, h3, h4)
+        for (i in 0 until 4) {
+            val barH = (totalH * heights[i]).coerceAtLeast(barWidth)
+            val left = i * (barWidth + spacing)
+            val top = totalH - barH
+            drawRoundRect(
+                color = color,
+                topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                size = androidx.compose.ui.geometry.Size(barWidth, barH),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
+            )
+        }
     }
 }
 
