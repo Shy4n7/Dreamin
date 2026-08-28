@@ -111,12 +111,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         connectToService()
         loadChart()
-        loadRecentlyPlayed()
-        loadTopSongs()
-        loadFavorites()
-        loadStats()
-        loadPlaylists()
-        loadDownloads()
+
+        // Priority 2: Stagger background DB & secondary loads to give 100% CPU priority to active screen
+        viewModelScope.launch(Dispatchers.IO) {
+            delay(150)
+            loadRecentlyPlayed()
+            loadTopSongs()
+            loadFavorites()
+            loadStats()
+            loadPlaylists()
+            loadDownloads()
+        }
 
         val context = getApplication<Application>()
         val filter = android.content.IntentFilter().apply {

@@ -198,7 +198,7 @@ private fun MainAppScaffold(
                     .hazeSource(state = hazeState)
                     .padding(bottom = padding.calculateBottomPadding()),
                 userScrollEnabled      = !state.isSearchActive,
-                beyondViewportPageCount = 1,
+                beyondViewportPageCount = 0,
                 key                    = { navScreens[it].name }
             ) { page ->
                 val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
