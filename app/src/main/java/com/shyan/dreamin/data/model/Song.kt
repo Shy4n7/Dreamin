@@ -168,7 +168,8 @@ data class PlayerUiState(
     val downloadingSongIds: Set<String> = emptySet(),
     val selectedArtistProfile: ArtistProfile? = null,
     val spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
-    val isFetchingUpNext: Boolean = false
+    val isFetchingUpNext: Boolean = false,
+    val didYouMeanQuery: String? = null
 )
 
 @Immutable

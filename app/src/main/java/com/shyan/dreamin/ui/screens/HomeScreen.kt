@@ -149,6 +149,8 @@ fun HomeScreen(
     onClearRecentSearches: () -> Unit = {},
     onResumeLastSession: () -> Unit = {},
     searchError: String? = null,
+    didYouMeanQuery: String? = null,
+    onApplyDidYouMean: (String) -> Unit = onSearchChange,
 ) {
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -309,7 +311,9 @@ fun HomeScreen(
                             isLoadingMore = isLoadingMoreSearch,
                             onLoadMore = onLoadMoreSearch,
                             onAddToPlaylist = onAddToPlaylist,
-                            errorMessage = searchError
+                            errorMessage = searchError,
+                            didYouMeanQuery = didYouMeanQuery,
+                            onApplyDidYouMean = onApplyDidYouMean
                         )
                     }
                 }
@@ -623,7 +627,9 @@ fun SearchResults(
     isLoadingMore: Boolean = false,
     onLoadMore: () -> Unit = {},
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    didYouMeanQuery: String? = null,
+    onApplyDidYouMean: (String) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
     if (isSearching && songs.isEmpty()) {
@@ -635,7 +641,26 @@ fun SearchResults(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(errorMessage ?: "No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(errorMessage ?: "No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                if (!didYouMeanQuery.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = colors.primary.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier.clickable { onApplyDidYouMean(didYouMeanQuery) }
+                    ) {
+                        Text(
+                            text = "Did you mean: $didYouMeanQuery?",
+                            color = colors.primary,
+                            fontSize = 13.5.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
         }
         return
     }
@@ -660,6 +685,38 @@ fun SearchResults(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (!didYouMeanQuery.isNullOrBlank()) {
+            item(key = "did_you_mean_chip", contentType = "SuggestionChip") {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = colors.primary.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .clickable { onApplyDidYouMean(didYouMeanQuery) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Did you mean: $didYouMeanQuery?",
+                            fontSize = 13.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            color = colors.primary
+                        )
+                    }
+                }
+            }
+        }
         itemsIndexed(
             items = songs,
             key = { idx, song -> "${song.id}_$idx" },

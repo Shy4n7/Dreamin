@@ -326,4 +326,153 @@ object IntelliMatchEngine {
             evaluateCandidate(targetTitle, targetArtist, targetDurationMs, cand, targetLanguage)
         }.maxByOrNull { it.score }
     }
+
+    // Noise patterns found in downloaded/local files (websites, bitrates, rip tags)
+    private val websiteWatermarkRegex = Regex("(?i)\\b(masstamilan|isaimini|songspk|tamilmv|starmusiq|kuttyweb|pagalworld|sensongs|mp3mad|raaga|gaana|jiosaavn|wynk|hungama|naasongs|filmywap|cinejosh|tamildada|tamiltunes|123musiq|southmp3|mobcup|ringtones|djtamil|djremix|desinode|freshmaza|mp3skull|beemp3)\\b")
+    private val bitrateWatermarkRegex = Regex("(?i)\\b(320\\s*kbps|128\\s*kbps|192\\s*kbps|256\\s*kbps|64\\s*kbps|vbr|cbr|flac|lossless|cd\\s*rip|dvd\\s*rip|web\\s*rip|hq|hd|audio|track|mp3|m4a|aac|wav|ogg)\\b")
+    private val trackNumberPrefixRegex = Regex("^[0-9]{1,3}\\s*[-._]\\s*")
+
+    /**
+     * Cleans raw local or downloaded filenames and tags into official clean titles and artists.
+     */
+    fun cleanTrackMetadata(rawTitle: String, rawArtist: String = ""): Pair<String, String> {
+        var cleanTitle = rawTitle.trim()
+
+        // 1. Strip track number prefixes like "01 - " or "01_"
+        cleanTitle = trackNumberPrefixRegex.replace(cleanTitle, "")
+
+        // 2. Strip file extensions
+        cleanTitle = cleanTitle.replace(Regex("(?i)\\.(mp3|m4a|flac|wav|ogg|aac)$"), "")
+
+        // 3. Strip website and bitrate watermarks
+        cleanTitle = websiteWatermarkRegex.replace(cleanTitle, "")
+        cleanTitle = bitrateWatermarkRegex.replace(cleanTitle, "")
+
+        // 4. Strip domain-like extensions (e.g. .com, .dev, .org, .net, .co)
+        cleanTitle = cleanTitle.replace(Regex("(?i)\\.(com|dev|org|net|co|in|is|io|ws|me|cc)\\b"), "")
+
+        // 5. Clean brackets and noise
+        val (_, fullClean) = decomposeTitle(cleanTitle)
+        val finalTitle = fullClean.replace(Regex("\\s+"), " ").trim(' ', '-', '_', '.', '|', ':')
+
+        // 6. Clean artist tags
+        var cleanArtist = rawArtist.trim()
+        val (_, cleanArtistDecomposed) = decomposeTitle(cleanArtist)
+        cleanArtist = websiteWatermarkRegex.replace(cleanArtistDecomposed, "")
+        cleanArtist = bitrateWatermarkRegex.replace(cleanArtist, "")
+        cleanArtist = cleanArtist.replace(Regex("(?i)\\.(com|dev|org|net|co|in|is|io|ws|me|cc)\\b"), "")
+        cleanArtist = cleanArtist.replace(Regex("(?i)\\[[^\\[\\]]*\\]|\\([^()]*\\)"), "")
+        cleanArtist = cleanArtist.replace(Regex("\\s+"), " ").trim(' ', '-', '_', '.', '|', ':')
+
+        return Pair(
+            if (finalTitle.isNotBlank()) finalTitle else rawTitle.trim(),
+            if (cleanArtist.isNotBlank()) cleanArtist else "Various Artists"
+        )
+    }
+
+    /**
+     * Dictionary of common regional phonetic spelling corrections and variations.
+     */
+    private val canonicalPhoneticReplacements = listOf(
+        Pair(Regex("(?i)\\baniruth\\b"), "Anirudh"),
+        Pair(Regex("(?i)\\billayaraja\\b"), "Ilayaraja"),
+        Pair(Regex("(?i)\\bilyaraja\\b"), "Ilayaraja"),
+        Pair(Regex("(?i)\\billaiyaraaja\\b"), "Ilayaraja"),
+        Pair(Regex("(?i)\\bmazhaye\\b"), "Mazhaiye"),
+        Pair(Regex("(?i)\\bkannazhaga\\b"), "Kanazhaga"),
+        Pair(Regex("(?i)\\barabikuthu\\b"), "Arabic Kuthu"),
+        Pair(Regex("(?i)\\barabic\\s*koothu\\b"), "Arabic Kuthu"),
+        Pair(Regex("(?i)\\bthalaivar\\b"), "Thalaivar"),
+        Pair(Regex("(?i)\\btalaivar\\b"), "Thalaivar"),
+        Pair(Regex("(?i)\\byuvan\\s*shankar\\b"), "Yuvan Shankar Raja"),
+        Pair(Regex("(?i)\\bsid\\s*sreeram\\b"), "Sid Sriram"),
+        Pair(Regex("(?i)\\bshreya\\s*goshal\\b"), "Shreya Ghoshal"),
+        Pair(Regex("(?i)\\bchinmayee\\b"), "Chinmayi"),
+        Pair(Regex("(?i)\\bnaresh\\s*iyer\\b"), "Naresh Iyer"),
+        Pair(Regex("(?i)\\bharrish\\s*jayaraj\\b"), "Harris Jayaraj"),
+        Pair(Regex("(?i)\\bharris\\s*jeyaraj\\b"), "Harris Jayaraj")
+    )
+
+    /**
+     * Analyzes a user search query and generates a canonical "Did you mean" suggestion if a known typo or variant exists.
+     */
+    fun generatePhoneticSuggestions(query: String): String? {
+        val trimmed = query.trim()
+        if (trimmed.length < 3) return null
+
+        var suggested = trimmed
+        var replaced = false
+
+        for ((regex, canonical) in canonicalPhoneticReplacements) {
+            if (regex.containsMatchIn(suggested)) {
+                suggested = regex.replace(suggested, canonical)
+                replaced = true
+            }
+        }
+
+        if (replaced && !suggested.equals(trimmed, ignoreCase = true)) {
+            return suggested
+        }
+
+        // Generic phonetic transformations (e.g. trailing "ye" -> "iye", "zhaye" -> "zhaiye")
+        if (suggested.contains("zhaye", ignoreCase = true)) {
+            return suggested.replace(Regex("(?i)zhaye"), "zhaiye")
+        }
+
+        return null
+    }
+
+    /**
+     * Ranks search candidates using multi-factor phonetic and token similarity against the user query.
+     */
+    fun fuzzyRankSearchResults(query: String, candidates: List<Song>): List<Song> {
+        if (candidates.isEmpty()) return candidates
+        val queryNorm = normalizePhonetics(query)
+        val queryTokens = query.lowercase().split(" ").filter { it.length >= 2 }
+
+        return candidates.sortedByDescending { song ->
+            var score = 0
+
+            val titleNorm = normalizePhonetics(song.title)
+            val artistNorm = normalizePhonetics(song.artist)
+
+            // 1. Direct phonetic exact match or prefix for title
+            if (titleNorm.contains(queryNorm) || queryNorm.contains(titleNorm)) {
+                score += 1000
+            } else {
+                val jaro = jaroWinkler(queryNorm, titleNorm)
+                score += (jaro * 600).toInt()
+            }
+
+            // 2. Direct phonetic exact match or prefix for artist
+            if (artistNorm.contains(queryNorm) || queryNorm.contains(artistNorm)) {
+                score += 900
+            } else {
+                val jaroArtist = jaroWinkler(queryNorm, artistNorm)
+                if (jaroArtist >= 0.70) {
+                    score += (jaroArtist * 500).toInt()
+                }
+            }
+
+            // 3. Token overlap with title & artist
+            val songTitleTokens = song.title.lowercase().split(" ", "(", ")", "-", "_")
+            val songArtistTokens = song.artist.lowercase().split(" ", ",", "&")
+            for (qt in queryTokens) {
+                val qtNorm = normalizePhonetics(qt)
+                if (songTitleTokens.any { normalizePhonetics(it) == qtNorm }) {
+                    score += 250
+                }
+                if (songArtistTokens.any { normalizePhonetics(it) == qtNorm }) {
+                    score += 200
+                }
+            }
+
+            // 4. Title cleanliness bonus (soundtrack/official versions over compilations)
+            if (!song.title.contains("remix", ignoreCase = true) && !song.title.contains("mashup", ignoreCase = true)) {
+                score += 100
+            }
+
+            score
+        }
+    }
 }

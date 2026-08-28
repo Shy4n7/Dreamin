@@ -1381,10 +1381,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun downloadSong(song: Song) {
         if (_uiState.value.downloadingSongIds.contains(song.id)) return
         viewModelScope.launch(Dispatchers.IO) {
+            val (cleanTitle, cleanArtist) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.cleanTrackMetadata(song.title, song.artist)
+            val cleanSong = song.copy(title = cleanTitle, artist = cleanArtist)
             _uiState.update { it.copy(downloadingSongIds = it.downloadingSongIds + song.id) }
             try {
-                val streamUrl = resolveStreamUrl(song)
-                val result = downloadRepo.downloadSong(song, streamUrl)
+                val streamUrl = resolveStreamUrl(cleanSong)
+                val result = downloadRepo.downloadSong(cleanSong, streamUrl)
                 if (result.isFailure) {
                     android.util.Log.e("MusicVM", "Download failed for ${song.title}")
                 }
@@ -1719,6 +1721,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun setSearchQuery(query: String) {
         val trimmed = query.trim()
+        val didYouMean = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(trimmed)
         _uiState.update {
             it.copy(
                 searchQuery = query,
@@ -1726,6 +1729,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 searchPage = 1,
                 hasMoreSearchResults = false,
                 searchError = null,
+                didYouMeanQuery = didYouMean,
                 isSearching = trimmed.isNotEmpty(),
                 searchResults = if (trimmed.isEmpty()) emptyList() else it.searchResults
             )
@@ -1735,12 +1739,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             searchJob = viewModelScope.launch {
                 delay(220)
                 try {
-                    val songs = searchOnDevice(trimmed, page = 1)
+                    var songs = searchOnDevice(trimmed, page = 1)
+                    if (songs.isEmpty() && didYouMean != null) {
+                        val altSongs = searchOnDevice(didYouMean, page = 1)
+                        if (altSongs.isNotEmpty()) {
+                            songs = altSongs
+                        }
+                    }
+                    val rankedSongs = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, songs)
                     if (trimmed.length >= 2) userPrefs.addRecentSearch(trimmed)
                     _uiState.update {
                         it.copy(
-                            searchResults = songs,
-                            hasMoreSearchResults = songs.size >= 15,
+                            searchResults = rankedSongs,
+                            hasMoreSearchResults = rankedSongs.size >= 15,
                             isSearching = false
                         )
                     }
@@ -1752,7 +1763,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
         } else {
-            _uiState.update { it.copy(isSearching = false, searchResults = emptyList()) }
+            _uiState.update { it.copy(isSearching = false, searchResults = emptyList(), didYouMeanQuery = null) }
         }
     }
 
@@ -1764,9 +1775,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             try {
                 val songs = searchOnDevice(state.searchQuery, page = nextPage)
+                val combined = state.searchResults + songs
+                val rankedCombined = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(state.searchQuery, combined)
                 _uiState.update {
                     it.copy(
-                        searchResults = it.searchResults + songs,
+                        searchResults = rankedCombined,
                         searchPage = nextPage,
                         isLoadingMoreSearch = false,
                         hasMoreSearchResults = songs.size >= 15
@@ -1783,7 +1796,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun closeSearch() {
         searchJob?.cancel()
-        _uiState.update { it.copy(searchQuery = "", isSearchActive = false, isSearching = false, searchResults = emptyList()) }
+        _uiState.update { it.copy(searchQuery = "", isSearchActive = false, isSearching = false, searchResults = emptyList(), didYouMeanQuery = null) }
     }
 
     fun clearSearch() {

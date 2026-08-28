@@ -232,7 +232,9 @@ private fun MainAppScaffold(
                             onEditName               = vm::saveUserName,
                             onClearRecentSearches    = vm::clearRecentSearches,
                             onResumeLastSession      = onResumeSession,
-                            searchError              = state.searchError
+                            searchError              = state.searchError,
+                            didYouMeanQuery          = state.didYouMeanQuery,
+                            onApplyDidYouMean        = vm::setSearchQuery
                         )
                     }
                 }
