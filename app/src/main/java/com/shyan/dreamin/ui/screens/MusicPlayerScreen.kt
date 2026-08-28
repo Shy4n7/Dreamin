@@ -358,17 +358,17 @@ private fun MainAppScaffold(
         AnimatedVisibility(
             visible = openPlaylist != null,
             enter = scaleIn(
-                initialScale = 0.93f,
+                initialScale = 0.95f,
                 animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.82f,
+                    stiffness = Spring.StiffnessMedium
                 )
             ) + slideInVertically(
                 animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.82f,
+                    stiffness = Spring.StiffnessMedium
                 )
-            ) { 70 } + fadeIn(tween(200)),
+            ) { 45 } + fadeIn(tween(140)),
             exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { 50 },
             modifier = Modifier.fillMaxSize()
         ) {

@@ -317,17 +317,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         openPlaylistJob = viewModelScope.launch {
             playlistRepo.observeSongs(playlistId).collect { songs ->
                 _uiState.update { it.copy(openPlaylistSongs = songs) }
-                // Proactively resolve official movie posters in background
-                songs.forEach { song ->
-                    launch(Dispatchers.IO) {
-                        try {
-                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                            if (!official.isNullOrBlank() && official != song.artworkUrl) {
-                                updateSongArtworkAcrossApp(song.id, official)
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
             }
         }
     }
