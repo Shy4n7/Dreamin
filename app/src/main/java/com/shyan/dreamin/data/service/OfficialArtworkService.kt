@@ -43,7 +43,7 @@ object OfficialArtworkService {
 
     /**
      * Dynamically fetches the 100% official original movie soundtrack poster
-     * directly from official movie catalogs.
+     * directly from official movie catalogs matching the song's language and DNA.
      */
     suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = "tamil"): String? = withContext(Dispatchers.IO) {
         getCachedPoster(song)?.let { return@withContext it }
@@ -51,10 +51,21 @@ object OfficialArtworkService {
         val cacheKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
         val titleKey = song.displayTitle.lowercase().trim()
 
-        // 1. Tier-1: Query Apple Music Official Movie Soundtrack Catalog (Highest Quality 1000x1000 Official Theatrical Covers)
-        val cleanTitle = song.displayTitle.replace(Regex("""\s*[\(\[].*?[\)\]]\s*$"""), "").trim()
+        val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(song.displayTitle)
+        val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else fullClean
         val primaryArtist = song.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-        val applePoster = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, targetLanguage)
+
+        // Context-aware language inference for regional soundtrack accuracy
+        val detectedLang = when {
+            song.title.contains("tamil", ignoreCase = true) || song.artist.contains("anirudh", ignoreCase = true) || song.artist.contains("rahman", ignoreCase = true) || song.artist.contains("yuvan", ignoreCase = true) || song.artist.contains("ilayaraja", ignoreCase = true) || song.artist.contains("harris", ignoreCase = true) || song.artist.contains("santhosh", ignoreCase = true) || song.artist.contains("g.v.", ignoreCase = true) || song.artist.contains("gv prakash", ignoreCase = true) || song.artist.contains("sid sriram", ignoreCase = true) || song.artist.contains("dhibu", ignoreCase = true) -> "tamil"
+            song.title.contains("telugu", ignoreCase = true) || song.artist.contains("thaman", ignoreCase = true) || song.artist.contains("devi sri prasad", ignoreCase = true) || song.artist.contains("dsp", ignoreCase = true) || song.artist.contains("keeravani", ignoreCase = true) || song.artist.contains("anurag kulkarni", ignoreCase = true) -> "telugu"
+            song.title.contains("malayalam", ignoreCase = true) || song.artist.contains("sushin shyam", ignoreCase = true) || song.artist.contains("shaan rahman", ignoreCase = true) || song.artist.contains("hesham", ignoreCase = true) || song.artist.contains("gopi sundar", ignoreCase = true) || song.artist.contains("vidyasagar", ignoreCase = true) -> "malayalam"
+            song.title.contains("hindi", ignoreCase = true) || song.artist.contains("arijit", ignoreCase = true) || song.artist.contains("pritam", ignoreCase = true) || song.artist.contains("vishal", ignoreCase = true) || song.artist.contains("shekhar", ignoreCase = true) || song.artist.contains("atif", ignoreCase = true) || song.artist.contains("badshah", ignoreCase = true) -> "hindi"
+            else -> targetLanguage
+        }
+
+        // 1. Tier-1: Query Apple Music Official Movie Soundtrack Catalog (1000x1000 Official Theatrical Covers)
+        val applePoster = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, detectedLang)
         if (!applePoster.isNullOrBlank()) {
             artworkCache.put(cacheKey, applePoster)
             artworkCache.put(titleKey, applePoster)
@@ -74,7 +85,7 @@ object OfficialArtworkService {
 
         // 3. Query JioSaavn Official Movie Album API if movie name is identified
         if (movieName.isNotBlank()) {
-            val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, targetLanguage)
+            val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
             if (!albumPoster.isNullOrBlank()) {
                 artworkCache.put(cacheKey, albumPoster)
                 artworkCache.put(titleKey, albumPoster)
@@ -84,12 +95,25 @@ object OfficialArtworkService {
         }
 
         // 4. Query JioSaavn Official Song Catalog with strict title & movie soundtrack prioritization
-        val songPoster = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, targetLanguage)
+        val songPoster = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
         if (!songPoster.isNullOrBlank()) {
             artworkCache.put(cacheKey, songPoster)
             artworkCache.put(titleKey, songPoster)
             if (song.id.isNotBlank()) artworkCache.put(song.id, songPoster)
             return@withContext songPoster
+        }
+
+        // 5. Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye")
+        val phoneticAlt = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(cleanTitle)
+        if (!phoneticAlt.isNullOrBlank()) {
+            val altPoster = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
+                ?: fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
+            if (!altPoster.isNullOrBlank()) {
+                artworkCache.put(cacheKey, altPoster)
+                artworkCache.put(titleKey, altPoster)
+                if (song.id.isNotBlank()) artworkCache.put(song.id, altPoster)
+                return@withContext altPoster
+            }
         }
 
         null
@@ -106,7 +130,8 @@ object OfficialArtworkService {
 
     private fun fetchAppleMusicOfficialCover(title: String, artist: String, targetLanguage: String): String? {
         try {
-            val cleanTitle = title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+            val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(title)
+            val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else title
             val cleanArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
             val q = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else "$cleanTitle $langHint"
@@ -122,7 +147,7 @@ object OfficialArtworkService {
             if (results != null && results.length() > 0) {
                 var bestCover: String? = null
                 var bestScore = Int.MIN_VALUE
-                val cleanQueryTitle = cleanTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
+                val queryNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(cleanTitle)
 
                 for (i in 0 until results.length()) {
                     val it = results.getJSONObject(i)
@@ -132,13 +157,12 @@ object OfficialArtworkService {
 
                     if (rawArtwork.isBlank()) continue
 
-                    val cleanTrackName = trackName.lowercase().replace(Regex("[^a-z0-9]"), "")
-                    val isExactMatch = cleanTrackName == cleanQueryTitle
-                    val isContained = cleanTrackName.contains(cleanQueryTitle) || cleanQueryTitle.contains(cleanTrackName)
-                    if (!isContained) continue
+                    val trackNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(trackName)
+                    val isPhoneticMatch = trackNorm.contains(queryNorm) || queryNorm.contains(trackNorm)
+                    val jaro = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(queryNorm, trackNorm)
+                    if (!isPhoneticMatch && jaro < 0.75) continue
 
-                    var score = 0
-                    if (isExactMatch) score += 6000 else score += 2000
+                    var score = (jaro * 5000).toInt()
 
                     val isCompilation = COMPILATION_REGEX.containsMatchIn(collectionName)
                     if (isCompilation) {
