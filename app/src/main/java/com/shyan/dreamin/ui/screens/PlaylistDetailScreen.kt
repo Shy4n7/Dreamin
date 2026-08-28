@@ -808,7 +808,7 @@ fun PlaylistDetailScreen(
                                 isPlaying = playingId == song.id,
                                 modifier = Modifier
                                     .animateItem()
-                                    .staggeredEntry(idx),
+                                    .continuousScrollSpring(listState, idx),
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
                                 onClick = { onSongClick(song) },

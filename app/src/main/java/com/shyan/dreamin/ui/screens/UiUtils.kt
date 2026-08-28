@@ -215,11 +215,53 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 24, maxStaggerItems: Int = 16): Modifier {
-    if (index >= maxStaggerItems) return this
-    val animState = remember { Animatable(0f) }
+fun Modifier.continuousScrollSpring(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    index: Int
+): Modifier {
+    val animState = remember { Animatable(0.88f) }
     LaunchedEffect(Unit) {
-        val staggerDelay = (index * baseDelayMs).toLong()
+        animState.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = 0.75f,
+                stiffness = Spring.StiffnessMediumLow
+            )
+        )
+    }
+
+    return this.graphicsLayer {
+        val entryProgress = animState.value
+        val layoutInfo = listState.layoutInfo
+        val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+
+        var scrollScale = 1f
+        var scrollAlpha = 1f
+        val scrollTranslationY = (1f - entryProgress) * 20.dp.toPx()
+
+        if (visibleItem != null) {
+            val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat().coerceAtLeast(1f)
+            val itemCenter = visibleItem.offset + (visibleItem.size / 2f)
+            val distFromTop = (itemCenter / (viewportHeight * 0.18f)).coerceIn(0f, 1f)
+            val distFromBottom = ((viewportHeight - itemCenter) / (viewportHeight * 0.18f)).coerceIn(0f, 1f)
+            val edgeFactor = minOf(distFromTop, distFromBottom)
+
+            scrollScale = 0.95f + (0.05f * edgeFactor)
+            scrollAlpha = 0.75f + (0.25f * edgeFactor)
+        }
+
+        scaleX = entryProgress * scrollScale
+        scaleY = entryProgress * scrollScale
+        alpha = entryProgress * scrollAlpha
+        translationY = scrollTranslationY
+    }
+}
+
+@Composable
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 20, maxStaggerItems: Int = 100): Modifier {
+    val animState = remember { Animatable(0.85f) }
+    LaunchedEffect(Unit) {
+        val staggerDelay = ((index % 12) * baseDelayMs).toLong()
         if (staggerDelay > 0) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
@@ -231,10 +273,10 @@ fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 24, maxStaggerItems: 
     }
     return this.graphicsLayer {
         val p = animState.value
-        alpha = p
-        translationY = (1f - p) * 32f
-        scaleX = 0.94f + (0.06f * p)
-        scaleY = 0.94f + (0.06f * p)
+        alpha = ((p - 0.85f) / 0.15f).coerceIn(0f, 1f)
+        translationY = (1f - p) * 36f
+        scaleX = p
+        scaleY = p
     }
 }
 
