@@ -60,6 +60,21 @@ class OfficialArtworkServiceTest {
     }
 
     @Test
+    fun testMalarePremamTheatricalPosterResolution() = runBlocking {
+        val song = Song(
+            id = "malare_premam_test",
+            title = "Malare",
+            artist = "Vijay Yesudas, Rajesh Murugesan",
+            artworkUrl = ""
+        )
+
+        val poster = OfficialArtworkService.resolveOfficialMoviePoster(song)
+        assertNotNull("Poster should be resolved", poster)
+        assertTrue("Poster should not be blank", poster!!.isNotBlank())
+        assertFalse("Poster should reject Power dubbed album", poster.contains("Power", ignoreCase = true))
+    }
+
+    @Test
     fun testMalareKarnaTheatricalPosterResolution() = runBlocking {
         val song = Song(
             id = "malare_karna_test",
