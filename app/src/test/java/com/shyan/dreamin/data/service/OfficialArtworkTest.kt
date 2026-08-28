@@ -52,4 +52,17 @@ class OfficialArtworkTest {
         assertNotNull(resolved)
         assertTrue(resolved!!.isNotBlank())
     }
+
+    @Test
+    fun testOruNaalaikkulResolvesYaaradiNeeMohini() = runBlocking {
+        val song = Song(
+            id = "test_4",
+            title = "Oru Naalaikkul",
+            artist = "Yuvan Shankar Raja, Karthik, Rita",
+            artworkUrl = "https://c.saavncdn.com/test_take_10.jpg"
+        )
+        val resolved = OfficialArtworkService.resolveOfficialMoviePoster(song, "tamil")
+        assertNotNull(resolved)
+        assertTrue(resolved!!.isNotBlank())
+    }
 }

@@ -27,7 +27,8 @@ object OfficialArtworkService {
         "memoirs|love story|love stories|valentines|valentine|romantic hits|love collection|love mix|" +
         "romance mix|love songs|super singer|rockstar|the girlfriend mix|the first love tapes|this is kaadhal|" +
         "latest evergreen melody|mazhai & kaadhal|dhanush dhamaka|endrendrum|pure love|sweet romance|evergreen love|" +
-        "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits)\\b"
+        "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits|" +
+        "take\\s*\\d+|take\\d+|masterworks|hits of\\s+[a-z]+|[a-z]+\\s+hits)\\b"
     )
 
     private val KNOWN_LYRICISTS = setOf(
@@ -226,6 +227,16 @@ object OfficialArtworkService {
                         score += 15000
                     }
 
+                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
+                    val movieFromTrack = Regex("(?i)from\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*[\\)\\]]").find(trackName)?.groupValues?.get(1)?.trim()
+                    if (!movieFromTrack.isNullOrBlank()) {
+                        if (collectionName.contains(movieFromTrack, ignoreCase = true)) {
+                            score += 35000 // Verified Authentic Theatrical Movie Album
+                        } else {
+                            score -= 30000 // Repackaged into compilation/playlist
+                        }
+                    }
+
                     if (score > bestScore) {
                         bestScore = score
                         bestCover = rawArtwork.replace("100x100bb.jpg", "1000x1000bb.jpg")
@@ -360,6 +371,16 @@ object OfficialArtworkService {
                         textCombined.contains("- $targetLanguage")
                     ) {
                         score += 15000
+                    }
+
+                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
+                    val movieFromTrack = Regex("(?i)from\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*[\\)\\]]").find(resTitle)?.groupValues?.get(1)?.trim()
+                    if (!movieFromTrack.isNullOrBlank()) {
+                        if (alb.contains(movieFromTrack, ignoreCase = true)) {
+                            score += 35000 // Verified Authentic Theatrical Movie Album
+                        } else {
+                            score -= 30000 // Repackaged into compilation/playlist
+                        }
                     }
 
                     if (score > bestScore) {
