@@ -1303,7 +1303,8 @@ fun SpotifyPlaylistPill(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(playlist.coverUrl)
-                    .crossfade(true)
+                    .size(coil.size.Size(160, 160))
+                    .crossfade(150)
                     .build(),
                 contentDescription = playlist.name,
                 contentScale = ContentScale.Crop,

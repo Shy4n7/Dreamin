@@ -74,6 +74,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
     private val paletteColorCache = android.util.LruCache<String, Triple<Int, Int, Int>>(100)
+    @Volatile
+    private var isScreenInteractive: Boolean = true
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -82,6 +84,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 MusicService.ACTION_PLAY_PREVIOUS -> playPrevious()
                 MusicService.ACTION_TOGGLE_FAVORITE -> _uiState.value.currentSong?.let { toggleFavoriteFor(it) }
                 MusicService.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
+                android.content.Intent.ACTION_SCREEN_OFF -> isScreenInteractive = false
+                android.content.Intent.ACTION_SCREEN_ON -> isScreenInteractive = true
             }
         }
     }
@@ -130,6 +134,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             addAction(MusicService.ACTION_PLAY_PREVIOUS)
             addAction(MusicService.ACTION_TOGGLE_FAVORITE)
             addAction(MusicService.ACTION_TOGGLE_SHUFFLE)
+            addAction(android.content.Intent.ACTION_SCREEN_OFF)
+            addAction(android.content.Intent.ACTION_SCREEN_ON)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             context,
@@ -836,7 +842,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             var saveCounter = 0
             while (isActive) {
-                delay(100)
+                val pollDelay = if (isScreenInteractive) 100L else 2000L
+                delay(pollDelay)
                 val c = controller ?: continue
                 if (!c.isPlaying) continue
                 val pos = c.currentPosition.coerceAtLeast(0L)
@@ -855,7 +862,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
 
-                saveCounter++
+                saveCounter += if (isScreenInteractive) 1 else 20
                 if (saveCounter >= 100) {
                     saveCounter = 0
                     _uiState.value.currentSong?.let { song ->
