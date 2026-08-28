@@ -45,7 +45,7 @@ object OfficialArtworkService {
      * Dynamically fetches the 100% official original movie soundtrack poster
      * directly from official movie catalogs.
      */
-    suspend fun resolveOfficialMoviePoster(song: Song): String? = withContext(Dispatchers.IO) {
+    suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = "tamil"): String? = withContext(Dispatchers.IO) {
         getCachedPoster(song)?.let { return@withContext it }
 
         val cacheKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
@@ -54,7 +54,7 @@ object OfficialArtworkService {
         // 1. Tier-1: Query Apple Music Official Movie Soundtrack Catalog (Highest Quality 1000x1000 Official Theatrical Covers)
         val cleanTitle = song.displayTitle.replace(Regex("""\s*[\(\[].*?[\)\]]\s*$"""), "").trim()
         val primaryArtist = song.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-        val applePoster = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist)
+        val applePoster = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, targetLanguage)
         if (!applePoster.isNullOrBlank()) {
             artworkCache.put(cacheKey, applePoster)
             artworkCache.put(titleKey, applePoster)
@@ -74,7 +74,7 @@ object OfficialArtworkService {
 
         // 3. Query JioSaavn Official Movie Album API if movie name is identified
         if (movieName.isNotBlank()) {
-            val albumPoster = fetchJioSaavnMovieAlbumCover(movieName)
+            val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, targetLanguage)
             if (!albumPoster.isNullOrBlank()) {
                 artworkCache.put(cacheKey, albumPoster)
                 artworkCache.put(titleKey, albumPoster)
@@ -84,7 +84,7 @@ object OfficialArtworkService {
         }
 
         // 4. Query JioSaavn Official Song Catalog with strict title & movie soundtrack prioritization
-        val songPoster = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName)
+        val songPoster = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, targetLanguage)
         if (!songPoster.isNullOrBlank()) {
             artworkCache.put(cacheKey, songPoster)
             artworkCache.put(titleKey, songPoster)
@@ -104,11 +104,12 @@ object OfficialArtworkService {
             .replace("&gt;", ">")
     }
 
-    private fun fetchAppleMusicOfficialCover(title: String, artist: String): String? {
+    private fun fetchAppleMusicOfficialCover(title: String, artist: String, targetLanguage: String): String? {
         try {
             val cleanTitle = title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
             val cleanArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-            val q = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else "$cleanTitle Tamil"
+            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
+            val q = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else "$cleanTitle $langHint"
             val encoded = URLEncoder.encode(q, "UTF-8")
             val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&country=IN&limit=10"
             val req = okhttp3.Request.Builder()
@@ -149,6 +150,26 @@ object OfficialArtworkService {
                         }
                     }
 
+                    // Language Affinity Guard (prevents picking Telugu/Hindi dub posters when Tamil is intended)
+                    val textCombined = "$trackName $collectionName".lowercase()
+                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
+                        .filter { it != targetLanguage.lowercase() }
+                    for (other in otherLangs) {
+                        if (textCombined.contains("($other)") || 
+                            textCombined.contains("[$other]") || 
+                            textCombined.contains("- $other") || 
+                            textCombined.contains("from \"$other\"")
+                        ) {
+                            score -= 25000
+                        }
+                    }
+                    if (textCombined.contains("($targetLanguage)") || 
+                        textCombined.contains("[$targetLanguage]") || 
+                        textCombined.contains("- $targetLanguage")
+                    ) {
+                        score += 15000
+                    }
+
                     if (score > bestScore) {
                         bestScore = score
                         bestCover = rawArtwork.replace("100x100bb.jpg", "1000x1000bb.jpg")
@@ -161,9 +182,10 @@ object OfficialArtworkService {
         return null
     }
 
-    private fun fetchJioSaavnMovieAlbumCover(movieName: String): String? {
+    private fun fetchJioSaavnMovieAlbumCover(movieName: String, targetLanguage: String): String? {
         try {
-            val encoded = URLEncoder.encode("$movieName Tamil", "UTF-8")
+            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
+            val encoded = URLEncoder.encode("$movieName $langHint", "UTF-8")
             val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=5&p=1"
             val req = okhttp3.Request.Builder()
                 .url(urlStr)
@@ -182,7 +204,13 @@ object OfficialArtworkService {
                     val isCompilation = COMPILATION_REGEX.containsMatchIn(albTitle)
                     val isEditorial = albImage.contains("/editorial/") || albImage.contains("/playlist/") || albImage.contains("default")
 
-                    if (albImage.isNotBlank() && !isCompilation && !isEditorial) {
+                    // Language check on album title
+                    val albLower = albTitle.lowercase()
+                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
+                        .filter { it != targetLanguage.lowercase() }
+                    val isOtherLang = otherLangs.any { albLower.contains("($it)") || albLower.contains("[$it]") }
+
+                    if (albImage.isNotBlank() && !isCompilation && !isEditorial && !isOtherLang) {
                         return toHighResCover(albImage)
                     }
                 }
@@ -193,9 +221,15 @@ object OfficialArtworkService {
         return null
     }
 
-    private fun fetchJioSaavnSongOfficialCover(title: String, artist: String, movieHint: String): String? {
+    private fun fetchJioSaavnSongOfficialCover(
+        title: String, 
+        artist: String, 
+        movieHint: String, 
+        targetLanguage: String
+    ): String? {
         try {
-            val q = if (artist.isNotBlank()) "$title $artist" else "$title tamil"
+            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
+            val q = if (artist.isNotBlank()) "$title $artist" else "$title $langHint"
             val encoded = URLEncoder.encode(q, "UTF-8")
             val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=12&p=1"
             val req = okhttp3.Request.Builder()
@@ -245,6 +279,25 @@ object OfficialArtworkService {
                         if (alb.contains("Soundtrack", ignoreCase = true) || alb.contains("Original Motion Picture", ignoreCase = true)) {
                             score += 8000
                         }
+                    }
+
+                    // Language Affinity Guard
+                    val textCombined = "$resTitle $alb".lowercase()
+                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
+                        .filter { it != targetLanguage.lowercase() }
+                    for (other in otherLangs) {
+                        if (textCombined.contains("($other)") || 
+                            textCombined.contains("[$other]") || 
+                            textCombined.contains("- $other")
+                        ) {
+                            score -= 25000
+                        }
+                    }
+                    if (textCombined.contains("($targetLanguage)") || 
+                        textCombined.contains("[$targetLanguage]") || 
+                        textCombined.contains("- $targetLanguage")
+                    ) {
+                        score += 15000
                     }
 
                     if (score > bestScore) {
