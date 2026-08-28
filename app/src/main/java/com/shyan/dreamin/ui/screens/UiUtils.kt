@@ -38,8 +38,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
@@ -215,46 +216,38 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.continuousScrollSpring(
-    listState: androidx.compose.foundation.lazy.LazyListState,
-    index: Int
-): Modifier {
-    val animState = remember { Animatable(0.88f) }
-    LaunchedEffect(Unit) {
-        animState.animateTo(
-            targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = 0.75f,
-                stiffness = Spring.StiffnessMediumLow
-            )
-        )
-    }
+fun Modifier.realtimeScrollSpring(): Modifier {
+    var itemYInRoot by remember { mutableFloatStateOf(1000f) }
+    var itemHeight by remember { mutableFloatStateOf(160f) }
 
-    return this.graphicsLayer {
-        val entryProgress = animState.value
-        val layoutInfo = listState.layoutInfo
-        val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-
-        var scrollScale = 1f
-        var scrollAlpha = 1f
-        val scrollTranslationY = (1f - entryProgress) * 20.dp.toPx()
-
-        if (visibleItem != null) {
-            val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat().coerceAtLeast(1f)
-            val itemCenter = visibleItem.offset + (visibleItem.size / 2f)
-            val distFromTop = (itemCenter / (viewportHeight * 0.18f)).coerceIn(0f, 1f)
-            val distFromBottom = ((viewportHeight - itemCenter) / (viewportHeight * 0.18f)).coerceIn(0f, 1f)
-            val edgeFactor = minOf(distFromTop, distFromBottom)
-
-            scrollScale = 0.95f + (0.05f * edgeFactor)
-            scrollAlpha = 0.75f + (0.25f * edgeFactor)
+    return this
+        .onGloballyPositioned { coordinates ->
+            val pos = coordinates.positionInRoot()
+            itemYInRoot = pos.y
+            itemHeight = coordinates.size.height.toFloat()
         }
+        .graphicsLayer {
+            val screenHeight = 2400f
+            val topEdgeZone = 280f
+            val bottomEdgeZone = 380f
 
-        scaleX = entryProgress * scrollScale
-        scaleY = entryProgress * scrollScale
-        alpha = entryProgress * scrollAlpha
-        translationY = scrollTranslationY
-    }
+            val topDist = itemYInRoot.coerceAtLeast(0f)
+            val bottomDist = (screenHeight - (itemYInRoot + itemHeight)).coerceAtLeast(0f)
+
+            val topFactor = (topDist / topEdgeZone).coerceIn(0.88f, 1f)
+            val bottomFactor = (bottomDist / bottomEdgeZone).coerceIn(0.88f, 1f)
+            val springScale = minOf(topFactor, bottomFactor)
+
+            val alphaFactor = minOf(
+                (topDist / (topEdgeZone * 0.7f)).coerceIn(0.35f, 1f),
+                (bottomDist / (bottomEdgeZone * 0.7f)).coerceIn(0.35f, 1f)
+            )
+
+            scaleX = springScale
+            scaleY = springScale
+            alpha = alphaFactor
+            translationY = if (topDist < topEdgeZone) (1f - topFactor) * 20f else if (bottomDist < bottomEdgeZone) -(1f - bottomFactor) * 20f else 0f
+        }
 }
 
 @Composable
