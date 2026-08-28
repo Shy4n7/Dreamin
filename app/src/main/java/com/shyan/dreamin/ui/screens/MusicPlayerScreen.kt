@@ -150,14 +150,19 @@ private fun MainAppScaffold(
 
     val isDetailScreenOpen = state.openPlaylistId != null || state.selectedArtistProfile != null
     val backgroundRecoilScale by animateFloatAsState(
-        targetValue = if (isDetailScreenOpen) 0.965f else 1f,
-        animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow),
+        targetValue = if (isDetailScreenOpen) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
         label = "bg_recoil_scale"
     )
     val backgroundRecoilAlpha by animateFloatAsState(
-        targetValue = if (isDetailScreenOpen) 0.88f else 1f,
-        animationSpec = tween(220),
+        targetValue = if (isDetailScreenOpen) 0.85f else 1f,
+        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
         label = "bg_recoil_alpha"
+    )
+    val backgroundRecoilY by animateFloatAsState(
+        targetValue = if (isDetailScreenOpen) 36f else 0f,
+        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
+        label = "bg_recoil_y"
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -168,6 +173,7 @@ private fun MainAppScaffold(
                 .graphicsLayer {
                     scaleX = backgroundRecoilScale
                     scaleY = backgroundRecoilScale
+                    translationY = backgroundRecoilY
                     alpha = backgroundRecoilAlpha
                 },
             bottomBar = {
@@ -342,17 +348,17 @@ private fun MainAppScaffold(
                 )
             ) { 70 } + fadeIn(tween(200)),
             exit = scaleOut(
-                targetScale = 0.94f,
+                targetScale = 0.93f,
                 animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = Spring.StiffnessMedium
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
                 )
             ) + slideOutVertically(
                 animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = Spring.StiffnessMedium
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
                 )
-            ) { 60 } + fadeOut(tween(160)),
+            ) { 70 } + fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize()
         ) {
             val profile = state.selectedArtistProfile
@@ -389,17 +395,17 @@ private fun MainAppScaffold(
                 )
             ) { 70 } + fadeIn(tween(200)),
             exit = scaleOut(
-                targetScale = 0.94f,
+                targetScale = 0.93f,
                 animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = Spring.StiffnessMedium
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
                 )
             ) + slideOutVertically(
                 animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = Spring.StiffnessMedium
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
                 )
-            ) { 60 } + fadeOut(tween(160)),
+            ) { 70 } + fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize()
         ) {
             if (openPlaylist != null) {
