@@ -143,6 +143,30 @@ fun LibraryScreen(
     val tabPagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
 
+    val isPlaylistOpen = state.openPlaylistId != null
+    var wasPlaylistOpen by remember { mutableStateOf(false) }
+    var returnSpringKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(isPlaylistOpen) {
+        if (wasPlaylistOpen && !isPlaylistOpen) {
+            returnSpringKey++
+        }
+        wasPlaylistOpen = isPlaylistOpen
+    }
+
+    val returnSpringAnim = remember(returnSpringKey) { Animatable(if (returnSpringKey > 0) 0f else 1f) }
+    LaunchedEffect(returnSpringKey) {
+        if (returnSpringKey > 0) {
+            returnSpringAnim.snapTo(0f)
+            returnSpringAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.76f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
+
     CompositionLocalProvider(LocalPlaylists provides state.playlists) {
 
     Column(
@@ -150,6 +174,13 @@ fun LibraryScreen(
             .fillMaxSize()
             .background(colors.background)
             .statusBarsPadding()
+            .graphicsLayer {
+                val progress = returnSpringAnim.value
+                scaleX = 0.94f + 0.06f * progress
+                scaleY = 0.94f + 0.06f * progress
+                translationY = (1f - progress) * 45f
+                alpha = (progress * 1.4f).coerceIn(0f, 1f)
+            }
     ) {
 
         Text(
