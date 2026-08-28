@@ -584,7 +584,7 @@ fun QueueScreen(
             if (state.queue.isNotEmpty()) {
                 IconButton(onClick = { showSaveDialog = true }) {
                     Icon(
-                        Icons.Outlined.PlaylistAdd,
+                        Icons.AutoMirrored.Outlined.PlaylistAdd,
                         contentDescription = "Save queue as playlist",
                         tint = colors.primary,
                         modifier = Modifier.size(28.dp)
@@ -709,15 +709,46 @@ fun QueueScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp)
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
         ) { data ->
-            Snackbar(
-                snackbarData = data,
-                containerColor = colors.surfaceHighest,
-                contentColor = colors.onSurface,
-                actionColor = colors.primary,
-                shape = RoundedCornerShape(14.dp)
-            )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF13111C).copy(alpha = 0.95f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                shadowElevation = 14.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = data.visuals.message,
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    data.visuals.actionLabel?.let { actionLabel ->
+                        TextButton(
+                            onClick = { data.performAction() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = colors.primary)
+                        ) {
+                            Text(
+                                text = actionLabel.uppercase(),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -736,7 +767,11 @@ fun QueueSongRow(
     onHeightMeasured: (Float) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val swipeOffset = remember(song.id) { Animatable(0f) }
+    val swipeThreshold = 100f
+    val scope = rememberCoroutineScope()
+    val onRemoveRef = rememberUpdatedState(onRemove)
+
     val elevation by animateDpAsState(
         targetValue = if (isDragging) 16.dp else 0.dp,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
@@ -748,7 +783,8 @@ fun QueueSongRow(
         label = "drag_scale"
     )
 
-    Row(
+    val rowShape = RoundedCornerShape(16.dp)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .offset { IntOffset(0, dragOffsetY.toInt()) }
@@ -758,87 +794,149 @@ fun QueueSongRow(
                 scaleX = scale
                 scaleY = scale
                 shadowElevation = elevation.toPx()
-                shape = RoundedCornerShape(16.dp)
+                shape = rowShape
                 clip = false
             }
-            .border(
-                width = if (isDragging) 1.5.dp else 0.dp,
-                brush = if (isDragging) Brush.horizontalGradient(listOf(colors.primary, colors.secondary)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)),
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = colors.primary)
-            ) { onClick() }
-            .background(
-                if (isDragging) colors.surfaceHighest.copy(alpha = 0.95f)
-                else if (isPlaying) colors.surfaceHigh
-                else Color.Transparent,
-                RoundedCornerShape(16.dp)
-            )
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = Icons.Outlined.DragHandle,
-            contentDescription = "Drag to reorder ${song.displayTitle}",
-            tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier
-                .size(20.dp)
-                .pointerInput(Unit) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onDragStart()
-                        },
-                        onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
-                        onDragEnd = { onDragEnd() },
-                        onDragCancel = { onDragEnd() }
+        // Glowing red remove backdrop on swipe left
+        val swipeVal = swipeOffset.value
+        if (swipeVal < 0f) {
+            val progress = (-swipeVal / swipeThreshold).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(rowShape)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0xFFEF4444).copy(alpha = 0.7f),
+                                Color(0xFFDC2626).copy(alpha = 0.9f)
+                            )
+                        )
                     )
+                    .padding(end = 16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = 0.6f + 0.4f * progress
+                        scaleY = 0.6f + 0.4f * progress
+                        alpha = progress
+                    }
+                ) {
+                    Text("REMOVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(18.dp))
                 }
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(song.displayArtworkUrl)
-                .crossfade(200)
-                .build(),
-            contentDescription = "Artwork for ${song.displayTitle}",
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(16.dp)),
-            contentScale = ContentScale.Crop
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                song.displayTitle,
-                color = if (isPlaying) colors.primary else colors.onSurface,
-                fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 15.sp
-            )
-            Text(
-                song.artist,
-                color = colors.onSurfaceVariant,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            }
         }
 
-        IconButton(onClick = onRemove) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val captured = swipeOffset.value
+                            scope.launch { swipeOffset.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                            if (captured < -swipeThreshold) {
+                                onRemoveRef.value()
+                            }
+                        },
+                        onDragCancel = {
+                            scope.launch { swipeOffset.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            if (dragAmount < 0f || swipeOffset.value < 0f) {
+                                val next = (swipeOffset.value + dragAmount).coerceIn(-180f, 0f)
+                                if (next < 0f || swipeOffset.value < 0f) {
+                                    change.consume()
+                                    scope.launch { swipeOffset.snapTo(next) }
+                                }
+                            }
+                        }
+                    )
+                }
+                .graphicsLayer { translationX = swipeOffset.value }
+                .clip(rowShape)
+                .border(
+                    width = if (isDragging) 1.5.dp else 0.dp,
+                    brush = if (isDragging) Brush.horizontalGradient(listOf(colors.primary, colors.secondary)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)),
+                    shape = rowShape
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(bounded = true, color = colors.primary)
+                ) { onClick() }
+                .background(
+                    if (isDragging) colors.surfaceHighest.copy(alpha = 0.95f)
+                    else if (isPlaying) colors.surfaceHigh
+                    else Color.Transparent,
+                    rowShape
+                )
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
-                Icons.Outlined.RemoveCircleOutline,
-                contentDescription = "Remove ${song.displayTitle} from queue",
-                tint = colors.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
+                imageVector = Icons.Outlined.DragHandle,
+                contentDescription = "Drag to reorder ${song.displayTitle}",
+                tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .size(20.dp)
+                    .pointerInput(Unit) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { onDragStart() },
+                            onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() }
+                        )
+                    }
             )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(song.displayArtworkUrl)
+                    .crossfade(200)
+                    .build(),
+                contentDescription = "Artwork for ${song.displayTitle}",
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Crop
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    song.displayTitle,
+                    color = if (isPlaying) colors.primary else colors.onSurface,
+                    fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 15.sp
+                )
+                Text(
+                    song.artist,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Outlined.RemoveCircleOutline,
+                    contentDescription = "Remove ${song.displayTitle} from queue",
+                    tint = colors.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
