@@ -216,10 +216,10 @@ fun DreaminRippleTheme(
 }
 
 @Composable
-fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 12): Modifier {
+fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: Int = 12, triggerKey: Any? = Unit): Modifier {
     if (index >= maxStaggerItems) return this
-    val animState = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
+    val animState = remember(triggerKey) { Animatable(0f) }
+    LaunchedEffect(triggerKey) {
         val staggerDelay = (index.coerceAtMost(maxStaggerItems) * baseDelayMs).toLong()
         if (staggerDelay > 0L) delay(staggerDelay)
         animState.animateTo(

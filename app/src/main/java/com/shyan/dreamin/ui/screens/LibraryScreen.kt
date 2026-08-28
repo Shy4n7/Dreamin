@@ -153,20 +153,6 @@ fun LibraryScreen(
         wasPlaylistOpen = isPlaylistOpen
     }
 
-    val returnSpringAnim = remember(returnSpringKey) { Animatable(if (returnSpringKey > 0) 0f else 1f) }
-    LaunchedEffect(returnSpringKey) {
-        if (returnSpringKey > 0) {
-            returnSpringAnim.snapTo(0f)
-            returnSpringAnim.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            )
-        }
-    }
-
     CompositionLocalProvider(LocalPlaylists provides state.playlists) {
 
     Column(
@@ -174,13 +160,6 @@ fun LibraryScreen(
             .fillMaxSize()
             .background(colors.background)
             .statusBarsPadding()
-            .graphicsLayer {
-                val progress = returnSpringAnim.value
-                scaleX = 0.94f + 0.06f * progress
-                scaleY = 0.94f + 0.06f * progress
-                translationY = (1f - progress) * 45f
-                alpha = (progress * 1.4f).coerceIn(0f, 1f)
-            }
     ) {
 
         Text(
@@ -243,20 +222,23 @@ fun LibraryScreen(
                         onImportSpotify = onImportSpotifyPlaylist,
                         onResetSpotifyImport = onResetSpotifyImportState,
                         onSearchOnline = onSearchOnline,
-                        onAddSuggestedTrack = onAddSuggestedTrack
+                        onAddSuggestedTrack = onAddSuggestedTrack,
+                        triggerKey = returnSpringKey
                     )
                     1 -> FavoritesTab(
                         favorites = state.favorites,
                         currentSong = state.currentSong,
                         onSongClick = onSongClick,
-                        onAddToPlaylist = onAddToPlaylist
+                        onAddToPlaylist = onAddToPlaylist,
+                        triggerKey = returnSpringKey
                     )
                     else -> DownloadsTab(
                         downloadedSongs = state.downloadedSongs,
                         currentSong = state.currentSong,
                         onSongClick = onSongClick,
                         onDeleteDownload = onDeleteDownload,
-                        onAddToPlaylist = onAddToPlaylist
+                        onAddToPlaylist = onAddToPlaylist,
+                        triggerKey = returnSpringKey
                     )
                 }
             }
@@ -271,7 +253,8 @@ fun DownloadsTab(
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
     onDeleteDownload: (String) -> Unit,
-    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> }
+    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    triggerKey: Any? = Unit
 ) {
     val colors = LocalDreaminColors.current
     if (downloadedSongs.isEmpty()) {
@@ -336,7 +319,7 @@ fun DownloadsTab(
                 key = { _, song -> song.id },
                 contentType = { _, _ -> "SongRow" }
             ) { index, song ->
-                Box(modifier = Modifier.staggeredEntry(index)) {
+                Box(modifier = Modifier.staggeredEntry(index, triggerKey = triggerKey)) {
                     SongRow(
                         song = song,
                         isPlaying = currentSong?.id == song.id,
@@ -356,7 +339,8 @@ fun FavoritesTab(
     favorites: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
-    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> }
+    onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    triggerKey: Any? = Unit
 ) {
     val colors = LocalDreaminColors.current
     if (favorites.isEmpty()) {
@@ -389,7 +373,7 @@ fun FavoritesTab(
                 key = { _, song -> song.id },
                 contentType = { _, _ -> "SongRow" }
             ) { index, song ->
-                Box(modifier = Modifier.staggeredEntry(index)) {
+                Box(modifier = Modifier.staggeredEntry(index, triggerKey = triggerKey)) {
                     SongRow(
                         song = song,
                         isPlaying = currentSong?.id == song.id,
@@ -416,7 +400,8 @@ fun PlaylistsTab(
     onImportSpotify: (String) -> Unit = {},
     onResetSpotifyImport: () -> Unit = {},
     onSearchOnline: (String) -> Unit = {},
-    onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> }
+    onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
+    triggerKey: Any? = Unit
 ) {
     val colors = LocalDreaminColors.current
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -464,7 +449,9 @@ fun PlaylistsTab(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "create_new_playlist_card") {
-                CreatePlaylistCard(onClick = { showCreateDialog = true })
+                Box(modifier = Modifier.staggeredEntry(0, baseDelayMs = 28, triggerKey = triggerKey)) {
+                    CreatePlaylistCard(onClick = { showCreateDialog = true })
+                }
             }
 
             itemsIndexed(
@@ -472,7 +459,7 @@ fun PlaylistsTab(
                 key = { _, playlist -> playlist.id },
                 contentType = { _, _ -> "PlaylistCard" }
             ) { index, playlist ->
-                Box(modifier = Modifier.staggeredEntry(index + 1, baseDelayMs = 28)) {
+                Box(modifier = Modifier.staggeredEntry(index + 1, baseDelayMs = 28, triggerKey = triggerKey)) {
                     PlaylistGridCard(
                         playlist = playlist,
                         artworkUrls = playlistArtworks[playlist.id] ?: emptyList(),
