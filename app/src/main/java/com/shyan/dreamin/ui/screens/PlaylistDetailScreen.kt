@@ -153,6 +153,7 @@ fun PlaylistDetailScreen(
     onSearchOnline: suspend (String) -> List<Song> = { emptyList() },
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
+    onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
     quickPickSongs: List<Song> = emptyList()
 ) {
     BackHandler { onBack() }
@@ -160,6 +161,7 @@ fun PlaylistDetailScreen(
     val context = LocalContext.current
     var showRenameDialog by remember { mutableStateOf(false) }
     var showAddSongsSheet by remember { mutableStateOf(false) }
+    var selectedSongForPosterPicker by remember { mutableStateOf<Song?>(null) }
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val songCount = remember(songs.size) { songs.size }
@@ -781,6 +783,7 @@ fun PlaylistDetailScreen(
                                 onClick = { onSongClick(song) },
                                 onPlayNext = { onPlayNext(song) },
                                 onAddToQueue = { onAddToQueue(song) },
+                                onChangePoster = { selectedSongForPosterPicker = song },
                                 onDownload = {
                                     if (isDownloaded) onDeleteDownload(song.id)
                                     else onDownloadSong(song)
@@ -858,6 +861,16 @@ fun PlaylistDetailScreen(
                 onPrevious = onPrevious,
                 onExpand = onExpandNowPlaying,
                 dominantColor = animatedDominant
+            )
+        }
+
+        if (selectedSongForPosterPicker != null) {
+            com.shyan.dreamin.ui.components.PosterPickerBottomSheet(
+                song = selectedSongForPosterPicker!!,
+                onDismiss = { selectedSongForPosterPicker = null },
+                onPosterSelected = { newPoster ->
+                    onUpdateSongArtwork?.invoke(selectedSongForPosterPicker!!, newPoster)
+                }
             )
         }
 
@@ -1261,6 +1274,7 @@ fun PlaylistSongRow(
     onClick: () -> Unit,
     onPlayNext: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
+    onChangePoster: () -> Unit = {},
     onDownload: () -> Unit = {},
     onRemove: () -> Unit
 ) {
@@ -1393,6 +1407,11 @@ fun PlaylistSongRow(
                     text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) Color(0xFFFF5252) else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
                     leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) Color(0xFFFF5252) else colors.onSurface, modifier = Modifier.size(20.dp)) },
                     onClick = { showOptionsSheet = false; onDownload() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Change Poster", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                    leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                    onClick = { showOptionsSheet = false; onChangePoster() }
                 )
                 HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
                 DropdownMenuItem(

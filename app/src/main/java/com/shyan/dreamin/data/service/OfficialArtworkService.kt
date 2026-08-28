@@ -229,13 +229,19 @@ object OfficialArtworkService {
                     val jaro = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(queryNorm, trackNorm)
                     if (!isPhoneticMatch && jaro < 0.75) continue
 
+                    val collectionType = it.optString("collectionType", "")
+                    val trackCount = it.optInt("trackCount", 0)
+
                     var score = (jaro * 5000).toInt()
 
-                    val isCompilation = COMPILATION_REGEX.containsMatchIn(collectionName)
+                    val isCompilation = collectionType.equals("Compilation", ignoreCase = true) || COMPILATION_REGEX.containsMatchIn(collectionName)
                     if (isCompilation) {
                         score -= 60000
                     } else {
                         score += 10000
+                        if (collectionType.equals("Album", ignoreCase = true) && trackCount >= 3) {
+                            score += 15000
+                        }
                         if (collectionName.contains("Soundtrack", ignoreCase = true) || collectionName.contains("Original Motion Picture", ignoreCase = true) || collectionName.contains("Original Soundtrack", ignoreCase = true)) {
                             score += 25000
                         }
@@ -392,11 +398,15 @@ object OfficialArtworkService {
                         score += 15000
                     }
 
-                    val isCompilation = COMPILATION_REGEX.containsMatchIn(alb)
+                    val albumType = more.optString("album_type", "").ifBlank { more.optString("type", "") }
+                    val isCompilation = albumType.equals("compilation", ignoreCase = true) || COMPILATION_REGEX.containsMatchIn(alb)
                     if (isCompilation) {
                         score -= 60000 // Heavy rejection for compilation albums
                     } else {
                         score += 10000
+                        if (albumType.equals("album", ignoreCase = true)) {
+                            score += 15000
+                        }
                         if (alb.contains("Soundtrack", ignoreCase = true) || alb.contains("Original Motion Picture", ignoreCase = true) || alb.contains("Original Soundtrack", ignoreCase = true)) {
                             score += 25000
                         }
@@ -454,6 +464,72 @@ object OfficialArtworkService {
             if (bestCover != null && bestScore > 0) return Pair(toHighResCover(bestCover), bestScore)
         } catch (_: Exception) {}
         return null
+    }
+
+    /**
+     * Fetches all high-resolution candidate theatrical movie posters from official catalogs
+     * for interactive user selection.
+     */
+    suspend fun fetchCandidatePosters(song: Song): List<String> = withContext(Dispatchers.IO) {
+        val candidates = linkedSetOf<String>()
+        if (song.artworkUrl.isNotBlank()) candidates.add(song.artworkUrl)
+        getCachedPoster(song)?.let { if (it.isNotBlank()) candidates.add(it) }
+
+        val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(song.displayTitle)
+        val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else fullClean
+        val primaryArtist = song.artist.split(",", "&", "/", "feat.", "ft.").firstOrNull()?.trim() ?: ""
+
+        val queries = mutableListOf<String>()
+        if (primaryArtist.isNotBlank()) queries.add("$cleanTitle $primaryArtist")
+        queries.add(cleanTitle)
+
+        // 1. Fetch Apple Music Candidates
+        for (q in queries) {
+            try {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&country=IN&limit=8"
+                val req = okhttp3.Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .build()
+                val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: continue
+                for (i in 0 until results.length()) {
+                    val it = results.getJSONObject(i)
+                    val rawArtwork = it.optString("artworkUrl100", "")
+                    val collectionType = it.optString("collectionType", "")
+                    if (rawArtwork.isNotBlank() && !collectionType.equals("Compilation", ignoreCase = true)) {
+                        candidates.add(rawArtwork.replace("100x100bb.jpg", "1000x1000bb.jpg"))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Fetch JioSaavn Candidates
+        for (q in queries) {
+            try {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=8&p=1"
+                val req = okhttp3.Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .header("Referer", "https://www.jiosaavn.com/")
+                    .build()
+                val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: continue
+                for (i in 0 until results.length()) {
+                    val it = results.getJSONObject(i)
+                    val img = it.optString("image", "")
+                    if (img.isNotBlank() && !img.contains("/editorial/") && !img.contains("/playlist/")) {
+                        candidates.add(toHighResCover(img))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        candidates.toList().take(8)
     }
 
     private fun toHighResCover(rawUrl: String): String {

@@ -134,6 +134,20 @@ class OfficialArtworkServiceTest {
     }
 
     @Test
+    fun testFetchCandidatePostersReturnsMultipleOptions() = runBlocking {
+        val song = Song(
+            id = "malare_candidates_test",
+            title = "Malare",
+            artist = "Vijay Yesudas, Rajesh Murugesan",
+            artworkUrl = ""
+        )
+
+        val candidates = OfficialArtworkService.fetchCandidatePosters(song)
+        assertNotNull("Candidates list should not be null", candidates)
+        assertTrue("Should return candidate posters", candidates.isNotEmpty())
+    }
+
+    @Test
     fun testCompilationRegexDetectsNewPatterns() {
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("A. R. Rahman Vibration"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("AR RAHMAN Hit Songs"))

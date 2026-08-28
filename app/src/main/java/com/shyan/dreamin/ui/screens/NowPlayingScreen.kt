@@ -396,6 +396,7 @@ fun NowPlayingScreen(
     onDownload: (Song) -> Unit = {},
     onDeleteDownload: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
+    onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
     onBack: () -> Unit = {}
 ) {
     var showSleepTimerDialog by remember { mutableStateOf(false) }
@@ -403,6 +404,7 @@ fun NowPlayingScreen(
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showPosterPicker by remember { mutableStateOf(false) }
     val song = state.currentSong
     val colors = LocalDreaminColors.current
 
@@ -840,6 +842,9 @@ fun NowPlayingScreen(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
                                         onClick = {},
+                                        onLongClick = {
+                                            showPosterPicker = true
+                                        },
                                         onDoubleClick = {
                                             onToggleFavorite()
                                             showHeartBurst = true
@@ -1289,6 +1294,16 @@ fun NowPlayingScreen(
     if (showEqualizerSheet) {
         EqualizerBottomSheet(
             onDismiss = { showEqualizerSheet = false }
+        )
+    }
+
+    if (showPosterPicker && song != null) {
+        com.shyan.dreamin.ui.components.PosterPickerBottomSheet(
+            song = song,
+            onDismiss = { showPosterPicker = false },
+            onPosterSelected = { newPoster ->
+                onUpdateSongArtwork?.invoke(song, newPoster)
+            }
         )
     }
 

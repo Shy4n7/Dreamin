@@ -388,6 +388,7 @@ private fun MainAppScaffold(
                     onSearchOnline = vm::searchSongsDirect,
                     onPlayNext = vm::playNext,
                     onAddToQueue = vm::addToQueue,
+                    onUpdateSongArtwork = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
                     quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
                         (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
                     }
@@ -431,6 +432,7 @@ private fun MainAppScaffold(
                 onDownload           = vm::downloadSong,
                 onDeleteDownload     = vm::deleteDownload,
                 onArtistClick        = vm::openArtistProfile,
+                onUpdateSongArtwork  = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
                 onBack               = onCloseNowPlaying
             )
         }

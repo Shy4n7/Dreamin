@@ -377,11 +377,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     try {
                         val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
-                            val officialPoster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang)
-                            val finalArtwork = officialPoster ?: when {
+                            val finalArtwork = when {
                                 track.artworkUrl.isNotBlank() -> track.artworkUrl
                                 matched.artworkUrl.isNotBlank() -> matched.artworkUrl
-                                else -> ""
+                                else -> com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang) ?: ""
+                            }
+                            if (finalArtwork.isNotBlank()) {
+                                com.shyan.dreamin.data.service.OfficialArtworkService.putCachedPoster(matched, finalArtwork)
                             }
                             val songWithArt = matched.copy(artworkUrl = finalArtwork)
                             matchedArray[index] = songWithArt
