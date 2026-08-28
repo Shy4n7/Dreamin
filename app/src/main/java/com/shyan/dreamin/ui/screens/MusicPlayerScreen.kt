@@ -112,8 +112,8 @@ private fun MainAppScaffold(
             pagerState.animateScrollToPage(
                 page = targetIdx,
                 animationSpec = spring(
-                    dampingRatio = 0.86f,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.85f,
+                    stiffness = Spring.StiffnessMedium
                 )
             )
         }
@@ -178,19 +178,7 @@ private fun MainAppScaffold(
                                 keyboard?.hide()
                                 vm.clearSearch()
                             }
-                            val targetIdx = navScreens.indexOf(screen)
-                            if (targetIdx >= 0) {
-                                onScreenChange(screen)
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        page = targetIdx,
-                                        animationSpec = spring(
-                                            dampingRatio = 0.86f,
-                                            stiffness = Spring.StiffnessMediumLow
-                                        )
-                                    )
-                                }
-                            }
+                            onScreenChange(screen)
                         }
                     )
                 }
@@ -203,7 +191,7 @@ private fun MainAppScaffold(
                     .hazeSource(state = hazeState)
                     .padding(bottom = padding.calculateBottomPadding()),
                 userScrollEnabled      = !state.isSearchActive,
-                beyondViewportPageCount = 0,
+                beyondViewportPageCount = 1,
                 key                    = { navScreens[it].name }
             ) { page ->
                 val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
