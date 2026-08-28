@@ -7,6 +7,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Build
+import com.shyan.dreamin.data.model.HeadphoneProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +27,8 @@ data class EqualizerUiState(
     val virtualizerStrength: Int = 30,    // 0 - 100%
     val loudnessGainMb: Int = 200,        // 0 - 1000 mB
     val bands: List<EqualizerBand> = emptyList(),
-    val availablePresets: List<String> = listOf("Studio Flat", "Bass Heavy", "Vocal Clarity", "Electronic", "Rock", "Acoustic")
+    val availablePresets: List<String> = listOf("Studio Flat", "Bass Heavy", "Vocal Clarity", "Electronic", "Rock", "Acoustic"),
+    val activeAutoEqProfile: HeadphoneProfile? = null
 )
 
 object AudioFxManager {
@@ -171,9 +173,46 @@ object AudioFxManager {
     }
 
     fun applyPreset(presetName: String) {
-        _uiState.value = _uiState.value.copy(selectedPresetName = presetName)
+        _uiState.value = _uiState.value.copy(selectedPresetName = presetName, activeAutoEqProfile = null)
         applyCurrentPreset()
         saveSettings()
+    }
+
+    fun applyAutoEqProfile(profile: HeadphoneProfile?) {
+        _uiState.value = _uiState.value.copy(activeAutoEqProfile = profile)
+        val eq = equalizer ?: return
+        if (profile == null) {
+            applyCurrentPreset()
+            return
+        }
+
+        val minMb = eq.bandLevelRange[0].toInt()
+        val maxMb = eq.bandLevelRange[1].toInt()
+        val updatedBands = mutableListOf<EqualizerBand>()
+
+        try {
+            val numBands = eq.numberOfBands.toInt()
+            for (i in 0 until numBands) {
+                val centerFreqHz = eq.getCenterFreq(i.toShort()) / 1000
+                val targetGain = profile.frequencyGainsMb.minByOrNull { Math.abs(it.key - centerFreqHz) }?.value ?: 0
+                val clampedMb = targetGain.coerceIn(minMb, maxMb)
+                eq.setBandLevel(i.toShort(), clampedMb.toShort())
+                updatedBands.add(
+                    EqualizerBand(
+                        index = i,
+                        centerFreqHz = centerFreqHz,
+                        gainMillibels = clampedMb,
+                        minMillibels = minMb,
+                        maxMillibels = maxMb
+                    )
+                )
+            }
+            _uiState.value = _uiState.value.copy(
+                bands = updatedBands,
+                selectedPresetName = "AutoEq: ${profile.model}"
+            )
+            saveSettings()
+        } catch (_: Exception) {}
     }
 
     private fun applyCurrentPreset() {

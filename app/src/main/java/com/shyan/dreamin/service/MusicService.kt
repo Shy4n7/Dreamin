@@ -95,6 +95,7 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         AudioFxManager.init(applicationContext)
+        AutoEqManager.init(applicationContext)
 
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)

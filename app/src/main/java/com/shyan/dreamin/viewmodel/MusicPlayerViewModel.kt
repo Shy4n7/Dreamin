@@ -895,11 +895,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
 
-            // Also pre-resolve stream URL for the upcoming song in parallel
+            // Also pre-resolve and pre-buffer stream URL for the upcoming song in parallel
             nextSongs.firstOrNull()?.let { upcomingSong ->
                 launch(Dispatchers.IO) {
                     try {
-                        resolveStreamUrl(upcomingSong)
+                        val stream = resolveStreamUrl(upcomingSong)
+                        if (stream.isNotBlank()) {
+                            com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(context, stream, viewModelScope)
+                        }
                     } catch (_: Exception) {}
                 }
             }
@@ -1146,6 +1149,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val streamUrl = resolveStreamUrl(song)
                         if (!streamUrl.startsWith("file://") && !streamUrl.startsWith("/")) {
                             downloadRepo.prefetchSong(song, streamUrl)
+                            val appCtx = getApplication<Application>()
+                            com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(appCtx, streamUrl, viewModelScope)
                         }
                     }
                 }

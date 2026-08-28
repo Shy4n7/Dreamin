@@ -1,4 +1,4 @@
-﻿package com.shyan.dreamin.service
+package com.shyan.dreamin.service
 
 import android.content.Context
 import androidx.annotation.OptIn
@@ -52,6 +52,34 @@ object ExoPlayerCacheManager {
             .setCache(cache)
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
+    /**
+     * Builds a standalone CacheDataSource instance for background CacheWriter pre-buffering.
+     */
+    fun createCacheDataSource(context: Context): CacheDataSource {
+        val cache = getSimpleCache(context)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.httpClient)
+        val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+
+        return CacheDataSource(
+            cache,
+            upstreamFactory.createDataSource(),
+            CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
+        )
+    }
+
+    /**
+     * Checks if a stream URL has already cached at least lengthBytes in SimpleCache.
+     */
+    fun isPartiallyCached(context: Context, streamUrl: String, lengthBytes: Long = 512 * 1024L): Boolean {
+        return try {
+            val cache = getSimpleCache(context)
+            val cachedBytes = cache.getCachedBytes(streamUrl, 0, lengthBytes)
+            cachedBytes >= lengthBytes
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

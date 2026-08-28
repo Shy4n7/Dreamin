@@ -110,6 +110,75 @@ fun EqualizerBottomSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // AutoEq Headphone Profiles Row
+            val activeAutoEq = eqState.activeAutoEqProfile
+            val connectedDevice by com.shyan.dreamin.service.AutoEqManager.connectedDeviceName.collectAsStateWithLifecycle()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "AUTOEQ CALIBRATION",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
+                if (activeAutoEq != null) {
+                    Text(
+                        "Calibrated (${activeAutoEq.target})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.primary
+                    )
+                } else if (!connectedDevice.isNullOrBlank()) {
+                    Text(
+                        "🎧 $connectedDevice",
+                        fontSize = 11.sp,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                com.shyan.dreamin.data.model.AutoEqCatalog.PROFILES.forEach { profile ->
+                    val isSelected = activeAutoEq?.id == profile.id
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.primary else colors.surfaceHighest)
+                            .clickable {
+                                if (isSelected) {
+                                    com.shyan.dreamin.service.AutoEqManager.clearProfile()
+                                } else {
+                                    com.shyan.dreamin.service.AutoEqManager.selectProfile(profile)
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🎧 ${profile.displayName}",
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else colors.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // Presets Horizontal Row
             Text(
                 "PRESETS",
@@ -127,12 +196,15 @@ fun EqualizerBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 eqState.availablePresets.forEach { preset ->
-                    val isSelected = eqState.selectedPresetName == preset
+                    val isSelected = eqState.selectedPresetName == preset && activeAutoEq == null
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSelected) colors.primary else colors.surfaceHighest)
-                            .clickable { AudioFxManager.applyPreset(preset) }
+                            .clickable {
+                                com.shyan.dreamin.service.AutoEqManager.clearProfile()
+                                AudioFxManager.applyPreset(preset)
+                            }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(
