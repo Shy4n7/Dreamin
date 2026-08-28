@@ -58,6 +58,7 @@ data class RecommendResponse(val recommendations: List<Song> = emptyList())
 
 enum class TrackRepeatMode { OFF, ONE, ALL }
 
+@Immutable
 data class ListeningStats(
     val songsThisWeek: Int = 0,
     val minutesThisWeek: Long = 0L,
@@ -65,6 +66,7 @@ data class ListeningStats(
     val topArtistThisWeek: String? = null
 )
 
+@Immutable
 sealed class PlaybackState {
     object Idle : PlaybackState()
     object Loading : PlaybackState()
@@ -73,6 +75,7 @@ sealed class PlaybackState {
     data class Error(val message: String) : PlaybackState()
 }
 
+@Immutable
 data class PlaybackProgress(
     val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L
@@ -85,6 +88,7 @@ data class LyricLine(
     val romanizedText: String = com.shyan.dreamin.data.util.IndicRomanizer.transliterateTamilToEnglish(text)
 )
 
+@Immutable
 sealed class LyricsState {
     object Idle : LyricsState()
     object Loading : LyricsState()

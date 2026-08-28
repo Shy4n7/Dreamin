@@ -42,6 +42,7 @@ import java.net.URL
 import java.net.URLEncoder
 import org.json.JSONObject
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -828,6 +829,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private val backgroundSyncDispatcher = Dispatchers.IO.limitedParallelism(2)
+    private var lastPrefetchedTrackId: String? = null
+
     private fun startPositionPoller() {
         viewModelScope.launch {
             var saveCounter = 0
@@ -841,6 +845,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (pos != current.currentPositionMs || dur != current.durationMs) {
                     _progress.value = PlaybackProgress(pos, dur)
                 }
+
+                // Predictive stream resolution for the upcoming track at 75% progress or 25s remaining
+                if (dur > 0 && (pos.toFloat() / dur.toFloat() > 0.75f || dur - pos < 25_000L)) {
+                    val currentSongId = _uiState.value.currentSong?.id
+                    if (currentSongId != null && lastPrefetchedTrackId != currentSongId) {
+                        lastPrefetchedTrackId = currentSongId
+                        prefetchQueueArtworks(_uiState.value.queue, currentSongId)
+                    }
+                }
+
                 saveCounter++
                 if (saveCounter >= 100) {
                     saveCounter = 0

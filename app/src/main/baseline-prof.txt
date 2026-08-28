@@ -1,0 +1,26 @@
+# Baseline Profiles for Dreamin Music Player
+# Pre-compiles critical user journeys to native machine code at install time (dex2oat)
+
+# Core Activity & Entrypoint
+HSPLcom/shyan/dreamin/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/shyan/dreamin/DreaminApplication;->newImageLoader()Lcoil/ImageLoader;
+
+# Compose UI Hierarchy & Fast Rendering
+HSPLcom/shyan/dreamin/ui/screens/MusicPlayerScreenKt;->MusicPlayerApp(Lcom/shyan/dreamin/viewmodel/MusicPlayerViewModel;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/shyan/dreamin/ui/screens/HomeScreenKt;->HomeScreen(Lcom/shyan/dreamin/data/model/PlayerUiState;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/shyan/dreamin/ui/screens/HomeScreenKt;->SpotifyQuickPlaylistGrid(Ljava/util/List;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/shyan/dreamin/ui/screens/HomeScreenKt;->SpotifyPlaylistPill(Lcom/shyan/dreamin/data/local/Playlist;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/shyan/dreamin/ui/screens/NowPlayingScreenKt;->NowPlayingScreen(Lcom/shyan/dreamin/data/model/PlayerUiState;Lkotlinx/coroutines/flow/StateFlow;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/shyan/dreamin/ui/components/FluidMeshGradientBackgroundKt;->FluidMeshGradientBackground(Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;ZLandroidx/compose/runtime/Composer;I)V
+
+# State & Models
+HSPLcom/shyan/dreamin/data/model/Song;->getDisplayTitle()Ljava/lang/String;
+HSPLcom/shyan/dreamin/data/model/Song;->getDisplayArtworkUrl()Ljava/lang/String;
+HSPLcom/shyan/dreamin/data/model/PlayerUiState;->getCurrentSong()Lcom/shyan/dreamin/data/model/Song;
+HSPLcom/shyan/dreamin/data/model/PlayerUiState;->getPlaybackState()Lcom/shyan/dreamin/data/model/PlaybackState;
+
+# Media3 & ViewModel Playback Pipeline
+HSPLcom/shyan/dreamin/viewmodel/MusicPlayerViewModel;->playSong(Lcom/shyan/dreamin/data/model/Song;ZZ)V
+HSPLcom/shyan/dreamin/viewmodel/MusicPlayerViewModel;->playNext(Z)V
+HSPLcom/shyan/dreamin/service/MusicService;->onGetSession(Landroidx/media3/session/MediaSession$ControllerInfo;)Landroidx/media3/session/MediaSession;
+HSPLcom/shyan/dreamin/data/service/AudioStreamResolver;->resolveStreamUrl(Lcom/shyan/dreamin/data/model/Song;Lcom/shyan/dreamin/data/local/DownloadRepository;Lcom/shyan/dreamin/data/network/MusicApi;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
