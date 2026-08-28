@@ -148,34 +148,9 @@ private fun MainAppScaffold(
         }
     }
 
-    val isDetailScreenOpen = state.openPlaylistId != null || state.selectedArtistProfile != null
-    val backgroundRecoilScale by animateFloatAsState(
-        targetValue = if (isDetailScreenOpen) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
-        label = "bg_recoil_scale"
-    )
-    val backgroundRecoilAlpha by animateFloatAsState(
-        targetValue = if (isDetailScreenOpen) 0.85f else 1f,
-        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
-        label = "bg_recoil_alpha"
-    )
-    val backgroundRecoilY by animateFloatAsState(
-        targetValue = if (isDetailScreenOpen) 36f else 0f,
-        animationSpec = spring(dampingRatio = 0.76f, stiffness = Spring.StiffnessMediumLow),
-        label = "bg_recoil_y"
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = backgroundRecoilScale
-                    scaleY = backgroundRecoilScale
-                    translationY = backgroundRecoilY
-                    alpha = backgroundRecoilAlpha
-                },
             bottomBar = {
                 Column {
                     AnimatedVisibility(
