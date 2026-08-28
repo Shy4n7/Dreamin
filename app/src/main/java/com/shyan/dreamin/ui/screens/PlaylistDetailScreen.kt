@@ -388,7 +388,7 @@ fun PlaylistDetailScreen(
                             IconButton(onClick = { showRenameDialog = true }, modifier = Modifier.size(44.dp)) {
                                 Icon(
                                     Icons.Outlined.Edit,
-                                    contentDescription = "Rename",
+                                    contentDescription = "Edit Playlist",
                                     tint = colors.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -433,38 +433,8 @@ fun PlaylistDetailScreen(
                                         artworkUrls = songs.map { it.displayArtworkUrl },
                                         coverUrl = playlist.coverUrl,
                                         size = 164.dp,
-                                        shape = RoundedCornerShape(22.dp),
-                                        modifier = Modifier
-                                            .clickable {
-                                                detailCoverPickerLauncher.launch(
-                                                    androidx.activity.result.PickVisualMediaRequest(
-                                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
-                                                    )
-                                                )
-                                            }
+                                        shape = RoundedCornerShape(22.dp)
                                     )
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(6.dp)
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(colors.surfaceHighest.copy(alpha = 0.95f))
-                                            .clickable {
-                                                detailCoverPickerLauncher.launch(
-                                                    androidx.activity.result.PickVisualMediaRequest(
-                                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
-                                                    )
-                                                )
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Edit,
-                                            contentDescription = "Change Cover Photo",
-                                            tint = colors.onSurface,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -913,29 +883,90 @@ fun PlaylistDetailScreen(
         var newTitle by remember { mutableStateOf(playlist.name) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("Rename Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold) },
+            title = { Text("Edit Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
             text = {
-                OutlinedTextField(
-                    value = newTitle,
-                    onValueChange = { newTitle = it },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedDominant,
-                        cursorColor = animatedDominant
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Artwork Preview & Change Action
+                    Box(
+                        contentAlignment = Alignment.BottomEnd,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    ) {
+                        PlaylistCoverArt(
+                            artworkUrls = songs.map { it.displayArtworkUrl },
+                            coverUrl = playlist.coverUrl,
+                            size = 110.dp,
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                detailCoverPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Change Photo", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+
+                        if (playlist.coverUrl != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = { onUpdateCover(null) },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.height(38.dp)
+                            ) {
+                                Text("Remove", fontSize = 13.sp, color = colors.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    OutlinedTextField(
+                        value = newTitle,
+                        onValueChange = { newTitle = it },
+                        label = { Text("Playlist Name", color = colors.onSurfaceVariant) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = animatedDominant,
+                            focusedLabelColor = animatedDominant,
+                            cursorColor = animatedDominant
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (newTitle.isNotBlank()) {
                             onRename(newTitle.trim())
                             showRenameDialog = false
                         }
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Save", color = animatedDominant, fontWeight = FontWeight.Bold)
+                    Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -944,7 +975,7 @@ fun PlaylistDetailScreen(
                 }
             },
             containerColor = colors.surfaceHighest,
-            shape = RoundedCornerShape(18.dp)
+            shape = RoundedCornerShape(22.dp)
         )
     }
 
