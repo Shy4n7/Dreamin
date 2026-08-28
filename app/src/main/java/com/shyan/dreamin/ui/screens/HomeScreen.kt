@@ -1414,6 +1414,29 @@ fun HomeFeedOnlyContent(
             }
         }
 
+        if (trending.isNotEmpty()) {
+            item(key = "section_trending", contentType = "SectionHeader") {
+                SectionTitle("Trending Now")
+            }
+            itemsIndexed(
+                items = trendingTop,
+                key = { index, it -> "${it.id}_$index" },
+                contentType = { _, _ -> "SongRow" }
+            ) { index, song ->
+                Box(modifier = Modifier.staggeredEntry(index)) {
+                    SongRow(
+                        song = song,
+                        rank = index + 1,
+                        isPlaying = currentSong?.id == song.id,
+                        onClick = { onSongClickFromList(song, trending) },
+                        onAddToQueue = { onQueueById(song.id) },
+                        onPlayNext = { onPlayNextById(song.id) },
+                        onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }
+                    )
+                }
+            }
+        }
+
         if (lastSession != null && currentSong == null) {
             item(key = "jump_back_in") {
                 JumpBackInCard(
@@ -1442,29 +1465,6 @@ fun HomeFeedOnlyContent(
                     currentSongId = currentSong?.id,
                     onSongClick = { song -> onSongClickFromList(song, topSongs) }
                 )
-            }
-        }
-
-        if (trending.isNotEmpty()) {
-            item(key = "section_trending", contentType = "SectionHeader") {
-                SectionTitle("Trending Now")
-            }
-            itemsIndexed(
-                items = trendingTop,
-                key = { index, it -> "${it.id}_$index" },
-                contentType = { _, _ -> "SongRow" }
-            ) { index, song ->
-                Box(modifier = Modifier.staggeredEntry(index)) {
-                    SongRow(
-                        song = song,
-                        rank = index + 1,
-                        isPlaying = currentSong?.id == song.id,
-                        onClick = { onSongClickFromList(song, trending) },
-                        onAddToQueue = { onQueueById(song.id) },
-                        onPlayNext = { onPlayNextById(song.id) },
-                        onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }
-                    )
-                }
             }
         }
 
