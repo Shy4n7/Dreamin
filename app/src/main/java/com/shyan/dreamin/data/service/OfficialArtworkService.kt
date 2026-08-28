@@ -15,7 +15,25 @@ object OfficialArtworkService {
     }
 
     private val COMPILATION_REGEX = Regex(
-        "(?i)\\b(mixtape|bighits|big hits|think music|thinkmusic|double delights|double delight|delights|delight|double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|romance|mashup|area boys|konjam|thamizh music|special|tribute|celebration|magic of|voice of|golden|non stop|jukebox|rewind|finesse|starry|mazhaiyum|thooral|pure|simply|anthology|sounds of|sensational|absolute|trending version|ungaludan|dhamaka|masterworks|all about love|sun-kissed|summer vibes|my playlist|words of|mazhaikaalam|joy|saaral|special|singer special|in the words of|feel good|night drive|soulful|chill tracks|unlimited|hits of)\\b"
+        "(?i)\\b(mixtape|bighits|big hits|think music|thinkmusic|double delights|double delight|delights|delight|" +
+        "double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|" +
+        "top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|" +
+        "radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|" +
+        "romance|mashup|area boys|konjam|thamizh music|special|tribute|celebration|magic of|voice of|golden|" +
+        "non stop|jukebox|rewind|finesse|starry|mazhaiyum|thooral|pure|simply|anthology|sounds of|sensational|" +
+        "absolute|trending version|ungaludan|dhamaka|masterworks|all about love|sun-kissed|summer vibes|" +
+        "my playlist|words of|mazhaikaalam|joy|saaral|singer special|in the words of|feel good|night drive|" +
+        "soulful|chill tracks|unlimited|hits of|love waves|love diaries|the love diaries|memoirs of love|" +
+        "memoirs|love story|love stories|valentines|valentine|romantic hits|love collection|love mix|" +
+        "romance mix|love songs|super singer|rockstar|the girlfriend mix|the first love tapes|this is kaadhal|" +
+        "latest evergreen melody|mazhai & kaadhal|dhanush dhamaka|endrendrum|pure love|sweet romance|evergreen love|" +
+        "kaadhal hits|kadhal hits|suriya hits|vijay hits|ajith hits|dhanush hits|anirudh hits|harris hits|rahman hits)\\b"
+    )
+
+    private val KNOWN_LYRICISTS = setOf(
+        "vignesh shivan", "thamarai", "vaali", "vairamuthu", "kabilan", "pa. vijay", "snehan", 
+        "yugabharathi", "madhan karky", "karky", "arunraja kamaraj", "rokesh", "vivek", 
+        "ku. karthik", "selvaraghavan", "gkb", "eknath", "mani amudhavan"
     )
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
@@ -53,7 +71,11 @@ object OfficialArtworkService {
 
         val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(song.displayTitle)
         val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else fullClean
-        val primaryArtist = song.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+
+        // Smart artist selection: ignore lyricists if composer/singer is present
+        val allArtists = song.artist.split(",", "&", "feat.", "ft.", "/").map { it.trim() }.filter { it.isNotBlank() }
+        val nonLyricists = allArtists.filter { a -> KNOWN_LYRICISTS.none { a.contains(it, ignoreCase = true) } }
+        val primaryArtist = nonLyricists.firstOrNull() ?: allArtists.firstOrNull() ?: ""
 
         // Context-aware language inference for regional soundtrack accuracy
         val detectedLang = when {
@@ -132,22 +154,27 @@ object OfficialArtworkService {
         try {
             val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(title)
             val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else title
-            val cleanArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
-            val q = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else "$cleanTitle $langHint"
-            val encoded = URLEncoder.encode(q, "UTF-8")
-            val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&country=IN&limit=10"
-            val req = okhttp3.Request.Builder()
-                .url(urlStr)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .build()
-            val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
-            val root = JSONObject(text)
-            val results = root.optJSONArray("results")
-            if (results != null && results.length() > 0) {
-                var bestCover: String? = null
-                var bestScore = Int.MIN_VALUE
-                val queryNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(cleanTitle)
+            
+            val searchQueries = mutableListOf<String>()
+            if (artist.isNotBlank()) searchQueries.add("$cleanTitle $artist")
+            searchQueries.add("$cleanTitle $langHint")
+            searchQueries.add(cleanTitle)
+
+            var bestCover: String? = null
+            var bestScore = Int.MIN_VALUE
+            val queryNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(cleanTitle)
+
+            for (q in searchQueries) {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&country=IN&limit=10"
+                val req = okhttp3.Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .build()
+                val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: continue
 
                 for (i in 0 until results.length()) {
                     val it = results.getJSONObject(i)
@@ -166,15 +193,20 @@ object OfficialArtworkService {
 
                     val isCompilation = COMPILATION_REGEX.containsMatchIn(collectionName)
                     if (isCompilation) {
-                        score -= 30000
+                        score -= 60000
                     } else {
-                        score += 8000
-                        if (collectionName.contains("Soundtrack", ignoreCase = true) || collectionName.contains("Original Motion Picture", ignoreCase = true)) {
-                            score += 10000
+                        score += 10000
+                        if (collectionName.contains("Soundtrack", ignoreCase = true) || collectionName.contains("Original Motion Picture", ignoreCase = true) || collectionName.contains("Original Soundtrack", ignoreCase = true)) {
+                            score += 25000
                         }
                     }
 
-                    // Language Affinity Guard (prevents picking Telugu/Hindi dub posters when Tamil is intended)
+                    // Prefer vocal original over instrumental/karaoke versions
+                    if (trackName.contains("Instrumental", ignoreCase = true) || trackName.contains("Karaoke", ignoreCase = true)) {
+                        score -= 10000
+                    }
+
+                    // Language Affinity Guard
                     val textCombined = "$trackName $collectionName".lowercase()
                     val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
                         .filter { it != targetLanguage.lowercase() }
@@ -184,7 +216,7 @@ object OfficialArtworkService {
                             textCombined.contains("- $other") || 
                             textCombined.contains("from \"$other\"")
                         ) {
-                            score -= 25000
+                            score -= 30000
                         }
                     }
                     if (textCombined.contains("($targetLanguage)") || 
@@ -253,33 +285,31 @@ object OfficialArtworkService {
     ): String? {
         try {
             val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
-            val q = if (artist.isNotBlank()) "$title $artist" else "$title $langHint"
-            val encoded = URLEncoder.encode(q, "UTF-8")
-            val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=12&p=1"
-            val req = okhttp3.Request.Builder()
-                .url(urlStr)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+            val searchQueries = mutableListOf<String>()
+            if (artist.isNotBlank()) searchQueries.add("$title $artist")
+            searchQueries.add("$title $langHint")
+            searchQueries.add(title)
 
-            val root = JSONObject(text)
-            val results = root.optJSONArray("results")
-            if (results != null && results.length() > 0) {
-                var bestCover: String? = null
-                var bestScore = Int.MIN_VALUE
-                val cleanQueryTitle = title.lowercase().replace(Regex("[^a-z0-9]"), "")
+            var bestCover: String? = null
+            var bestScore = Int.MIN_VALUE
+            val queryNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(title)
+
+            for (q in searchQueries) {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=12&p=1"
+                val req = okhttp3.Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .header("Referer", "https://www.jiosaavn.com/")
+                    .build()
+                val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: continue
 
                 for (i in 0 until results.length()) {
                     val it = results.getJSONObject(i)
                     val resTitle = unescape(it.optString("title", ""))
-                    val cleanResTitle = resTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
-
-                    // Candidate title must match query song title
-                    val isExactMatch = cleanResTitle == cleanQueryTitle
-                    val isContained = cleanResTitle.contains(cleanQueryTitle) || cleanQueryTitle.contains(cleanResTitle)
-                    if (!isContained) continue
-
                     val more = it.optJSONObject("more_info") ?: JSONObject()
                     val alb = unescape(more.optString("album", ""))
                     val img = it.optString("image", "")
@@ -287,22 +317,30 @@ object OfficialArtworkService {
 
                     if (img.isBlank() || isEditorial) continue
 
-                    var score = 0
-                    if (isExactMatch) score += 5000
-                    else score += 2000
+                    val resNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(resTitle)
+                    val isPhoneticMatch = resNorm.contains(queryNorm) || queryNorm.contains(resNorm)
+                    val jaro = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(queryNorm, resNorm)
+                    if (!isPhoneticMatch && jaro < 0.75) continue
+
+                    var score = (jaro * 5000).toInt()
 
                     if (movieHint.isNotBlank() && alb.contains(movieHint, ignoreCase = true)) {
-                        score += 8000
+                        score += 15000
                     }
 
                     val isCompilation = COMPILATION_REGEX.containsMatchIn(alb)
                     if (isCompilation) {
-                        score -= 30000 // Heavy rejection for compilation albums like Double Delights, Fire & Desire, Hits of...
+                        score -= 60000 // Heavy rejection for compilation albums
                     } else {
-                        score += 6000
-                        if (alb.contains("Soundtrack", ignoreCase = true) || alb.contains("Original Motion Picture", ignoreCase = true)) {
-                            score += 8000
+                        score += 10000
+                        if (alb.contains("Soundtrack", ignoreCase = true) || alb.contains("Original Motion Picture", ignoreCase = true) || alb.contains("Original Soundtrack", ignoreCase = true)) {
+                            score += 25000
                         }
+                    }
+
+                    // Prefer vocal original over instrumental/karaoke versions
+                    if (resTitle.contains("Instrumental", ignoreCase = true) || resTitle.contains("Karaoke", ignoreCase = true)) {
+                        score -= 10000
                     }
 
                     // Language Affinity Guard
@@ -314,7 +352,7 @@ object OfficialArtworkService {
                             textCombined.contains("[$other]") || 
                             textCombined.contains("- $other")
                         ) {
-                            score -= 25000
+                            score -= 30000
                         }
                     }
                     if (textCombined.contains("($targetLanguage)") || 

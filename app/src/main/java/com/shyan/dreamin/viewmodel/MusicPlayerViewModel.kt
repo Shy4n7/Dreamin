@@ -776,15 +776,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _progress.value = PlaybackProgress(0L, duration)
             _uiState.value.currentSong?.let { activeSong ->
                 prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
-                if (!activeSong.artworkUrl.contains("scdn.co") && !activeSong.artworkUrl.contains("spotifycdn")) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
-                            if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
-                                updateSongArtworkAcrossApp(activeSong.id, official)
-                            }
-                        } catch (_: Exception) {}
-                    }
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
+                        if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
+                            updateSongArtworkAcrossApp(activeSong.id, official)
+                        }
+                    } catch (_: Exception) {}
                 }
             }
         }
@@ -867,18 +865,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val context = getApplication<Application>()
             val currentIndex = queue.indexOfFirst { it.id == currentSongId }
             val nextSongs = if (currentIndex >= 0) {
-                queue.drop(currentIndex + 1).take(4)
+                queue.drop(currentIndex + 1).take(5)
             } else {
-                queue.take(4)
+                queue.take(5)
             }
             nextSongs.forEach { song ->
-                val artUrl = song.displayArtworkUrl
-                if (artUrl.isNotBlank()) {
-                    val req = coil.request.ImageRequest.Builder(context)
-                        .data(artUrl)
-                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .build()
-                    coil.Coil.imageLoader(context).enqueue(req)
+                launch(Dispatchers.IO) {
+                    try {
+                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
+                        val finalUrl = official ?: song.displayArtworkUrl
+                        if (!official.isNullOrBlank() && official != song.artworkUrl) {
+                            updateSongArtworkAcrossApp(song.id, official)
+                        }
+                        if (finalUrl.isNotBlank()) {
+                            val req = coil.request.ImageRequest.Builder(context)
+                                .data(finalUrl)
+                                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                                .build()
+                            coil.Coil.imageLoader(context).enqueue(req)
+                        }
+                    } catch (_: Exception) {}
                 }
             }
 
