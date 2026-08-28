@@ -8,33 +8,37 @@ import java.net.URLEncoder
 
 object OfficialArtworkService {
 
-    private val artworkCache = android.util.LruCache<String, String>(1000)
+    private val artworkCache = object : java.util.LinkedHashMap<String, String>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+            return size > 1000
+        }
+    }
 
     private val COMPILATION_REGEX = Regex(
-        "(?i)\\b(double delights|double delight|delights|delight|double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|romance|mashup|area boys|konjam|thamizh music|special|tribute|celebration|magic of|voice of|golden|non stop|jukebox|rewind|finesse|starry|mazhaiyum|thooral|pure|simply|anthology|sounds of|sensational|absolute|trending version|ungaludan|dhamaka|masterworks|all about love|sun-kissed|summer vibes|my playlist|words of|mazhaikaalam|joy|saaral|special|singer special|in the words of|feel good|night drive|soulful|chill tracks|unlimited|hits of)\\b"
+        "(?i)\\b(mixtape|bighits|big hits|think music|thinkmusic|double delights|double delight|delights|delight|double|duo|duets|triple|jodi|combo|treats|fire & desire|fire and desire|desire|this is|best of|top hits|hits|vol\\b|vol\\.|volume|love notes|collection|playlist|raga collective|kondattam|selected|radio|superhit|compilation|greatest hits|evergreen|melody|melodies|latest|essential|party|workout|romance|mashup|area boys|konjam|thamizh music|special|tribute|celebration|magic of|voice of|golden|non stop|jukebox|rewind|finesse|starry|mazhaiyum|thooral|pure|simply|anthology|sounds of|sensational|absolute|trending version|ungaludan|dhamaka|masterworks|all about love|sun-kissed|summer vibes|my playlist|words of|mazhaikaalam|joy|saaral|special|singer special|in the words of|feel good|night drive|soulful|chill tracks|unlimited|hits of)\\b"
     )
 
-    fun getCachedPoster(song: Song): String? {
+    fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
         if (song.id.isNotBlank()) {
-            artworkCache.get(song.id)?.let { return it }
+            artworkCache[song.id]?.let { return it }
         }
         val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
-        artworkCache.get(fullKey)?.let { return it }
+        artworkCache[fullKey]?.let { return it }
         val titleOnlyKey = song.displayTitle.lowercase().trim()
-        return artworkCache.get(titleOnlyKey)
+        return artworkCache[titleOnlyKey]
     }
 
-    fun putCachedPoster(song: Song, posterUrl: String) {
+    fun putCachedPoster(song: Song, posterUrl: String): Unit = synchronized(artworkCache) {
         if (posterUrl.isBlank()) return
-        if (song.id.isNotBlank()) artworkCache.put(song.id, posterUrl)
+        if (song.id.isNotBlank()) artworkCache[song.id] = posterUrl
         val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
-        artworkCache.put(fullKey, posterUrl)
+        artworkCache[fullKey] = posterUrl
         val titleOnlyKey = song.displayTitle.lowercase().trim()
-        artworkCache.put(titleOnlyKey, posterUrl)
+        artworkCache[titleOnlyKey] = posterUrl
     }
 
-    fun clearCache() {
-        artworkCache.evictAll()
+    fun clearCache(): Unit = synchronized(artworkCache) {
+        artworkCache.clear()
     }
 
     /**
@@ -151,7 +155,7 @@ object OfficialArtworkService {
                     }
                 }
 
-                if (bestCover != null) return bestCover
+                if (bestCover != null && bestScore > 0) return bestCover
             }
         } catch (_: Exception) {}
         return null
@@ -249,7 +253,7 @@ object OfficialArtworkService {
                     }
                 }
 
-                if (bestCover != null) return toHighResCover(bestCover)
+                if (bestCover != null && bestScore > 0) return toHighResCover(bestCover)
             }
         } catch (_: Exception) {}
         return null
