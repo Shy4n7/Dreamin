@@ -16,6 +16,8 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -747,12 +749,7 @@ fun NowPlayingScreen(
                                     )
                             )
 
-                            val dragX = artworkOffsetX.value
-                            val sheenOffset = (dragX * 2.2f).coerceIn(-400f, 400f)
-                            val sheenAlpha = (kotlin.math.abs(dragX) / 100f).coerceIn(0f, 0.45f)
-                            val borderAlpha = (0.14f + (kotlin.math.abs(dragX) / 350f)).coerceIn(0.14f, 0.48f)
-
-                            val artworkShape = RoundedCornerShape(26.dp)
+                            val artworkShape = remember { RoundedCornerShape(26.dp) }
                             Box(
                                 modifier = Modifier
                                     .size(270.dp)
@@ -760,10 +757,40 @@ fun NowPlayingScreen(
                                         shape = artworkShape
                                         clip = true
                                         shadowElevation = 20f
-                                        compositingStrategy = CompositingStrategy.Offscreen
+                                        compositingStrategy = CompositingStrategy.Auto
                                     }
                                     .clip(artworkShape)
-                                    .border(1.5.dp, Color.White.copy(alpha = borderAlpha), artworkShape)
+                                    .drawWithContent {
+                                        drawContent()
+                                        val dragX = artworkOffsetX.value
+                                        val sheenOffset = (dragX * 2.2f).coerceIn(-400f, 400f)
+                                        val sheenAlpha = (kotlin.math.abs(dragX) / 100f).coerceIn(0f, 0.45f)
+                                        val borderAlpha = (0.14f + (kotlin.math.abs(dragX) / 350f)).coerceIn(0.14f, 0.48f)
+
+                                        // Draw smooth border in Draw Phase
+                                        drawOutline(
+                                            outline = artworkShape.createOutline(size, layoutDirection, this),
+                                            color = Color.White.copy(alpha = borderAlpha),
+                                            style = Stroke(width = 1.5.dp.toPx())
+                                        )
+
+                                        // 🎚️ Holographic Vinyl Specular Sheen in Draw Phase
+                                        if (sheenAlpha > 0.005f) {
+                                            drawRect(
+                                                brush = Brush.linearGradient(
+                                                    colors = listOf(
+                                                        Color.Transparent,
+                                                        Color(0xFFFF80BF).copy(alpha = sheenAlpha * 0.32f),
+                                                        Color.White.copy(alpha = sheenAlpha * 0.65f),
+                                                        Color(0xFF80D8FF).copy(alpha = sheenAlpha * 0.32f),
+                                                        Color.Transparent
+                                                    ),
+                                                    start = Offset(sheenOffset - 100f, -50f),
+                                                    end = Offset(sheenOffset + 240f, 320f)
+                                                )
+                                            )
+                                        }
+                                    }
                                     .combinedClickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
@@ -778,7 +805,7 @@ fun NowPlayingScreen(
                                 AnimatedContent(
                                     targetState = song.id,
                                     transitionSpec = {
-                                        fadeIn(animationSpec = tween(260)) togetherWith fadeOut(animationSpec = tween(200))
+                                        fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(160))
                                     },
                                     label = "artwork_cinematic_transition"
                                 ) { _ ->
@@ -787,27 +814,6 @@ fun NowPlayingScreen(
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
-                                    )
-                                }
-
-                                // 🎚️ Holographic Vinyl Specular Sheen Light Reflection on 3D Drag
-                                if (sheenAlpha > 0.005f) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.linearGradient(
-                                                    colors = listOf(
-                                                        Color.Transparent,
-                                                        Color(0xFFFF80BF).copy(alpha = sheenAlpha * 0.32f),
-                                                        Color.White.copy(alpha = sheenAlpha * 0.65f),
-                                                        Color(0xFF80D8FF).copy(alpha = sheenAlpha * 0.32f),
-                                                        Color.Transparent
-                                                    ),
-                                                    start = Offset(sheenOffset - 100f, -50f),
-                                                    end = Offset(sheenOffset + 240f, 320f)
-                                                )
-                                            )
                                     )
                                 }
 
