@@ -1099,6 +1099,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         triggerSmartQueuePrefetch(nextSong?.id)
     }
 
+    private fun fetchStreamAuthUrl(encUrl: String): String? {
+        if (encUrl.isBlank()) return null
+        return try {
+            val enc = URLEncoder.encode(encUrl, "UTF-8")
+            val authUrl = "https://www.jiosaavn.com/api.php?__call=song.generateAuthToken&url=$enc&bitrate=320&api_version=4&_format=json&ctx=android&_marker=0"
+            val req = okhttp3.Request.Builder()
+                .url(authUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .header("Referer", "https://www.jiosaavn.com/")
+                .build()
+            val text = NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+            val authResp = JSONObject(text)
+            val streamUrl = authResp.optString("auth_url", "")
+            if (streamUrl.isNotBlank() && streamUrl != "false") streamUrl else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun resolveStreamUrl(song: Song): String = withContext(Dispatchers.IO) {
         val songId = song.id
         streamUrlCache.get(songId)?.let { return@withContext it }
@@ -1110,12 +1129,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return@withContext localPath
         }
 
-        // Attempt 1: Direct on-device JioSaavn API by PID with native 0ms DES decryption
+        // Attempt 1: Direct on-device JioSaavn API by PID
         try {
             val detailsUrl = "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId"
             val req1 = okhttp3.Request.Builder()
                 .url(detailsUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                 .header("Referer", "https://www.jiosaavn.com/")
                 .build()
             val text1 = NetworkService.httpClient.newCall(req1).execute().use { it.body?.string().orEmpty() }
@@ -1123,6 +1142,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val encUrl = details.optJSONObject(songId)?.optString("encrypted_media_url", "")
                 ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
             if (encUrl.isNotBlank()) {
+                val streamAuth = fetchStreamAuthUrl(encUrl)
+                if (!streamAuth.isNullOrBlank()) {
+                    streamUrlCache.put(songId, streamAuth)
+                    return@withContext streamAuth
+                }
                 val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
                 if (!directDecrypted.isNullOrBlank()) {
                     streamUrlCache.put(songId, directDecrypted)
@@ -1133,7 +1157,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             android.util.Log.w("MusicVM", "Direct PID stream resolution for $songId failed (${e.message}), attempting search fallback...")
         }
 
-        // Attempt 2: Search Fallback with direct DES decryption
+        // Attempt 2: Search Fallback
         try {
             val queries = mutableListOf(
                 "${song.displayTitle} ${song.artist}".trim(),
@@ -1147,7 +1171,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&ctx=android&api_version=4&p=1&n=8&q=$encodedQuery"
                 val reqSearch = okhttp3.Request.Builder()
                     .url(searchUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                     .header("Referer", "https://www.jiosaavn.com/")
                     .build()
                 val textSearch = NetworkService.httpClient.newCall(reqSearch).execute().use { it.body?.string().orEmpty() }
@@ -1159,6 +1183,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val encUrl = match.optString("encrypted_media_url", "")
                             .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
                         if (encUrl.isNotBlank()) {
+                            val streamAuth = fetchStreamAuthUrl(encUrl)
+                            if (!streamAuth.isNullOrBlank()) {
+                                streamUrlCache.put(songId, streamAuth)
+                                return@withContext streamAuth
+                            }
                             val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
                             if (!directDecrypted.isNullOrBlank()) {
                                 streamUrlCache.put(songId, directDecrypted)
