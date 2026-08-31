@@ -423,7 +423,7 @@ object IntelliMatchEngine {
     }
 
     /**
-     * Ranks search candidates using multi-factor phonetic and token similarity against the user query.
+     * Ranks search candidates using multi-factor phonetic, token similarity, and stream popularity against the user query.
      */
     fun fuzzyRankSearchResults(query: String, candidates: List<Song>): List<Song> {
         if (candidates.isEmpty()) return candidates
@@ -431,45 +431,58 @@ object IntelliMatchEngine {
         val queryTokens = query.lowercase().split(" ").filter { it.length >= 2 }
 
         return candidates.sortedByDescending { song ->
-            var score = 0
+            var score = 0L
 
-            val titleNorm = normalizePhonetics(song.title)
+            val titleNorm = normalizePhonetics(song.displayTitle)
             val artistNorm = normalizePhonetics(song.artist)
 
-            // 1. Direct phonetic exact match or prefix for title
-            if (titleNorm.contains(queryNorm) || queryNorm.contains(titleNorm)) {
-                score += 1000
+            // 1. Direct phonetic exact match, prefix, or containment for title
+            if (titleNorm.equals(queryNorm, ignoreCase = true)) {
+                score += 5000L
+            } else if (titleNorm.startsWith(queryNorm) || queryNorm.startsWith(titleNorm)) {
+                score += 3000L
+            } else if (titleNorm.contains(queryNorm) || queryNorm.contains(titleNorm)) {
+                score += 2000L
             } else {
                 val jaro = jaroWinkler(queryNorm, titleNorm)
-                score += (jaro * 600).toInt()
+                score += (jaro * 1200).toLong()
             }
 
             // 2. Direct phonetic exact match or prefix for artist
-            if (artistNorm.contains(queryNorm) || queryNorm.contains(artistNorm)) {
-                score += 900
+            if (artistNorm.equals(queryNorm, ignoreCase = true)) {
+                score += 2500L
+            } else if (artistNorm.contains(queryNorm) || queryNorm.contains(artistNorm)) {
+                score += 1500L
             } else {
                 val jaroArtist = jaroWinkler(queryNorm, artistNorm)
                 if (jaroArtist >= 0.70) {
-                    score += (jaroArtist * 500).toInt()
+                    score += (jaroArtist * 800).toLong()
                 }
             }
 
             // 3. Token overlap with title & artist
-            val songTitleTokens = song.title.lowercase().split(" ", "(", ")", "-", "_")
+            val songTitleTokens = song.displayTitle.lowercase().split(" ", "(", ")", "-", "_")
             val songArtistTokens = song.artist.lowercase().split(" ", ",", "&")
             for (qt in queryTokens) {
                 val qtNorm = normalizePhonetics(qt)
                 if (songTitleTokens.any { normalizePhonetics(it) == qtNorm }) {
-                    score += 250
+                    score += 500L
                 }
                 if (songArtistTokens.any { normalizePhonetics(it) == qtNorm }) {
-                    score += 200
+                    score += 400L
                 }
             }
 
-            // 4. Title cleanliness bonus (soundtrack/official versions over compilations)
+            // 4. Stream Popularity Weight (Industry Standard Logarithmic Scoring)
+            // 5M streams gives ~log10(5000000) * 150 = ~1005 bonus points
+            if (song.playCount > 0L) {
+                val logPopularity = kotlin.math.log10(song.playCount.toDouble()).coerceAtLeast(0.0)
+                score += (logPopularity * 150.0).toLong()
+            }
+
+            // 5. Title cleanliness bonus (soundtrack/official versions over compilations/remixes)
             if (!song.title.contains("remix", ignoreCase = true) && !song.title.contains("mashup", ignoreCase = true)) {
-                score += 100
+                score += 200L
             }
 
             score

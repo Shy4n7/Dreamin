@@ -1040,20 +1040,37 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         if (noiseRegex.containsMatchIn(rawTitle)) continue
                         val more = bestItem.optJSONObject("more_info") ?: org.json.JSONObject()
                         val durationSec = more.optString("duration").toLongOrNull() ?: 0L
-                        if (durationSec in 1..74 || durationSec > 540) continue
+                        if (durationSec in 1..49 || durationSec > 600) continue
 
                         val image = cleanArtworkUrl(bestItem.optString("image"))
+                        val playCount = bestItem.optString("play_count").toLongOrNull()
+                            ?: (more.optString("play_count").toLongOrNull() ?: 0L)
+
                         val artistMap = more.optJSONObject("artistMap")
                         val primaryArr = artistMap?.optJSONArray("primary_artists")
-                        val artist = if (primaryArr != null && primaryArr.length() > 0) {
+                        var artist = if (primaryArr != null && primaryArr.length() > 0) {
                             (0 until primaryArr.length()).joinToString(", ") { unescapeHtml(primaryArr.getJSONObject(it).optString("name")) }
                         } else unescapeHtml(more.optString("singers").ifBlank { "" })
+
+                        if (artist.isBlank()) {
+                            val music = unescapeHtml(more.optString("music"))
+                            val subtitle = unescapeHtml(bestItem.optString("subtitle"))
+                            val album = unescapeHtml(more.optString("album"))
+                            artist = when {
+                                music.isNotBlank() -> music
+                                subtitle.isNotBlank() -> subtitle
+                                album.isNotBlank() -> album
+                                else -> "Original Soundtrack"
+                            }
+                        }
+
                         val songItem = Song(
                             id = bestItem.optString("id"),
                             title = rawTitle,
                             artist = artist,
                             artworkUrl = image,
-                            duration = durationSec * 1000L
+                            duration = durationSec * 1000L,
+                            playCount = playCount
                         )
                         if (OfficialSongFilter.isOfficial(songItem, rejectHindi = rejectHindi)) {
                             songs.add(songItem)

@@ -11,7 +11,8 @@ data class Song(
     val title: String,
     val artist: String,
     @SerializedName("artwork_url") val artworkUrl: String = "",
-    val duration: Long = 0L
+    val duration: Long = 0L,
+    @SerializedName("play_count") val playCount: Long = 0L
 ) {
     val displayArtworkUrl: String get() {
         val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(this)

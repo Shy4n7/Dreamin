@@ -66,11 +66,11 @@ object OfficialSongFilter {
         // 1. Reject if title contains noise patterns
         if (UNWANTED_TITLE_PATTERNS.containsMatchIn(title)) return false
 
-        // 2. Reject if artist is unknown, generic, or unofficial
-        if (artist.isBlank() || UNWANTED_ARTISTS.any { artist.contains(it) }) return false
+        // 2. Reject if artist contains unwanted spam channels or blacklisted terms
+        if (artist.isNotBlank() && UNWANTED_ARTISTS.any { artist.contains(it) }) return false
 
-        // 3. Reject abnormal durations (under 80s or over 9 minutes)
-        if (song.duration in 1..79_999L || song.duration > 540_000L) return false
+        // 3. Reject abnormal durations (under 50s or over 10 minutes)
+        if (song.duration in 1..49_999L || song.duration > 600_000L) return false
 
         // 4. Reject suspicious title formatting
         if (title.contains(":") && title.contains("Song", ignoreCase = true)) return false
