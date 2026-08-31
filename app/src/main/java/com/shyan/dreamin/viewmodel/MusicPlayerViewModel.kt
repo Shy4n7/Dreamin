@@ -614,21 +614,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Tier 1 & 2: Multi-Pass Search with Session Query Cache
         val allCandidates = mutableListOf<Song>()
 
-        // Pass 1: Direct Clean Base Title
+        // Pass 1: Direct Clean Base Title + Primary Artist (Most accurate for Spotify tracks)
+        val q1 = if (primaryArtist.isNotBlank()) "$cleanBaseTitle $primaryArtist" else cleanBaseTitle
         val p1 = if (queryCache != null) {
-            queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8) }
+            queryCache.getOrPut(q1) { searchOnDevice(q1, limit = 8, rejectHindi = false) }
         } else {
-            searchOnDevice(cleanBaseTitle, limit = 8)
+            searchOnDevice(q1, limit = 8, rejectHindi = false)
         }
         allCandidates.addAll(p1)
 
-        // Pass 2: Base Title + Primary Artist (for disambiguation)
+        // Pass 2: Base Title alone (if combined query had zero results)
         if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
-            val q2 = "$cleanBaseTitle $primaryArtist"
             val p2 = if (queryCache != null) {
-                queryCache.getOrPut(q2) { searchOnDevice(q2, limit = 8) }
+                queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false) }
             } else {
-                searchOnDevice(q2, limit = 8)
+                searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false)
             }
             allCandidates.addAll(p2)
         }
@@ -636,9 +636,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Pass 3: Full Clean Title
         if (allCandidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
             val p3 = if (queryCache != null) {
-                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8) }
+                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8, rejectHindi = false) }
             } else {
-                searchOnDevice(fullClean, limit = 8)
+                searchOnDevice(fullClean, limit = 8, rejectHindi = false)
             }
             allCandidates.addAll(p3)
         }
@@ -1077,19 +1077,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         rejectHindi: Boolean = false
     ): List<Song> = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=android&q=$encoded&n=$limit&p=$page"
+        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
         
         for (attempt in 0..1) {
             try {
                 val req = okhttp3.Request.Builder()
                     .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                     .header("Accept", "application/json, text/plain, */*")
                     .header("Origin", "https://www.jiosaavn.com")
                     .header("Referer", "https://www.jiosaavn.com/")
                     .build()
                 val resp = NetworkService.httpClient.newCall(req).execute()
-                val text = resp.body?.string().orEmpty()
+                val text = resp.body?.string().orEmpty().trim()
+                if (text.startsWith("<") || !text.startsWith("{")) {
+                    if (attempt == 0) kotlinx.coroutines.delay(200L)
+                    continue
+                }
                 val root = org.json.JSONObject(text)
                 val results = root.optJSONArray("results")
                 if (results != null && results.length() > 0) {

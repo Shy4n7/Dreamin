@@ -176,6 +176,17 @@ object IntelliMatchEngine {
             "amit trivedi", "mithoon", "shankar-ehsaan-loy", "jubin nautiyal", "b praak"
         )
 
+        val englishArtists = setOf(
+            "alec benjamin", "the neighbourhood", "lana del rey", "arctic monkeys", "ariana grande",
+            "the weeknd", "billie eilish", "tom odell", "keane", "seafret", "new west",
+            "taylor swift", "ed sheeran", "dua lipa", "maroon 5", "charlie puth", "selena gomez",
+            "justin bieber", "olivia rodrigo", "bruno mars", "eminem", "conan gray", "post malone",
+            "imagine dragons", "shawn mendes", "coldplay", "drake", "kendrick lamar", "rihanna",
+            "beyonce", "sam smith", "adele", "harry styles", "katy perry", "camila cabello",
+            "isabel larosa", "tv girl", "david kushner", "djo", "gotye", "melanie martinez",
+            "stephen sanchez", "conan gray", "mitski", "sasha alex sloan", "dominic fike"
+        )
+
         for (t in tracks) {
             val titleLower = t.title.lowercase()
             val artistLower = t.artist.lowercase()
@@ -198,10 +209,13 @@ object IntelliMatchEngine {
             if (hindiArtists.any { artistLower.contains(it) }) {
                 langScores["hindi"] = langScores.getValue("hindi") + 3
             }
+            if (englishArtists.any { artistLower.contains(it) }) {
+                langScores["english"] = langScores.getValue("english") + 3
+            }
         }
 
         val best = langScores.maxByOrNull { it.value }
-        return if (best != null && best.value > 0) best.key else "tamil"
+        return if (best != null && best.value > 0) best.key else "english"
     }
 
     /**
