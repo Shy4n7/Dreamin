@@ -114,11 +114,6 @@ class IntelliMatchEngineTest {
                 durationMs = 229000L
             ),
             com.shyan.dreamin.data.service.SpotifyImportedTrack(
-                title = "Arabic Kuthu",
-                artist = "Anirudh Ravichander, Jonita Gandhi",
-                durationMs = 280000L
-            ),
-            com.shyan.dreamin.data.service.SpotifyImportedTrack(
                 title = "Marakkuma Nenjam",
                 artist = "A.R. Rahman",
                 durationMs = 250000L
@@ -126,6 +121,29 @@ class IntelliMatchEngineTest {
         )
         val detected = IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, playlistTitle = "My Songs")
         assertEquals("tamil", detected)
+    }
+
+    @Test
+    fun testDetectDominantPlaylistLanguage_englishPlaylist() {
+        val tracks = listOf(
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Let Me Down Slowly",
+                artist = "Alec Benjamin",
+                durationMs = 169000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Sweater Weather",
+                artist = "The Neighbourhood",
+                durationMs = 240000L
+            ),
+            com.shyan.dreamin.data.service.SpotifyImportedTrack(
+                title = "Summertime Sadness",
+                artist = "Lana Del Rey",
+                durationMs = 265000L
+            )
+        )
+        val detected = IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, playlistTitle = "Chill Pop")
+        assertEquals("english", detected)
     }
 
     @Test

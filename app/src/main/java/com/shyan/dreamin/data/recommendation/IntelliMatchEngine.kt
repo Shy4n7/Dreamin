@@ -288,14 +288,19 @@ object IntelliMatchEngine {
 
         // 3. Language Affinity (Context-aware preference for targetLanguage over other regional versions)
         val candTitleLower = candidate.title.lowercase()
-        val otherLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi").filter { it != targetLanguage.lowercase() }
+        val allRegionalLanguages = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bhojpuri", "marathi")
+        val otherLanguages = if (targetLanguage.lowercase() == "english") {
+            allRegionalLanguages
+        } else {
+            allRegionalLanguages.filter { it != targetLanguage.lowercase() }
+        }
         for (other in otherLanguages) {
-            if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]")) {
-                score -= 300
+            if (candTitleLower.contains("($other)") || candTitleLower.contains("[$other]") || candTitleLower.contains(" - $other") || candTitleLower.contains(" ($other)")) {
+                score -= 650
             }
         }
-        if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]")) {
-            score += 350
+        if (candTitleLower.contains("($targetLanguage)") || candTitleLower.contains("[$targetLanguage]") || candTitleLower.contains(" - $targetLanguage")) {
+            score += 500
         }
 
         val isExactTrackMatch = (targetBaseKey == candBaseKey || maxTitleSim >= 0.85) && artistHits > 0

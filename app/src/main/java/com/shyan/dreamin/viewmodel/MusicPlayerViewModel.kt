@@ -617,18 +617,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Pass 1: Direct Clean Base Title + Primary Artist (Most accurate for Spotify tracks)
         val q1 = if (primaryArtist.isNotBlank()) "$cleanBaseTitle $primaryArtist" else cleanBaseTitle
         val p1 = if (queryCache != null) {
-            queryCache.getOrPut(q1) { searchOnDevice(q1, limit = 8, rejectHindi = false) }
+            queryCache.getOrPut(q1) { searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
         } else {
-            searchOnDevice(q1, limit = 8, rejectHindi = false)
+            searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false)
         }
         allCandidates.addAll(p1)
 
         // Pass 2: Base Title alone (if combined query had zero results)
         if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
             val p2 = if (queryCache != null) {
-                queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false) }
+                queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
             } else {
-                searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false)
+                searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false)
             }
             allCandidates.addAll(p2)
         }
@@ -636,9 +636,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Pass 3: Full Clean Title
         if (allCandidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
             val p3 = if (queryCache != null) {
-                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8, rejectHindi = false) }
+                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
             } else {
-                searchOnDevice(fullClean, limit = 8, rejectHindi = false)
+                searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false)
             }
             allCandidates.addAll(p3)
         }
@@ -1097,15 +1097,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val root = org.json.JSONObject(text)
                 val results = root.optJSONArray("results")
                 if (results != null && results.length() > 0) {
-                    val rawItems = mutableListOf<org.json.JSONObject>()
+                    val allItems = mutableListOf<org.json.JSONObject>()
+                    val langItems = mutableListOf<org.json.JSONObject>()
                     for (i in 0 until results.length()) {
                         val it = results.getJSONObject(i)
+                        allItems.add(it)
                         val itemLang = it.optString("language").ifBlank { it.optJSONObject("more_info")?.optString("language") ?: "" }.lowercase().trim()
-                        if (targetLanguage.isNotBlank() && itemLang.isNotBlank() && !itemLang.equals(targetLanguage, ignoreCase = true)) {
-                            continue
+                        if (targetLanguage.isBlank() || itemLang.isBlank() || itemLang.equals(targetLanguage, ignoreCase = true)) {
+                            langItems.add(it)
                         }
-                        rawItems.add(it)
                     }
+                    val rawItems = if (langItems.isNotEmpty()) langItems else allItems
 
                     val grouped = rawItems.groupBy {
                         it.optString("title").replace(Regex("(?i)\\s*\\(?\\s*from\\s+[\"\'\u201c\u2018].*?[\"\'\u201d\u2019]?\\s*\\)?$"), "")
