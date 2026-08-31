@@ -395,22 +395,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val suggestedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = Semaphore(8)
+        val semaphore = Semaphore(5)
+        val queryCache = java.util.concurrent.ConcurrentHashMap<String, List<Song>>()
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
                 launch(Dispatchers.IO) {
                     try {
                         semaphore.withPermit {
-                            val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
+                            val (matched, suggestion) = matchSpotifyTrack(track, playlistLang, queryCache)
                             if (matched != null) {
                                 val finalArtwork = when {
                                     track.artworkUrl.isNotBlank() -> track.artworkUrl
                                     matched.artworkUrl.isNotBlank() -> matched.artworkUrl
-                                    else -> com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang) ?: ""
-                                }
-                                if (finalArtwork.isNotBlank()) {
-                                    com.shyan.dreamin.data.service.OfficialArtworkService.putCachedPoster(matched, finalArtwork)
+                                    else -> ""
                                 }
                                 val songWithArt = matched.copy(artworkUrl = finalArtwork)
                                 matchedArray[index] = songWithArt
@@ -424,7 +422,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     } finally {
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
-                        if (currDone % 2 == 0 || currDone == total) {
+                        if (currDone % 3 == 0 || currDone == total) {
                             _uiState.update {
                                 it.copy(
                                     spotifyImportState = SpotifyImportState.MatchingTracks(
@@ -583,7 +581,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private suspend fun matchSpotifyTrack(
         track: com.shyan.dreamin.data.service.SpotifyImportedTrack,
-        playlistLanguage: String
+        playlistLanguage: String,
+        queryCache: java.util.concurrent.ConcurrentHashMap<String, List<Song>>? = null
     ): Pair<Song?, Song?> = withContext(Dispatchers.IO) {
         val rawTitle = track.title
         val rawArtist = track.artist
@@ -612,41 +611,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         } catch (_: Exception) {}
 
-        // Tier 1 & 2: Multi-Pass Search
+        // Tier 1 & 2: Multi-Pass Search with Session Query Cache
         val allCandidates = mutableListOf<Song>()
 
         // Pass 1: Direct Clean Base Title
-        val p1 = searchOnDevice(cleanBaseTitle, limit = 8)
+        val p1 = if (queryCache != null) {
+            queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8) }
+        } else {
+            searchOnDevice(cleanBaseTitle, limit = 8)
+        }
         allCandidates.addAll(p1)
 
         // Pass 2: Base Title + Primary Artist (for disambiguation)
         if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
-            allCandidates.addAll(searchOnDevice("$cleanBaseTitle $primaryArtist", limit = 8))
+            val q2 = "$cleanBaseTitle $primaryArtist"
+            val p2 = if (queryCache != null) {
+                queryCache.getOrPut(q2) { searchOnDevice(q2, limit = 8) }
+            } else {
+                searchOnDevice(q2, limit = 8)
+            }
+            allCandidates.addAll(p2)
         }
 
         // Pass 3: Full Clean Title
         if (allCandidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
-            allCandidates.addAll(searchOnDevice(fullClean, limit = 8))
-        }
-
-        // Pass 4: Secondary Engine / Server Fallback
-        if (allCandidates.isEmpty()) {
-            try {
-                val serverResp = api.search(cleanBaseTitle, page = 1, limit = 8)
-                allCandidates.addAll(serverResp.results.filter { OfficialSongFilter.isOfficial(it, rejectHindi = false) })
-            } catch (_: Exception) {}
-        }
-        if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
-            try {
-                val serverResp = api.search("$cleanBaseTitle $primaryArtist", page = 1, limit = 8)
-                allCandidates.addAll(serverResp.results.filter { OfficialSongFilter.isOfficial(it, rejectHindi = false) })
-            } catch (_: Exception) {}
-        }
-
-        // Pass 5: Relaxed Search for tracks where only Acoustic/Single cuts exist (e.g. Veesum Velichathile)
-        if (allCandidates.isEmpty()) {
-            val relaxed = searchOnDevice(cleanBaseTitle, limit = 8, rejectHindi = false)
-            allCandidates.addAll(relaxed)
+            val p3 = if (queryCache != null) {
+                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8) }
+            } else {
+                searchOnDevice(fullClean, limit = 8)
+            }
+            allCandidates.addAll(p3)
         }
 
         if (allCandidates.isEmpty()) return@withContext Pair(null, null)

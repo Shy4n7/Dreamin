@@ -1233,7 +1233,7 @@ fun CreatePlaylistDialog(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val displayArt = st.currentArtworkUrl.ifBlank { st.coverUrl }
+                                    val displayArt = st.coverUrl.ifBlank { st.currentArtworkUrl }
                                     Box(
                                         modifier = Modifier
                                             .size(52.dp)
