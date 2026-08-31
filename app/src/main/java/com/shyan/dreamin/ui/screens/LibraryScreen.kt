@@ -137,6 +137,9 @@ fun LibraryScreen(
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
     onCheckClipboard: () -> Unit = {},
     onDismissDetectedSpotifyLink: () -> Unit = {},
+    onSyncSpotifyPlaylist: (Long) -> Unit = {},
+    onDismissSpotifySyncAlert: (Long) -> Unit = {},
+    onUnlinkSpotifyPlaylist: (Long) -> Unit = {},
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {}
 ) {
@@ -230,6 +233,11 @@ fun LibraryScreen(
                             onAddSuggestedTrack = onAddSuggestedTrack,
                             onDownloadPlaylist = onDownloadPlaylist,
                             initialSpotifyUrl = state.detectedSpotifyClipboardUrl,
+                            spotifySyncAlerts = state.spotifySyncAlerts,
+                            isSyncingSpotifyPlaylist = state.isSyncingSpotifyPlaylist,
+                            onSyncSpotifyPlaylist = onSyncSpotifyPlaylist,
+                            onDismissSpotifySyncAlert = onDismissSpotifySyncAlert,
+                            onUnlinkSpotifyPlaylist = onUnlinkSpotifyPlaylist,
                             triggerKey = returnSpringKey
                         )
                         1 -> FavoritesTab(
@@ -461,6 +469,11 @@ fun PlaylistsTab(
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
     onDownloadPlaylist: (List<Song>) -> Unit = {},
     initialSpotifyUrl: String? = null,
+    spotifySyncAlerts: List<com.shyan.dreamin.data.model.SpotifySyncAlert> = emptyList(),
+    isSyncingSpotifyPlaylist: Boolean = false,
+    onSyncSpotifyPlaylist: (Long) -> Unit = {},
+    onDismissSpotifySyncAlert: (Long) -> Unit = {},
+    onUnlinkSpotifyPlaylist: (Long) -> Unit = {},
     triggerKey: Any? = Unit
 ) {
     val colors = LocalDreaminColors.current
@@ -499,6 +512,17 @@ fun PlaylistsTab(
                 Icon(Icons.Filled.Add, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
                 Text("New", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
+        }
+
+        // In-App Smart Sync & Change Alerts (No Emojis)
+        spotifySyncAlerts.forEach { alert ->
+            SpotifySyncAlertBanner(
+                alert = alert,
+                onSync = { onSyncSpotifyPlaylist(alert.playlistId) },
+                onDismiss = { onDismissSpotifySyncAlert(alert.playlistId) },
+                onUnlink = { onUnlinkSpotifyPlaylist(alert.playlistId) },
+                isSyncing = isSyncingSpotifyPlaylist
+            )
         }
 
         LazyVerticalGrid(
@@ -928,3 +952,112 @@ fun StatsCard(modifier: Modifier = Modifier, label: String, value: String) {
         Text(label, fontSize = 12.sp, color = colors.onSurfaceVariant)
     }
 }
+
+@Composable
+fun SpotifySyncAlertBanner(
+    alert: com.shyan.dreamin.data.model.SpotifySyncAlert,
+    onSync: () -> Unit,
+    onDismiss: () -> Unit,
+    onUnlink: () -> Unit,
+    isSyncing: Boolean = false
+) {
+    val colors = LocalDreaminColors.current
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = colors.surfaceHigh,
+        border = BorderStroke(1.dp, if (alert.isUnavailable) colors.surfaceHighest else Color(0xFF1DB954).copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (alert.isUnavailable) colors.surfaceHigh else Color(0xFF1DB954).copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (alert.isUnavailable) Icons.Filled.LinkOff else Icons.Filled.Sync,
+                    contentDescription = null,
+                    tint = if (alert.isUnavailable) colors.onSurfaceVariant else Color(0xFF1DB954),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (alert.isUnavailable) {
+                        "${alert.playlistName} is unavailable"
+                    } else {
+                        "${alert.newTrackCount} new ${if (alert.newTrackCount == 1) "song" else "songs"} in ${alert.playlistName}"
+                    },
+                    color = colors.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (alert.isUnavailable) "Spotify playlist is no longer public" else "Spotify playlist updated — tap to sync",
+                    color = colors.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (alert.isUnavailable) {
+                Button(
+                    onClick = onUnlink,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.surfaceHighest,
+                        contentColor = colors.onSurface
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text("Keep Local", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                Button(
+                    onClick = onSync,
+                    enabled = !isSyncing,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1DB954),
+                        contentColor = Color.Black
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            color = Color.Black,
+                            strokeWidth = 1.5.dp
+                        )
+                    } else {
+                        Text("Sync Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+

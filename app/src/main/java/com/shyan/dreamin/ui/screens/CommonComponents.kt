@@ -1292,7 +1292,7 @@ fun CreatePlaylistDialog(
                                             trackColor = colors.surfaceHigh
                                         )
                                         Text(
-                                            "✨ Matching: ${st.currentTrackName}",
+                                            "Matching: ${st.currentTrackName}",
                                             color = colors.onSurface,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -1340,7 +1340,7 @@ fun CreatePlaylistDialog(
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Text(
-                                            "⚠️ ${st.unmatchedTracks.size} songs not found",
+                                            "${st.unmatchedTracks.size} songs not found",
                                             color = Color(0xFFFFB74D),
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold
@@ -1417,7 +1417,7 @@ fun CreatePlaylistDialog(
                                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                         ) {
                                                             Text(
-                                                                "💡 Match: ${track.suggestedCandidate.title}",
+                                                                "Match: ${track.suggestedCandidate.title}",
                                                                 color = colors.primary,
                                                                 fontSize = 9.5.sp,
                                                                 fontWeight = FontWeight.Medium,
@@ -1426,7 +1426,7 @@ fun CreatePlaylistDialog(
                                                                 modifier = Modifier.weight(1f)
                                                             )
                                                             if (isAdded) {
-                                                                Text("Added ✓", color = Color(0xFF1DB954), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                                                Text("Added", color = Color(0xFF1DB954), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                                                             } else {
                                                                 Text(
                                                                     "+ Add",

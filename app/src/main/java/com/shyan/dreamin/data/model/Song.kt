@@ -172,7 +172,16 @@ data class PlayerUiState(
     val isFetchingUpNext: Boolean = false,
     val didYouMeanQuery: String? = null,
     val detectedSpotifyClipboardUrl: String? = null,
-    val isSyncingSpotifyPlaylist: Boolean = false
+    val isSyncingSpotifyPlaylist: Boolean = false,
+    val spotifySyncAlerts: List<SpotifySyncAlert> = emptyList()
+)
+
+@Immutable
+data class SpotifySyncAlert(
+    val playlistId: Long,
+    val playlistName: String,
+    val newTrackCount: Int,
+    val isUnavailable: Boolean = false
 )
 
 @Immutable

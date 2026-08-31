@@ -257,6 +257,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
                 _uiState.update { it.copy(playlists = lists, playlistArtworks = artworks) }
+                checkSpotifyPlaylistsForUpdates(lists)
             }
         }
     }
@@ -530,6 +531,57 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun dismissSpotifySyncAlert(playlistId: Long) {
+        _uiState.update { state ->
+            state.copy(spotifySyncAlerts = state.spotifySyncAlerts.filterNot { it.playlistId == playlistId })
+        }
+    }
+
+    fun unlinkSpotifyPlaylist(playlistId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistRepo.updateSpotifyPlaylistId(playlistId, null)
+            dismissSpotifySyncAlert(playlistId)
+        }
+    }
+
+    fun checkSpotifyPlaylistsForUpdates(playlists: List<com.shyan.dreamin.data.local.Playlist>? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val targetPlaylists = playlists ?: _uiState.value.playlists
+                val spotifyPlaylists = targetPlaylists.filter { !it.spotifyPlaylistId.isNullOrBlank() }
+                if (spotifyPlaylists.isEmpty()) return@launch
+
+                val alerts = mutableListOf<SpotifySyncAlert>()
+                for (pl in spotifyPlaylists) {
+                    val spotifyId = pl.spotifyPlaylistId ?: continue
+                    try {
+                        val details = com.shyan.dreamin.data.service.SpotifyImportService.fetchPlaylistDetails(spotifyId, getApplication())
+                        if (details == null) {
+                            alerts.add(SpotifySyncAlert(playlistId = pl.id, playlistName = pl.name, newTrackCount = 0, isUnavailable = true))
+                        } else {
+                            val existingSongs = playlistRepo.getSongs(pl.id)
+                            val existingKeys = existingSongs.map { com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(it.displayTitle) }.toSet()
+                            val newTracks = details.tracks.filterNot { t ->
+                                val key = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(t.title)
+                                existingKeys.contains(key)
+                            }
+                            if (newTracks.isNotEmpty()) {
+                                alerts.add(SpotifySyncAlert(playlistId = pl.id, playlistName = pl.name, newTrackCount = newTracks.size, isUnavailable = false))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MusicVM", "checkSpotifyPlaylistsForUpdates error on ${pl.name}: ${e.message}")
+                    }
+                }
+                _uiState.update { state ->
+                    state.copy(spotifySyncAlerts = alerts)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MusicVM", "checkSpotifyPlaylistsForUpdates failed: ${e.message}")
+            }
+        }
+    }
+
     fun syncSpotifyPlaylist(playlistId: Long) {
         if (_uiState.value.isSyncingSpotifyPlaylist) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -570,6 +622,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             _uiState.update { it.copy(openPlaylistSongs = updatedAll) }
                         }
                     }
+                }
+                _uiState.update { state ->
+                    state.copy(spotifySyncAlerts = state.spotifySyncAlerts.filterNot { it.playlistId == playlistId })
                 }
             } catch (e: Exception) {
                 android.util.Log.w("MusicVM", "syncSpotifyPlaylist failed: ${e.message}")

@@ -275,6 +275,9 @@ private fun MainAppScaffold(
                             onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
                             onCheckClipboard         = { vm.checkClipboardForSpotifyLink(context) },
                             onDismissDetectedSpotifyLink = vm::dismissDetectedSpotifyLink,
+                            onSyncSpotifyPlaylist    = vm::syncSpotifyPlaylist,
+                            onDismissSpotifySyncAlert = vm::dismissSpotifySyncAlert,
+                            onUnlinkSpotifyPlaylist  = vm::unlinkSpotifyPlaylist,
                             onPlayNext               = vm::playNext,
                             onAddToQueue             = vm::addToQueue
                         )
