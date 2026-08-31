@@ -3,6 +3,8 @@ package com.shyan.dreamin.data.service
 import com.shyan.dreamin.data.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -44,6 +46,8 @@ object OfficialArtworkService {
         "ku. karthik", "selvaraghavan", "gkb", "eknath", "mani amudhavan"
     )
 
+    private val prefetchSemaphore = Semaphore(3)
+
     fun prefetchSongListArtworks(
         songs: List<Song>,
         scope: kotlinx.coroutines.CoroutineScope,
@@ -52,9 +56,11 @@ object OfficialArtworkService {
         songs.forEach { song ->
             scope.launch(Dispatchers.IO) {
                 try {
-                    val poster = resolveOfficialMoviePoster(song)
-                    if (!poster.isNullOrBlank() && poster != song.artworkUrl) {
-                        onResolved?.invoke(song.id, poster)
+                    prefetchSemaphore.withPermit {
+                        val poster = resolveOfficialMoviePoster(song)
+                        if (!poster.isNullOrBlank() && poster != song.artworkUrl) {
+                            onResolved?.invoke(song.id, poster)
+                        }
                     }
                 } catch (_: Exception) {}
             }

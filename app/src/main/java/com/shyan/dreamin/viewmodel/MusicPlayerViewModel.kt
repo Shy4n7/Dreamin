@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
 import java.net.HttpURLConnection
@@ -368,33 +370,33 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val suggestedArray = arrayOfNulls<Song>(total)
         val progressCounter = java.util.concurrent.atomic.AtomicInteger(0)
         val matchedCounter = java.util.concurrent.atomic.AtomicInteger(0)
-        val semaphore = kotlinx.coroutines.sync.Semaphore(8)
+        val semaphore = Semaphore(8)
 
         kotlinx.coroutines.coroutineScope {
             tracks.forEachIndexed { index, track ->
                 launch(Dispatchers.IO) {
-                    semaphore.acquire()
                     try {
-                        val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
-                        if (matched != null) {
-                            val finalArtwork = when {
-                                track.artworkUrl.isNotBlank() -> track.artworkUrl
-                                matched.artworkUrl.isNotBlank() -> matched.artworkUrl
-                                else -> com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang) ?: ""
+                        semaphore.withPermit {
+                            val (matched, suggestion) = matchSpotifyTrack(track, playlistLang)
+                            if (matched != null) {
+                                val finalArtwork = when {
+                                    track.artworkUrl.isNotBlank() -> track.artworkUrl
+                                    matched.artworkUrl.isNotBlank() -> matched.artworkUrl
+                                    else -> com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(matched, playlistLang) ?: ""
+                                }
+                                if (finalArtwork.isNotBlank()) {
+                                    com.shyan.dreamin.data.service.OfficialArtworkService.putCachedPoster(matched, finalArtwork)
+                                }
+                                val songWithArt = matched.copy(artworkUrl = finalArtwork)
+                                matchedArray[index] = songWithArt
+                                matchedCounter.incrementAndGet()
+                            } else if (suggestion != null) {
+                                suggestedArray[index] = suggestion
                             }
-                            if (finalArtwork.isNotBlank()) {
-                                com.shyan.dreamin.data.service.OfficialArtworkService.putCachedPoster(matched, finalArtwork)
-                            }
-                            val songWithArt = matched.copy(artworkUrl = finalArtwork)
-                            matchedArray[index] = songWithArt
-                            matchedCounter.incrementAndGet()
-                        } else if (suggestion != null) {
-                            suggestedArray[index] = suggestion
                         }
                     } catch (e: Exception) {
                         android.util.Log.w("MusicVM", "Failed to match track: ${track.title} - ${e.message}")
                     } finally {
-                        semaphore.release()
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
                         if (currDone % 4 == 0 || currDone == total) {
@@ -1766,7 +1768,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             songs = altSongs
                         }
                     }
-                    val rankedSongs = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, songs)
+                    val rankedSongs = withContext(Dispatchers.Default) {
+                        com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, songs)
+                    }
                     if (trimmed.length >= 2) userPrefs.addRecentSearch(trimmed)
                     _uiState.update {
                         it.copy(
@@ -1796,7 +1800,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val songs = searchOnDevice(state.searchQuery, page = nextPage)
                 val combined = state.searchResults + songs
-                val rankedCombined = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(state.searchQuery, combined)
+                val rankedCombined = withContext(Dispatchers.Default) {
+                    com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(state.searchQuery, combined)
+                }
                 _uiState.update {
                     it.copy(
                         searchResults = rankedCombined,

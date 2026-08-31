@@ -20,11 +20,15 @@ import kotlinx.coroutines.launch
 @OptIn(UnstableApi::class)
 object PreBufferManager {
 
-    const val PRE_BUFFER_BYTES = 512L * 1024L // 512 KB
+    const val PRE_BUFFER_BYTES_UNMETERED = 512L * 1024L // 512 KB on Wi-Fi / Unmetered
+    const val PRE_BUFFER_BYTES_METERED = 128L * 1024L   // 128 KB on Cellular / Metered
+    const val PRE_BUFFER_BYTES = PRE_BUFFER_BYTES_UNMETERED
+
     private var preBufferJob: Job? = null
 
     /**
      * Silently pre-caches the stream header and initial audio blocks of upcomingStreamUrl.
+     * Uses reduced buffer on metered connections to conserve cellular data.
      */
     fun preBufferUpcomingStream(
         context: Context,
@@ -36,7 +40,11 @@ object PreBufferManager {
         preBufferJob?.cancel()
         preBufferJob = scope.launch(Dispatchers.IO) {
             try {
-                if (ExoPlayerCacheManager.isPartiallyCached(context, streamUrl, PRE_BUFFER_BYTES)) {
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+                val isMetered = cm?.isActiveNetworkMetered == true
+                val bufferTargetBytes = if (isMetered) PRE_BUFFER_BYTES_METERED else PRE_BUFFER_BYTES_UNMETERED
+
+                if (ExoPlayerCacheManager.isPartiallyCached(context, streamUrl, bufferTargetBytes)) {
                     return@launch
                 }
 
@@ -44,7 +52,7 @@ object PreBufferManager {
                 val dataSpec = DataSpec.Builder()
                     .setUri(Uri.parse(streamUrl))
                     .setPosition(0)
-                    .setLength(PRE_BUFFER_BYTES)
+                    .setLength(bufferTargetBytes)
                     .setKey(streamUrl)
                     .build()
 
