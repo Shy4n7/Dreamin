@@ -154,6 +154,8 @@ fun PlaylistDetailScreen(
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {},
     onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
+    onSyncSpotify: () -> Unit = {},
+    isSyncingSpotify: Boolean = false,
     quickPickSongs: List<Song> = emptyList()
 ) {
     BackHandler { onBack() }
@@ -192,11 +194,10 @@ fun PlaylistDetailScreen(
         songs.isNotEmpty() && songs.all { downloadedSongIds.contains(it.id) }
     }
 
-    val heroArt = playlist.coverUrl ?: songs.firstOrNull()?.displayArtworkUrl
-
-    // 🎨 1. Dynamic Dominant Color Extraction & Smooth Bloom (Instant 0ms LRU Cache)
-    var extractedDominant by remember(heroArt) {
-        mutableStateOf(com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedColor(heroArt) ?: colors.primary)
+    // 🎨 1. Dynamic Dominant Background Bloom extracted from Top Track / Cover
+    var extractedDominant by remember(playlist.id) { mutableStateOf(colors.primary) }
+    val heroArt = remember(playlist.coverUrl, songs) {
+        playlist.coverUrl?.takeIf { it.isNotBlank() } ?: songs.firstOrNull()?.displayArtworkUrl
     }
     LaunchedEffect(heroArt) {
         if (!heroArt.isNullOrBlank()) {
@@ -258,8 +259,8 @@ fun PlaylistDetailScreen(
                                     animatedDominant.copy(alpha = 0.14f),
                                     Color.Transparent
                                 ),
-                                center = Offset(200f, 60f),
-                                radius = 800f
+                                center = Offset(x = 540f, y = 180f),
+                                radius = 700f
                             )
                         )
                 )
@@ -371,6 +372,28 @@ fun PlaylistDetailScreen(
                                         translationY = (1f - titleAlpha) * 16f
                                     }
                             )
+                            if (playlist.spotifyPlaylistId != null) {
+                                IconButton(
+                                    onClick = onSyncSpotify,
+                                    enabled = !isSyncingSpotify,
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    if (isSyncingSpotify) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = Color(0xFF1DB954),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.Sync,
+                                            contentDescription = "Sync with Spotify",
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
                             IconButton(onClick = { showAddSongsSheet = true }, modifier = Modifier.size(44.dp)) {
                                 Icon(
                                     Icons.Filled.Add,

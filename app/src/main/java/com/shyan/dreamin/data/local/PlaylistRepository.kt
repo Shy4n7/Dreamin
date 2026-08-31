@@ -14,7 +14,8 @@ data class Playlist(
     val name: String,
     val createdAt: Long,
     val coverUrl: String? = null,
-    val songCount: Int = 0
+    val songCount: Int = 0,
+    val spotifyPlaylistId: String? = null
 )
 
 class PlaylistRepository(private val dao: PlaylistDao) {
@@ -22,8 +23,14 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     fun observePlaylists(): Flow<List<Playlist>> =
         dao.observePlaylists().map { entities -> entities.map { it.toPlaylist() } }
 
-    suspend fun createPlaylist(name: String, coverUrl: String? = null): Long =
-        dao.insertPlaylist(PlaylistEntity(name = name, coverUrl = coverUrl))
+    suspend fun createPlaylist(name: String, coverUrl: String? = null, spotifyPlaylistId: String? = null): Long =
+        dao.insertPlaylist(PlaylistEntity(name = name, coverUrl = coverUrl, spotifyPlaylistId = spotifyPlaylistId))
+
+    suspend fun getSpotifyPlaylistId(playlistId: Long): String? =
+        dao.getSpotifyPlaylistId(playlistId)
+
+    suspend fun updateSpotifyPlaylistId(playlistId: Long, spotifyId: String?) =
+        dao.updateSpotifyPlaylistId(playlistId, spotifyId)
 
     suspend fun deletePlaylist(playlistId: Long) =
         dao.deletePlaylist(playlistId)
@@ -84,7 +91,8 @@ private fun com.shyan.dreamin.data.local.dao.PlaylistWithCount.toPlaylist() = Pl
     name = name,
     createdAt = createdAt,
     coverUrl = coverUrl,
-    songCount = songCount
+    songCount = songCount,
+    spotifyPlaylistId = spotifyPlaylistId
 )
 
 private fun PlaylistSongEntity.toSong() = Song(

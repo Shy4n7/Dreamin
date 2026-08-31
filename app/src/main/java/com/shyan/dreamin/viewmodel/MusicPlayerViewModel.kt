@@ -2,6 +2,7 @@ package com.shyan.dreamin.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
@@ -337,9 +338,28 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(spotifyImportState = SpotifyImportState.Idle) }
     }
 
+    fun checkClipboardForSpotifyLink(context: Context) {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0)?.text?.toString()?.trim()
+                if (!text.isNullOrBlank() && (text.contains("open.spotify.com/playlist/") || text.contains("spotify.link/") || text.contains("spoti.fi/"))) {
+                    if (text != _uiState.value.detectedSpotifyClipboardUrl) {
+                        _uiState.update { it.copy(detectedSpotifyClipboardUrl = text) }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun dismissDetectedSpotifyLink() {
+        _uiState.update { it.copy(detectedSpotifyClipboardUrl = null) }
+    }
+
     fun importSpotifyPlaylist(url: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(spotifyImportState = SpotifyImportState.FetchingMetadata(url)) }
+            _uiState.update { it.copy(spotifyImportState = SpotifyImportState.FetchingMetadata(url), detectedSpotifyClipboardUrl = null) }
 
             val playlistId = com.shyan.dreamin.data.service.SpotifyImportService.resolvePlaylistId(url)
             if (playlistId == null) {
@@ -357,11 +377,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
 
-            processTrackMatching(details.title, details.coverUrl, details.tracks)
+            processTrackMatching(details.title, details.coverUrl, details.tracks, spotifyPlaylistId = playlistId)
         }
     }
 
-    private suspend fun processTrackMatching(title: String, coverUrl: String, tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>) {
+    private suspend fun processTrackMatching(
+        title: String,
+        coverUrl: String,
+        tracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack>,
+        spotifyPlaylistId: String? = null
+    ) {
         val playlistLang = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.detectDominantPlaylistLanguage(tracks, title)
         android.util.Log.d("MusicVM", "Inferred dominant playlist language for '$title': $playlistLang")
 
@@ -399,7 +424,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     } finally {
                         val currDone = progressCounter.incrementAndGet()
                         val currMatched = matchedCounter.get()
-                        if (currDone % 4 == 0 || currDone == total) {
+                        if (currDone % 2 == 0 || currDone == total) {
                             _uiState.update {
                                 it.copy(
                                     spotifyImportState = SpotifyImportState.MatchingTracks(
@@ -408,7 +433,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                                         currentTrackIndex = currDone,
                                         totalTracks = total,
                                         matchedCount = currMatched,
-                                        currentTrackName = track.title
+                                        currentTrackName = track.title,
+                                        currentTrackArtist = track.artist,
+                                        currentArtworkUrl = track.artworkUrl
                                     )
                                 )
                             }
@@ -432,7 +459,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        val newPlaylistId = playlistRepo.createPlaylist(name = title, coverUrl = coverUrl.takeIf { it.isNotBlank() })
+        val newPlaylistId = playlistRepo.createPlaylist(
+            name = title,
+            coverUrl = coverUrl.takeIf { it.isNotBlank() },
+            spotifyPlaylistId = spotifyPlaylistId
+        )
         playlistRepo.addSongs(newPlaylistId, matchedSongs)
 
         // Preload first batch of high-resolution cinematic covers in background
@@ -458,9 +489,95 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     matchedCount = matchedSongs.size,
                     totalTracks = total,
                     coverUrl = coverUrl,
-                    unmatchedTracks = unmatchedTracks
+                    matchedSongs = matchedSongs,
+                    unmatchedTracks = unmatchedTracks,
+                    spotifyPlaylistId = spotifyPlaylistId
                 )
             )
+        }
+    }
+
+    fun downloadPlaylist(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            for (song in songs) {
+                downloadSong(song)
+            }
+        }
+    }
+
+    fun resolveAndAddUnmatchedTrack(
+        playlistId: Long,
+        unmatchedTrack: com.shyan.dreamin.data.service.SpotifyImportedTrack,
+        replacementSong: Song
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = playlistRepo.getSongs(playlistId)
+            val nextPosition = existing.size
+            playlistRepo.addSong(playlistId, replacementSong, nextPosition)
+
+            _uiState.update { state ->
+                val success = state.spotifyImportState as? SpotifyImportState.Success ?: return@update state
+                val updatedUnmatched = success.unmatchedTracks.filterNot { it.title == unmatchedTrack.title && it.artist == unmatchedTrack.artist }
+                val updatedMatched = success.matchedSongs + replacementSong
+                state.copy(
+                    spotifyImportState = success.copy(
+                        matchedCount = success.matchedCount + 1,
+                        matchedSongs = updatedMatched,
+                        unmatchedTracks = updatedUnmatched
+                    ),
+                    openPlaylistSongs = if (state.openPlaylistId == playlistId) updatedMatched else state.openPlaylistSongs
+                )
+            }
+        }
+    }
+
+    fun syncSpotifyPlaylist(playlistId: Long) {
+        if (_uiState.value.isSyncingSpotifyPlaylist) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSyncingSpotifyPlaylist = true) }
+            try {
+                val spotifyId = playlistRepo.getSpotifyPlaylistId(playlistId)
+                if (spotifyId.isNullOrBlank()) {
+                    _uiState.update { it.copy(isSyncingSpotifyPlaylist = false) }
+                    return@launch
+                }
+                val details = com.shyan.dreamin.data.service.SpotifyImportService.fetchPlaylistDetails(spotifyId, getApplication())
+                if (details == null || details.tracks.isEmpty()) {
+                    _uiState.update { it.copy(isSyncingSpotifyPlaylist = false) }
+                    return@launch
+                }
+                val existingSongs = playlistRepo.getSongs(playlistId)
+                val existingKeys = existingSongs.map { com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(it.displayTitle) }.toSet()
+
+                val newTracks = details.tracks.filterNot { t ->
+                    val key = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(t.title)
+                    existingKeys.contains(key)
+                }
+
+                if (newTracks.isNotEmpty()) {
+                    val playlistLang = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.detectDominantPlaylistLanguage(details.tracks, details.title)
+                    val newlyMatched = mutableListOf<Song>()
+                    for (track in newTracks) {
+                        val (matched, _) = matchSpotifyTrack(track, playlistLang)
+                        if (matched != null) {
+                            val art = if (track.artworkUrl.isNotBlank()) track.artworkUrl else matched.artworkUrl
+                            newlyMatched.add(matched.copy(artworkUrl = art))
+                        }
+                    }
+                    if (newlyMatched.isNotEmpty()) {
+                        playlistRepo.addSongs(playlistId, newlyMatched, startPosition = existingSongs.size)
+                        val updatedAll = existingSongs + newlyMatched
+                        if (_uiState.value.openPlaylistId == playlistId) {
+                            _uiState.update { it.copy(openPlaylistSongs = updatedAll) }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MusicVM", "syncSpotifyPlaylist failed: ${e.message}")
+            } finally {
+                _uiState.update { it.copy(isSyncingSpotifyPlaylist = false) }
+            }
         }
     }
 

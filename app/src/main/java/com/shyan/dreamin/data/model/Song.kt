@@ -170,7 +170,9 @@ data class PlayerUiState(
     val selectedArtistProfile: ArtistProfile? = null,
     val spotifyImportState: SpotifyImportState = SpotifyImportState.Idle,
     val isFetchingUpNext: Boolean = false,
-    val didYouMeanQuery: String? = null
+    val didYouMeanQuery: String? = null,
+    val detectedSpotifyClipboardUrl: String? = null,
+    val isSyncingSpotifyPlaylist: Boolean = false
 )
 
 @Immutable
@@ -183,7 +185,9 @@ sealed class SpotifyImportState {
         val currentTrackIndex: Int,
         val totalTracks: Int,
         val matchedCount: Int,
-        val currentTrackName: String
+        val currentTrackName: String,
+        val currentTrackArtist: String = "",
+        val currentArtworkUrl: String = ""
     ) : SpotifyImportState()
     data class Success(
         val playlistId: Long,
@@ -191,7 +195,9 @@ sealed class SpotifyImportState {
         val matchedCount: Int,
         val totalTracks: Int,
         val coverUrl: String = "",
-        val unmatchedTracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack> = emptyList()
+        val matchedSongs: List<Song> = emptyList(),
+        val unmatchedTracks: List<com.shyan.dreamin.data.service.SpotifyImportedTrack> = emptyList(),
+        val spotifyPlaylistId: String? = null
     ) : SpotifyImportState()
     data class Error(val message: String) : SpotifyImportState()
 }

@@ -135,6 +135,8 @@ fun LibraryScreen(
     onResetSpotifyImportState: () -> Unit = {},
     onSearchOnline: (String) -> Unit = {},
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
+    onCheckClipboard: () -> Unit = {},
+    onDismissDetectedSpotifyLink: () -> Unit = {},
     onPlayNext: (Song) -> Unit = {},
     onAddToQueue: (Song) -> Unit = {}
 ) {
@@ -142,6 +144,10 @@ fun LibraryScreen(
     val tabs = listOf("Playlists", "Favourites", "Downloads")
     val tabPagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        onCheckClipboard()
+    }
 
     var lastOpenPlaylistId by remember { mutableStateOf(state.openPlaylistId) }
     var returnSpringKey by remember { mutableIntStateOf(0) }
@@ -152,92 +158,146 @@ fun LibraryScreen(
 
     CompositionLocalProvider(LocalPlaylists provides state.playlists) {
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding()
-    ) {
-
-        Text(
-            "Library",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-        )
-
-        TabRow(
-            selectedTabIndex = tabPagerState.currentPage,
-            containerColor = colors.background,
-            contentColor = colors.primary
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.background)
+                .statusBarsPadding()
         ) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = tabPagerState.currentPage == index,
-                    onClick = { scope.launch { tabPagerState.scrollToPage(index) } },
-                    text = {
-                        Text(
-                            title,
-                            color = if (tabPagerState.currentPage == index) colors.primary else colors.onSurfaceVariant,
-                            fontWeight = if (tabPagerState.currentPage == index) FontWeight.SemiBold else FontWeight.Normal
+
+            Text(
+                "Library",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+            )
+
+            TabRow(
+                selectedTabIndex = tabPagerState.currentPage,
+                containerColor = colors.background,
+                contentColor = colors.primary
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = tabPagerState.currentPage == index,
+                        onClick = { scope.launch { tabPagerState.scrollToPage(index) } },
+                        text = {
+                            Text(
+                                title,
+                                color = if (tabPagerState.currentPage == index) colors.primary else colors.onSurfaceVariant,
+                                fontWeight = if (tabPagerState.currentPage == index) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        }
+                    )
+                }
+            }
+
+            HorizontalPager(
+                state = tabPagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = true,
+                beyondViewportPageCount = 1,
+                key = { tabs[it] }
+            ) { page ->
+                val pageOffset = ((tabPagerState.currentPage - page) + tabPagerState.currentPageOffsetFraction)
+                val absOffset = kotlin.math.abs(pageOffset)
+                val pageScale = 1f - (absOffset * 0.05f).coerceIn(0f, 0.05f)
+                val pageAlpha = 1f - (absOffset * 0.40f).coerceIn(0f, 0.40f)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = pageScale
+                            scaleY = pageScale
+                            alpha = pageAlpha
+                        }
+                ) {
+                    when (page) {
+                        0 -> PlaylistsTab(
+                            playlists = state.playlists,
+                            playlistArtworks = state.playlistArtworks,
+                            onCreatePlaylist = onCreatePlaylist,
+                            onDeletePlaylist = onDeletePlaylist,
+                            onPlayPlaylist = onPlayPlaylist,
+                            onOpenPlaylist = onOpenPlaylist,
+                            spotifyImportState = state.spotifyImportState,
+                            onImportSpotify = onImportSpotifyPlaylist,
+                            onResetSpotifyImport = onResetSpotifyImportState,
+                            onSearchOnline = onSearchOnline,
+                            onAddSuggestedTrack = onAddSuggestedTrack,
+                            onDownloadPlaylist = onDownloadPlaylist,
+                            initialSpotifyUrl = state.detectedSpotifyClipboardUrl,
+                            triggerKey = returnSpringKey
+                        )
+                        1 -> FavoritesTab(
+                            favorites = state.favorites,
+                            currentSong = state.currentSong,
+                            onSongClick = onSongClick,
+                            onAddToPlaylist = onAddToPlaylist,
+                            triggerKey = returnSpringKey
+                        )
+                        else -> DownloadsTab(
+                            downloadedSongs = state.downloadedSongs,
+                            currentSong = state.currentSong,
+                            onSongClick = onSongClick,
+                            onDeleteDownload = onDeleteDownload,
+                            onAddToPlaylist = onAddToPlaylist,
+                            triggerKey = returnSpringKey
                         )
                     }
-                )
+                }
             }
         }
 
-        HorizontalPager(
-            state = tabPagerState,
-            modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = true,
-            beyondViewportPageCount = 1,
-            key = { tabs[it] }
-        ) { page ->
-            val pageOffset = ((tabPagerState.currentPage - page) + tabPagerState.currentPageOffsetFraction)
-            val absOffset = kotlin.math.abs(pageOffset)
-            val pageScale = 1f - (absOffset * 0.05f).coerceIn(0f, 0.05f)
-            val pageAlpha = 1f - (absOffset * 0.40f).coerceIn(0f, 0.40f)
-
-            Box(
+        // Floating Spotify Clipboard Detection Banner
+        androidx.compose.animation.AnimatedVisibility(
+            visible = state.detectedSpotifyClipboardUrl != null,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = colors.surfaceHigh,
+                tonalElevation = 6.dp,
+                border = BorderStroke(1.dp, Color(0xFF1DB954).copy(alpha = 0.5f)),
                 modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = pageScale
-                        scaleY = pageScale
-                        alpha = pageAlpha
+                    .fillMaxWidth()
+                    .clickable {
+                        val url = state.detectedSpotifyClipboardUrl ?: ""
+                        onImportSpotifyPlaylist(url)
+                        onDismissDetectedSpotifyLink()
                     }
             ) {
-                when (page) {
-                    0 -> PlaylistsTab(
-                        playlists = state.playlists,
-                        playlistArtworks = state.playlistArtworks,
-                        onCreatePlaylist = onCreatePlaylist,
-                        onDeletePlaylist = onDeletePlaylist,
-                        onPlayPlaylist = onPlayPlaylist,
-                        onOpenPlaylist = onOpenPlaylist,
-                        spotifyImportState = state.spotifyImportState,
-                        onImportSpotify = onImportSpotifyPlaylist,
-                        onResetSpotifyImport = onResetSpotifyImportState,
-                        onSearchOnline = onSearchOnline,
-                        onAddSuggestedTrack = onAddSuggestedTrack,
-                        triggerKey = returnSpringKey
-                    )
-                    1 -> FavoritesTab(
-                        favorites = state.favorites,
-                        currentSong = state.currentSong,
-                        onSongClick = onSongClick,
-                        onAddToPlaylist = onAddToPlaylist,
-                        triggerKey = returnSpringKey
-                    )
-                    else -> DownloadsTab(
-                        downloadedSongs = state.downloadedSongs,
-                        currentSong = state.currentSong,
-                        onSongClick = onSongClick,
-                        onDeleteDownload = onDeleteDownload,
-                        onAddToPlaylist = onAddToPlaylist,
-                        triggerKey = returnSpringKey
-                    )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1DB954).copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(18.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Spotify Playlist Detected", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Tap to import into your library", color = colors.onSurfaceVariant, fontSize = 11.sp)
+                    }
+                    IconButton(
+                        onClick = onDismissDetectedSpotifyLink,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    }
                 }
             }
         }
@@ -399,6 +459,8 @@ fun PlaylistsTab(
     onResetSpotifyImport: () -> Unit = {},
     onSearchOnline: (String) -> Unit = {},
     onAddSuggestedTrack: (Long, Song, String) -> Unit = { _, _, _ -> },
+    onDownloadPlaylist: (List<Song>) -> Unit = {},
+    initialSpotifyUrl: String? = null,
     triggerKey: Any? = Unit
 ) {
     val colors = LocalDreaminColors.current
@@ -485,7 +547,9 @@ fun PlaylistsTab(
             onImportSpotify = onImportSpotify,
             onResetSpotifyImport = onResetSpotifyImport,
             onSearchOnline = onSearchOnline,
-            onAddSuggestedTrack = onAddSuggestedTrack
+            onAddSuggestedTrack = onAddSuggestedTrack,
+            onDownloadAllOffline = onDownloadPlaylist,
+            initialSpotifyUrl = initialSpotifyUrl
         )
     }
 }

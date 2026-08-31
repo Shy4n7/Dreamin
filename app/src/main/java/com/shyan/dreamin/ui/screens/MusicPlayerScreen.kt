@@ -96,6 +96,7 @@ private fun MainAppScaffold(
     onCloseNowPlaying: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     val hazeState = remember { HazeState() }
     val navScreens = Screen.entries
@@ -272,6 +273,8 @@ private fun MainAppScaffold(
                                 vm.setSearchQuery(query)
                             },
                             onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
+                            onCheckClipboard         = { vm.checkClipboardForSpotifyLink(context) },
+                            onDismissDetectedSpotifyLink = vm::dismissDetectedSpotifyLink,
                             onPlayNext               = vm::playNext,
                             onAddToQueue             = vm::addToQueue
                         )
@@ -389,6 +392,8 @@ private fun MainAppScaffold(
                     onPlayNext = vm::playNext,
                     onAddToQueue = vm::addToQueue,
                     onUpdateSongArtwork = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
+                    onSyncSpotify = { vm.syncSpotifyPlaylist(openPlaylist.id) },
+                    isSyncingSpotify = state.isSyncingSpotifyPlaylist,
                     quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
                         (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
                     }

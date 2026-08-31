@@ -14,7 +14,8 @@ data class PlaylistWithCount(
     val name: String,
     val coverUrl: String?,
     val createdAt: Long,
-    val songCount: Int
+    val songCount: Int,
+    val spotifyPlaylistId: String? = null
 )
 
 @Dao
@@ -32,8 +33,14 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET coverUrl = :coverUrl WHERE id = :playlistId")
     suspend fun updatePlaylistCover(playlistId: Long, coverUrl: String?)
 
+    @Query("SELECT spotifyPlaylistId FROM playlists WHERE id = :playlistId")
+    suspend fun getSpotifyPlaylistId(playlistId: Long): String?
+
+    @Query("UPDATE playlists SET spotifyPlaylistId = :spotifyId WHERE id = :playlistId")
+    suspend fun updateSpotifyPlaylistId(playlistId: Long, spotifyId: String?)
+
     @Query("""
-        SELECT p.id, p.name, p.coverUrl, p.createdAt,
+        SELECT p.id, p.name, p.coverUrl, p.createdAt, p.spotifyPlaylistId,
                (SELECT COUNT(*) FROM playlist_songs ps WHERE ps.playlistId = p.id) as songCount
         FROM playlists p
         ORDER BY p.createdAt DESC
