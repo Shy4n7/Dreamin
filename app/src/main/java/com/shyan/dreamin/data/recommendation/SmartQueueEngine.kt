@@ -48,4 +48,16 @@ object SmartQueueEngine {
         val combined = (primaryList + filterCandidates(fallbackHits)).distinctBy { it.id }
         return combined.take(limit)
     }
+
+    /**
+     * Determines whether the infinite radio queue should proactively auto-extend.
+     */
+    fun shouldAutoExtendQueue(
+        remainingTracks: Int,
+        isPlaylistActive: Boolean,
+        isFetching: Boolean
+    ): Boolean {
+        return !isPlaylistActive && !isFetching && remainingTracks <= 2
+    }
 }
+

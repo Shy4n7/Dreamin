@@ -3,6 +3,7 @@ package com.shyan.dreamin.data.service
 import android.content.Context
 import android.graphics.drawable.BitmapDrawable
 import android.util.LruCache
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.palette.graphics.Palette
 import coil.Coil
@@ -10,8 +11,21 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@Immutable
+data class PaletteTriad(
+    val dominant: Int = 0xFF6C5CE7.toInt(),
+    val secondary: Int = 0xFF8E44AD.toInt(),
+    val accent: Int = 0xFF00CEC9.toInt()
+)
+
+/**
+ * High-performance, memory-cached Palette and dynamic harmonic color triad extractor.
+ */
 object PaletteMemoryCache {
     private val colorCache = LruCache<String, Int>(150)
+    private val triadCache = LruCache<String, PaletteTriad>(150)
+
+    val DEFAULT_TRIAD = PaletteTriad()
 
     fun getCachedColor(key: String?): Color? {
         if (key.isNullOrBlank()) return null
@@ -24,9 +38,29 @@ object PaletteMemoryCache {
         }
     }
 
-    suspend fun extractDominantColor(context: Context, url: String?): Color? = withContext(Dispatchers.IO) {
-        if (url.isNullOrBlank()) return@withContext null
-        getCachedColor(url)?.let { return@withContext it }
+    fun getCachedTriad(key: String?): PaletteTriad? {
+        if (key.isNullOrBlank()) return null
+        return triadCache.get(key)
+    }
+
+    fun putTriad(key: String, triad: PaletteTriad) {
+        if (key.isNotBlank()) {
+            triadCache.put(key, triad)
+            colorCache.put(key, triad.dominant)
+        }
+    }
+
+    fun clearCache() {
+        triadCache.evictAll()
+        colorCache.evictAll()
+    }
+
+    /**
+     * Extracts full harmonic color triad (dominant, secondary, accent) from an image URL.
+     */
+    suspend fun extractPaletteTriad(context: Context, url: String?): PaletteTriad = withContext(Dispatchers.IO) {
+        if (url.isNullOrBlank()) return@withContext DEFAULT_TRIAD
+        getCachedTriad(url)?.let { return@withContext it }
 
         try {
             val req = ImageRequest.Builder(context)
@@ -40,19 +74,39 @@ object PaletteMemoryCache {
                     val scaledBmp = if (bmp.width > 32 || bmp.height > 32) {
                         android.graphics.Bitmap.createScaledBitmap(bmp, 24, 24, true)
                     } else bmp
-                    val palette = Palette.from(scaledBmp).generate()
-                    val dominantRgb = palette.dominantSwatch?.rgb
-                        ?: palette.vibrantSwatch?.rgb
-                        ?: palette.mutedSwatch?.rgb
-                    if (dominantRgb != null) {
-                        putColor(url, dominantRgb)
-                        return@withContext Color(dominantRgb)
+
+                    val triad = withContext(Dispatchers.Default) {
+                        val palette = Palette.from(scaledBmp).generate()
+                        val dominant = palette.getVibrantColor(
+                            palette.getDominantColor(
+                                palette.getMutedColor(0xFF6C5CE7.toInt())
+                            )
+                        )
+                        val secondary = palette.getDarkVibrantColor(
+                            palette.getMutedColor(
+                                palette.getDarkMutedColor(0xFF8E44AD.toInt())
+                            )
+                        )
+                        val accent = palette.getLightVibrantColor(
+                            palette.getLightMutedColor(0xFF00CEC9.toInt())
+                        )
+                        PaletteTriad(dominant, secondary, accent)
                     }
+
+                    putTriad(url, triad)
+                    return@withContext triad
                 }
             }
-        } catch (e: Exception) {
-            // Fail silently
+        } catch (_: Exception) {
+            // Graceful fallback to default palette triad
         }
-        null
+        DEFAULT_TRIAD
+    }
+
+    suspend fun extractDominantColor(context: Context, url: String?): Color? = withContext(Dispatchers.IO) {
+        if (url.isNullOrBlank()) return@withContext null
+        getCachedColor(url)?.let { return@withContext it }
+        val triad = extractPaletteTriad(context, url)
+        Color(triad.dominant)
     }
 }

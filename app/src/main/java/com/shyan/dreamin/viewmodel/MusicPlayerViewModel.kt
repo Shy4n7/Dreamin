@@ -66,6 +66,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val playlistRepo = com.shyan.dreamin.data.local.PlaylistRepository(db.playlistDao())
     val downloadRepo = DownloadRepository(getApplication(), db.downloadDao())
     private val importMatchDao = db.importMatchDao()
+    private val analyticsTracker = com.shyan.dreamin.data.local.PlaybackAnalyticsTracker(historyRepo, statsRepo)
 
     private var isListenerAttached = false
     private var searchJob: Job? = null
@@ -75,7 +76,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var prefetchJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
-    private val paletteColorCache = android.util.LruCache<String, Triple<Int, Int, Int>>(100)
     @Volatile
     private var isScreenInteractive: Boolean = true
 
@@ -1083,12 +1083,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (artworkUrl.isBlank()) return
 
         // 1. Instant 0ms RAM cache hit
-        paletteColorCache.get(artworkUrl)?.let { (cachedDom, cachedSec, cachedAcc) ->
+        com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(artworkUrl)?.let { triad ->
             _uiState.update {
                 it.copy(
-                    dominantColor = cachedDom,
-                    secondaryColor = cachedSec,
-                    accentColor = cachedAcc
+                    dominantColor = triad.dominant,
+                    secondaryColor = triad.secondary,
+                    accentColor = triad.accent
                 )
             }
             return
@@ -1096,45 +1096,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         colorExtractJob?.cancel()
         colorExtractJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val context = getApplication<Application>()
-                val loader = coil.Coil.imageLoader(context)
-                val request = coil.request.ImageRequest.Builder(context)
-                    .data(artworkUrl)
-                    .allowHardware(false)
-                    .build()
-                val result = (loader.execute(request) as? coil.request.SuccessResult)?.drawable
-                val bitmap = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                if (bitmap != null) {
-                    val scaledBitmap = if (bitmap.width > 32 || bitmap.height > 32) {
-                        android.graphics.Bitmap.createScaledBitmap(bitmap, 24, 24, true)
-                    } else bitmap
-                    val palette = androidx.palette.graphics.Palette.from(scaledBitmap).generate()
-                    val dominant = palette.getVibrantColor(
-                        palette.getDominantColor(
-                            palette.getMutedColor(0xFF6C5CE7.toInt())
-                        )
-                    )
-                    val secondary = palette.getDarkVibrantColor(
-                        palette.getMutedColor(
-                            palette.getDarkMutedColor(0xFF8E44AD.toInt())
-                        )
-                    )
-                    val accent = palette.getLightVibrantColor(
-                        palette.getLightMutedColor(0xFF00CEC9.toInt())
-                    )
-
-                    paletteColorCache.put(artworkUrl, Triple(dominant, secondary, accent))
-
-                    _uiState.update {
-                        it.copy(
-                            dominantColor = dominant,
-                            secondaryColor = secondary,
-                            accentColor = accent
-                        )
-                    }
-                }
-            } catch (_: Exception) {}
+            val triad = com.shyan.dreamin.data.service.PaletteMemoryCache.extractPaletteTriad(getApplication(), artworkUrl)
+            _uiState.update {
+                it.copy(
+                    dominantColor = triad.dominant,
+                    secondaryColor = triad.secondary,
+                    accentColor = triad.accent
+                )
+            }
         }
     }
 
@@ -1492,10 +1461,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val current = state.currentSong ?: return
         val idx = queue.indexOfFirst { it.id == current.id }
 
-        // Track playback completion / skip in FeedbackEngine
+        // Track playback completion / skip in PlaybackAnalyticsTracker & FeedbackEngine
         val pos = controller?.currentPosition ?: 0L
         val dur = controller?.duration ?: 0L
-        FeedbackEngine.recordTrackEvent(current, pos, dur)
+        viewModelScope.launch(Dispatchers.IO) {
+            analyticsTracker.recordTrackEnd(current, pos, dur)
+        }
 
         // 1. Repeat ONE: replay current track from start
         if (state.repeatMode == TrackRepeatMode.ONE) {
@@ -1519,7 +1490,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true)
             // Auto-extend queue when reaching the last 2 songs
             val remaining = queue.size - (idx + 2)
-            if (!state.playlistQueueActive && remaining <= 2 && !_uiState.value.isFetchingUpNext) {
+            if (com.shyan.dreamin.data.recommendation.SmartQueueEngine.shouldAutoExtendQueue(remaining, state.playlistQueueActive, _uiState.value.isFetchingUpNext)) {
                 val seedSong = queue.lastOrNull() ?: nextSong
                 fetchUpNext(seedSong.id)
             }
@@ -1972,7 +1943,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         com.shyan.dreamin.data.service.YouTubeRadioService.clearCache()
         com.shyan.dreamin.data.service.AudioStreamResolver.clearCache()
         com.shyan.dreamin.data.service.OfficialArtworkService.clearCache()
-        paletteColorCache.evictAll()
+        com.shyan.dreamin.data.service.PaletteMemoryCache.clearCache()
     }
 
     private suspend fun resolveRadioCandidates(currentSong: Song, limit: Int): List<Song> = withContext(Dispatchers.IO) {
@@ -2130,31 +2101,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun extractColorsFromArtwork(artworkUrl: String) {
-        if (artworkUrl.isBlank()) return
-        val appContext = getApplication<Application>()
-        colorExtractJob?.cancel()
-        colorExtractJob = viewModelScope.launch {
-            try {
-                val request = coil.request.ImageRequest.Builder(appContext)
-                    .data(artworkUrl)
-                    .allowHardware(false)
-                    .build()
-                val result = coil.Coil.imageLoader(appContext).execute(request)
-                val bitmap = (result as? coil.request.SuccessResult)
-                    ?.drawable
-                    ?.let { (it as? android.graphics.drawable.BitmapDrawable)?.bitmap }
-                bitmap?.let { bmp ->
-                    val scaledBmp = if (bmp.width > 32 || bmp.height > 32) {
-                        android.graphics.Bitmap.createScaledBitmap(bmp, 24, 24, true)
-                    } else bmp
-                    val palette = androidx.palette.graphics.Palette.from(scaledBmp).generate()
-                    updateDominantColor(palette.getDominantColor(0xFF1A1A2E.toInt()))
-                } ?: updateDominantColor(0xFF1A1A2E.toInt())
-            } catch (e: Exception) {
-                android.util.Log.e("MusicVM", "Color extraction failed: ${e.message}")
-                updateDominantColor(0xFF1A1A2E.toInt())
-            }
-        }
+        extractDominantColor(artworkUrl)
     }
 
     override fun onCleared() {
