@@ -295,6 +295,13 @@ object IntelliMatchEngine {
             else if (diffSec > 60) score -= 300
         }
 
+        // 5. Stream Popularity Weight (Logarithmic Scoring)
+        // Prioritizes official multi-million stream releases over fan/karaoke/low-stream duplicates
+        if (candidate.playCount > 0L) {
+            val logPopularity = kotlin.math.log10(candidate.playCount.toDouble()).coerceAtLeast(0.0)
+            score += (logPopularity * 150.0).toInt()
+        }
+
         val confidence = when {
             isExactTrackMatch || score >= 1600 -> MatchConfidence.HIGH
             score >= 1200 -> MatchConfidence.MEDIUM

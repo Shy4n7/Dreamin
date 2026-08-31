@@ -1193,7 +1193,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             songs.add(songItem)
                         }
                     }
-                    if (songs.isNotEmpty()) return@withContext songs.take(limit)
+                    if (songs.isNotEmpty()) {
+                        val ranked = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(query, songs)
+                        return@withContext ranked.take(limit)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -1207,7 +1210,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Seamless fallback to server search
         try {
             val serverResp = api.search(query, page = page, limit = limit)
-            serverResp.results
+            com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(query, serverResp.results).take(limit)
         } catch (_: Exception) {
             emptyList()
         }

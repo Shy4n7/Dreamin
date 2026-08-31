@@ -162,4 +162,55 @@ class IntelliMatchEngineTest {
 
         assertTrue("Malayalam version should score higher than Telugu dub in Malayalam playlist", malResult.score > telResult.score)
     }
+
+    @Test
+    fun testCandidateMatchingPrioritizesHighStreamCountOverLowStreamDuplicate() {
+        val blockbusterOriginal = Song(
+            id = "hit_1",
+            title = "Malare",
+            artist = "Vijay Yesudas, Rajesh Murugesan",
+            artworkUrl = "",
+            duration = 316000L,
+            playCount = 45000000L // 45M streams
+        )
+        val fanCoverOrDuplicate = Song(
+            id = "cover_1",
+            title = "Malare",
+            artist = "Vijay Yesudas, Rajesh Murugesan",
+            artworkUrl = "",
+            duration = 316000L,
+            playCount = 1200L // 1.2K streams
+        )
+
+        val hitScore = IntelliMatchEngine.evaluateCandidate(
+            targetTitle = "Malare",
+            targetArtist = "Vijay Yesudas",
+            targetDurationMs = 316000L,
+            candidate = blockbusterOriginal,
+            targetLanguage = "malayalam"
+        )
+        val coverScore = IntelliMatchEngine.evaluateCandidate(
+            targetTitle = "Malare",
+            targetArtist = "Vijay Yesudas",
+            targetDurationMs = 316000L,
+            candidate = fanCoverOrDuplicate,
+            targetLanguage = "malayalam"
+        )
+
+        assertTrue(
+            "Blockbuster with 45M streams should score significantly higher than low-stream duplicate",
+            hitScore.score > coverScore.score
+        )
+
+        val best = IntelliMatchEngine.findBestMatch(
+            targetTitle = "Malare",
+            targetArtist = "Vijay Yesudas",
+            targetDurationMs = 316000L,
+            candidates = listOf(fanCoverOrDuplicate, blockbusterOriginal),
+            targetLanguage = "malayalam"
+        )
+
+        assertNotNull(best)
+        assertEquals("hit_1", best?.song?.id)
+    }
 }
