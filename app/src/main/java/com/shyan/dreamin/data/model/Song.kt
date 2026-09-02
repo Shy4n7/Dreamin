@@ -14,7 +14,13 @@ data class Song(
     val duration: Long = 0L,
     @SerializedName("play_count") val playCount: Long = 0L
 ) {
+    val isSpotifyArtwork: Boolean get() =
+        artworkUrl.contains("scdn.co") ||
+        artworkUrl.contains("spotifycdn.com") ||
+        artworkUrl.contains("spotify.com")
+
     val displayArtworkUrl: String get() {
+        if (isSpotifyArtwork) return artworkUrl
         val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(this)
         if (!cached.isNullOrBlank()) return cached
         return resolvePoster(title, artworkUrl)

@@ -54,6 +54,7 @@ object OfficialArtworkService {
         onResolved: ((songId: String, posterUrl: String) -> Unit)? = null
     ) {
         songs.forEach { song ->
+            if (song.isSpotifyArtwork) return@forEach
             scope.launch(Dispatchers.IO) {
                 try {
                     prefetchSemaphore.withPermit {
@@ -68,6 +69,7 @@ object OfficialArtworkService {
     }
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
+        if (song.isSpotifyArtwork) return song.artworkUrl
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
         }
@@ -96,6 +98,7 @@ object OfficialArtworkService {
      * directly from official movie catalogs matching the song's language and DNA.
      */
     suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = "tamil"): String? = withContext(Dispatchers.IO) {
+        if (song.isSpotifyArtwork) return@withContext song.artworkUrl
         getCachedPoster(song)?.let { return@withContext it }
 
         val cacheKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()

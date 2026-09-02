@@ -24,7 +24,7 @@ interface DownloadDao {
     @Query("DELETE FROM downloaded_songs WHERE songId = :songId")
     suspend fun deleteDownload(songId: String)
 
-    @Query("UPDATE downloaded_songs SET artworkUrl = :artworkUrl WHERE songId = :songId")
+    @Query("UPDATE downloaded_songs SET artworkUrl = :artworkUrl WHERE songId = :songId AND artworkUrl NOT LIKE '%scdn.co%' AND artworkUrl NOT LIKE '%spotify%'")
     suspend fun updateArtwork(songId: String, artworkUrl: String)
 
     @Query("DELETE FROM downloaded_songs")

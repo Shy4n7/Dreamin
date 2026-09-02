@@ -134,6 +134,7 @@ object SpotifyImportService {
 
             val trackListArray = entity.optJSONArray("trackList") ?: return@withContext null
             val tracks = mutableListOf<SpotifyImportedTrack>()
+            val embedTrackIds = mutableListOf<String>()
 
             for (i in 0 until trackListArray.length()) {
                 val item = trackListArray.getJSONObject(i)
@@ -154,6 +155,8 @@ object SpotifyImportService {
                 }
 
                 val duration = item.optLong("duration", 0L)
+                val uri = item.optString("uri", "")
+                val trackId = if (uri.startsWith("spotify:track:")) uri.removePrefix("spotify:track:") else ""
                 val trackCover = item.optString("displayImageUri").ifBlank {
                     item.optJSONObject("coverArt")?.optJSONArray("sources")?.optJSONObject(0)?.optString("url")
                         ?: item.optJSONObject("album")?.optJSONObject("coverArt")?.optJSONArray("sources")?.optJSONObject(0)?.optString("url")
@@ -169,6 +172,7 @@ object SpotifyImportService {
                             artworkUrl = trackCover
                         )
                     )
+                    embedTrackIds.add(trackId)
                 }
             }
 
@@ -177,6 +181,31 @@ object SpotifyImportService {
             val sessionToken = tokenRegex.find(html)?.groupValues?.getOrNull(1)
                 ?: data.optJSONObject("session")?.optString("accessToken")
                 ?: data.optString("accessToken").takeIf { it.isNotBlank() }
+
+            // Concurrently resolve authentic Spotify covers for embed tracks missing artwork
+            if (!sessionToken.isNullOrBlank()) {
+                val missingIndices = tracks.indices.filter { tracks[it].artworkUrl.isBlank() && embedTrackIds.getOrNull(it)?.isNotBlank() == true }
+                if (missingIndices.isNotEmpty()) {
+                    val idsToFetch = missingIndices.map { embedTrackIds[it] }
+                    val resolvedTracks = fetchTracksConcurrently(idsToFetch, sessionToken)
+                    val resolvedMap = resolvedTracks.associateBy { it.title.lowercase().trim() }
+                    for (idx in missingIndices) {
+                        val current = tracks[idx]
+                        val resolved = resolvedMap[current.title.lowercase().trim()]
+                        val newArtwork = resolved?.artworkUrl?.takeIf { it.isNotBlank() } ?: coverUrl
+                        tracks[idx] = current.copy(artworkUrl = newArtwork)
+                    }
+                }
+            }
+
+            // Fallback: any track still missing artwork adopts the official Spotify playlist cover
+            if (coverUrl.isNotBlank()) {
+                for (i in tracks.indices) {
+                    if (tracks[i].artworkUrl.isBlank()) {
+                        tracks[i] = tracks[i].copy(artworkUrl = coverUrl)
+                    }
+                }
+            }
 
             var reportedTotal = tracks.size
 

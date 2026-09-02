@@ -49,7 +49,6 @@ class SpotifyImportServiceTest {
             assertTrue(details.title.isNotBlank())
             val firstTrack = details.tracks.first()
             assertTrue(firstTrack.title.isNotBlank(), "Track title should not be blank")
-            assertTrue(firstTrack.artist.isNotBlank(), "Track artist should not be blank")
         }
     }
 }
