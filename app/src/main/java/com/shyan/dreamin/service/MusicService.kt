@@ -109,14 +109,15 @@ class MusicService : MediaSessionService() {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         }
 
-        // Fast-response & stable buffer: 1000ms playback start, 1500ms rebuffer
+        // High-stability buffer: 1000ms start, 2000ms rebuffer, 30s-120s buffer window + 30s back-buffer
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                20_000, // Min buffer (20s)
-                60_000, // Max buffer (60s)
-                1_000,  // Buffer for playback start (1.0s)
-                1_500   // Buffer for playback after rebuffer/seek (1.5s)
+                30_000,  // Min buffer (30s)
+                120_000, // Max buffer (120s)
+                1_000,   // Buffer for playback start (1.0s)
+                2_000    // Buffer for playback after rebuffer/seek (2.0s)
             )
+            .setBackBuffer(30_000, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 

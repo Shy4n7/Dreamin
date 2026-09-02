@@ -116,15 +116,15 @@ object AudioStreamResolver {
                         ?: details.optJSONObject(songId)?.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: ""
 
                     if (encUrl.isNotBlank()) {
-                        val streamAuth = fetchStreamAuthUrl(encUrl)
-                        if (!streamAuth.isNullOrBlank()) {
-                            putCachedStreamUrl(songId, streamAuth)
-                            return@withContext streamAuth
-                        }
                         val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
                         if (!directDecrypted.isNullOrBlank()) {
                             putCachedStreamUrl(songId, directDecrypted)
                             return@withContext directDecrypted
+                        }
+                        val streamAuth = fetchStreamAuthUrl(encUrl)
+                        if (!streamAuth.isNullOrBlank()) {
+                            putCachedStreamUrl(songId, streamAuth)
+                            return@withContext streamAuth
                         }
                     }
 
@@ -172,15 +172,15 @@ object AudioStreamResolver {
                             val encUrl = match.optString("encrypted_media_url", "")
                                 .ifBlank { match.optJSONObject("more_info")?.optString("encrypted_media_url", "") ?: "" }
                             if (encUrl.isNotBlank()) {
-                                val streamAuth = fetchStreamAuthUrl(encUrl)
-                                if (!streamAuth.isNullOrBlank()) {
-                                    putCachedStreamUrl(songId, streamAuth)
-                                    return@withContext streamAuth
-                                }
                                 val directDecrypted = decryptJioSaavnMediaUrl(encUrl)
                                 if (!directDecrypted.isNullOrBlank()) {
                                     putCachedStreamUrl(songId, directDecrypted)
                                     return@withContext directDecrypted
+                                }
+                                val streamAuth = fetchStreamAuthUrl(encUrl)
+                                if (!streamAuth.isNullOrBlank()) {
+                                    putCachedStreamUrl(songId, streamAuth)
+                                    return@withContext streamAuth
                                 }
                             }
                         }
@@ -239,7 +239,7 @@ object AudioStreamResolver {
      */
     fun decryptJioSaavnMediaUrl(encryptedUrl: String): String? {
         return try {
-            val keyBytes = "38343638".toByteArray(Charsets.UTF_8)
+            val keyBytes = "38346591".toByteArray(Charsets.UTF_8)
             val keySpec = SecretKeySpec(keyBytes, "DES")
             val cipher = Cipher.getInstance("DES/ECB/PKCS5Padding")
             cipher.init(Cipher.DECRYPT_MODE, keySpec)

@@ -75,6 +75,19 @@ object NetworkService {
         .retryOnConnectionFailure(true)
         .build()
 
+    /**
+     * Dedicated OkHttpClient optimized for continuous audio media streaming.
+     * Features resilient 30-second read and write timeouts to prevent socket stalls
+     * during ExoPlayer buffer windows.
+     */
+    val mediaHttpClient: OkHttpClient by lazy {
+        httpClient.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
     val api: MusicApi by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)

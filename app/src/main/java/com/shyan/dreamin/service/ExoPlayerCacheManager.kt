@@ -45,7 +45,7 @@ object ExoPlayerCacheManager {
      */
     fun createCacheDataSourceFactory(context: Context): DataSource.Factory {
         val cache = getSimpleCache(context)
-        val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.httpClient)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.mediaHttpClient)
         val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
 
         return CacheDataSource.Factory()
@@ -59,7 +59,7 @@ object ExoPlayerCacheManager {
      */
     fun createCacheDataSource(context: Context): CacheDataSource {
         val cache = getSimpleCache(context)
-        val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.httpClient)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.mediaHttpClient)
         val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
 
         return CacheDataSource(
