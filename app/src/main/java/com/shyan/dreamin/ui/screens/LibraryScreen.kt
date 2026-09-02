@@ -273,7 +273,7 @@ fun LibraryScreen(
                 shape = RoundedCornerShape(16.dp),
                 color = colors.surfaceHigh,
                 tonalElevation = 6.dp,
-                border = BorderStroke(1.dp, Color(0xFF1DB954).copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
@@ -291,10 +291,10 @@ fun LibraryScreen(
                         modifier = Modifier
                             .size(34.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1DB954).copy(alpha = 0.2f)),
+                            .background(colors.primary.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.MusicNote, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Spotify Playlist Detected", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -849,8 +849,8 @@ fun PlaylistGridCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete", color = Color(0xFFEF4444)) },
-                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFEF4444)) },
+                        text = { Text("Delete", color = colors.error) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = colors.error) },
                         onClick = {
                             showMenu = false
                             onDelete()
@@ -870,10 +870,10 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
+        item(key = "stats_this_week_header", contentType = "StatsHeader") {
             Text("This week", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
         }
-        item {
+        item(key = "stats_cards_row", contentType = "StatsCardsRow") {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatsCard(
                     modifier = Modifier.weight(1f),
@@ -888,8 +888,8 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
             }
         }
         stats.topSongThisWeek?.let { song ->
-            item { Text("Top song", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
-            item {
+            item(key = "stats_top_song_header", contentType = "StatsSubHeader") { Text("Top song", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
+            item(key = "stats_top_song_card", contentType = "StatsTopSongCard") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -912,8 +912,8 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
             }
         }
         stats.topArtistThisWeek?.let { artist ->
-            item { Text("Top artist", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
-            item {
+            item(key = "stats_top_artist_header", contentType = "StatsSubHeader") { Text("Top artist", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
+            item(key = "stats_top_artist_card", contentType = "StatsTopArtistCard") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -928,13 +928,13 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
             }
         }
         if (stats.songsThisWeek == 0) {
-            item {
+            item(key = "stats_empty_card", contentType = "StatsEmptyCard") {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
                     Text("Play some songs to see your stats here", color = colors.onSurfaceVariant, fontSize = 14.sp)
                 }
             }
         }
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item(key = "stats_bottom_spacer", contentType = "StatsSpacer") { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }
 
@@ -968,7 +968,7 @@ fun SpotifySyncAlertBanner(
             .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(14.dp),
         color = colors.surfaceHigh,
-        border = BorderStroke(1.dp, if (alert.isUnavailable) colors.surfaceHighest else Color(0xFF1DB954).copy(alpha = 0.35f))
+        border = BorderStroke(1.dp, if (alert.isUnavailable) colors.surfaceHighest else colors.primary.copy(alpha = 0.35f))
     ) {
         Row(
             modifier = Modifier
@@ -981,13 +981,13 @@ fun SpotifySyncAlertBanner(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (alert.isUnavailable) colors.surfaceHigh else Color(0xFF1DB954).copy(alpha = 0.15f)),
+                    .background(if (alert.isUnavailable) colors.surfaceHigh else colors.primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     if (alert.isUnavailable) Icons.Filled.LinkOff else Icons.Filled.Sync,
                     contentDescription = null,
-                    tint = if (alert.isUnavailable) colors.onSurfaceVariant else Color(0xFF1DB954),
+                    tint = if (alert.isUnavailable) colors.onSurfaceVariant else colors.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1032,8 +1032,8 @@ fun SpotifySyncAlertBanner(
                     onClick = onSync,
                     enabled = !isSyncing,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1DB954),
-                        contentColor = Color.Black
+                        containerColor = colors.primary,
+                        contentColor = colors.onPrimary
                     ),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(8.dp),

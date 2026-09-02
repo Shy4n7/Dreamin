@@ -381,14 +381,14 @@ fun PlaylistDetailScreen(
                                     if (isSyncingSpotify) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
-                                            color = Color(0xFF1DB954),
+                                            color = colors.primary,
                                             strokeWidth = 2.dp
                                         )
                                     } else {
                                         Icon(
                                             Icons.Filled.Sync,
                                             contentDescription = "Sync with Spotify",
-                                            tint = Color(0xFF1DB954),
+                                            tint = colors.primary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
@@ -746,7 +746,7 @@ fun PlaylistDetailScreen(
                                                 Icon(
                                                     imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
                                                     contentDescription = "Add",
-                                                    tint = if (isAdded) Color(0xFF00B894) else animatedDominant,
+                                                    tint = if (isAdded) colors.secondary else animatedDominant,
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
@@ -1184,7 +1184,7 @@ fun AddSongsToPlaylistDialog(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     if (displayList.isEmpty() && !isSearching) {
-                        item {
+                        item(key = "empty_state", contentType = "EmptyState") {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                                 contentAlignment = Alignment.Center
@@ -1200,7 +1200,8 @@ fun AddSongsToPlaylistDialog(
 
                     items(
                         items = displayList,
-                        key = { it.id }
+                        key = { it.id },
+                        contentType = { "AddSongRow" }
                     ) { song ->
                         val isAlreadyInPlaylist = existingSongIds.contains(song.id) || addedSongIds.contains(song.id)
 
@@ -1246,18 +1247,18 @@ fun AddSongsToPlaylistDialog(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFF00B894).copy(alpha = 0.2f))
+                                        .background(colors.secondary.copy(alpha = 0.2f))
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Icon(
                                         Icons.Filled.Check,
                                         contentDescription = null,
-                                        tint = Color(0xFF00B894),
+                                        tint = colors.secondary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
                                         "Added",
-                                        color = Color(0xFF00B894),
+                                        color = colors.secondary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
                                     )
@@ -1427,8 +1428,8 @@ fun PlaylistSongRow(
                     onClick = { showOptionsSheet = false; onAddToQueue() }
                 )
                 DropdownMenuItem(
-                    text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) Color(0xFFFF5252) else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) Color(0xFFFF5252) else colors.onSurface, modifier = Modifier.size(20.dp)) },
+                    text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                    leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) colors.error else colors.onSurface, modifier = Modifier.size(20.dp)) },
                     onClick = { showOptionsSheet = false; onDownload() }
                 )
                 DropdownMenuItem(
@@ -1438,8 +1439,8 @@ fun PlaylistSongRow(
                 )
                 HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
                 DropdownMenuItem(
-                    text = { Text("Remove from playlist", color = Color(0xFFFF5252), fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = Color(0xFFFF5252), modifier = Modifier.size(20.dp)) },
+                    text = { Text("Remove from playlist", color = colors.error, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                    leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = colors.error, modifier = Modifier.size(20.dp)) },
                     onClick = { showOptionsSheet = false; onRemove() }
                 )
             }

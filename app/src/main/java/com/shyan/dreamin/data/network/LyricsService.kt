@@ -42,44 +42,43 @@ object LyricsService {
                     .url(searchUrl)
                     .header("User-Agent", "DreaminMusicPlayer/2.0 (https://github.com/Shy4n7/Dreamin)")
                     .build()
-                val resp = NetworkService.httpClient.newCall(reqSearch).execute()
-                if (resp.isSuccessful) {
-                    val jsonStr = resp.body?.string().orEmpty()
-                    if (jsonStr.isNotBlank()) {
-                        val arr = org.json.JSONArray(jsonStr)
-                        var bestItem: JSONObject? = null
-                        var highestScore = -999
+                val jsonStr = NetworkService.httpClient.newCall(reqSearch).execute().use { resp ->
+                    if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+                }
+                if (jsonStr.isNotBlank()) {
+                    val arr = org.json.JSONArray(jsonStr)
+                    var bestItem: JSONObject? = null
+                    var highestScore = -999
 
-                        for (i in 0 until arr.length().coerceAtMost(10)) {
-                            val item = arr.getJSONObject(i)
-                            val score = scoreCandidate(item, cleanTitle, cleanArtist, durationSec)
-                            if (score > highestScore) {
-                                highestScore = score
-                                bestItem = item
-                            }
+                    for (i in 0 until arr.length().coerceAtMost(10)) {
+                        val item = arr.getJSONObject(i)
+                        val score = scoreCandidate(item, cleanTitle, cleanArtist, durationSec)
+                        if (score > highestScore) {
+                            highestScore = score
+                            bestItem = item
                         }
+                    }
 
-                        if (bestItem != null && highestScore > 0) {
-                            val synced = bestItem.optString("syncedLyrics", "")
-                            if (synced.isNotBlank()) {
-                                val parsed = parseLrc(synced)
-                                if (parsed.isNotEmpty()) {
-                                    val state = LyricsState.Success(parsed, isSynced = true)
-                                    lyricsCache.put(cacheKey, state)
-                                    return@withContext state
-                                }
-                            }
-
-                            val plain = bestItem.optString("plainLyrics", "")
-                            if (plain.isNotBlank()) {
-                                val lines = plain.lines().map { it.trim() }.filter { it.isNotBlank() }
-                                val plainParsed = lines.mapIndexed { idx, line ->
-                                    LyricLine(timestampMs = idx * 4000L, text = line)
-                                }
-                                val state = LyricsState.Success(plainParsed, isSynced = false)
+                    if (bestItem != null && highestScore > 0) {
+                        val synced = bestItem.optString("syncedLyrics", "")
+                        if (synced.isNotBlank()) {
+                            val parsed = parseLrc(synced)
+                            if (parsed.isNotEmpty()) {
+                                val state = LyricsState.Success(parsed, isSynced = true)
                                 lyricsCache.put(cacheKey, state)
                                 return@withContext state
                             }
+                        }
+
+                        val plain = bestItem.optString("plainLyrics", "")
+                        if (plain.isNotBlank()) {
+                            val lines = plain.lines().map { it.trim() }.filter { it.isNotBlank() }
+                            val plainParsed = lines.mapIndexed { idx, line ->
+                                LyricLine(timestampMs = idx * 4000L, text = line)
+                            }
+                            val state = LyricsState.Success(plainParsed, isSynced = false)
+                            lyricsCache.put(cacheKey, state)
+                            return@withContext state
                         }
                     }
                 }
@@ -101,21 +100,20 @@ object LyricsService {
                 .url(urlStr)
                 .header("User-Agent", "DreaminMusicPlayer/2.0 (https://github.com/Shy4n7/Dreamin)")
                 .build()
-            val resp = NetworkService.httpClient.newCall(req).execute()
-            if (resp.isSuccessful) {
-                val jsonStr = resp.body?.string().orEmpty()
-                if (jsonStr.isNotBlank()) {
-                    val json = JSONObject(jsonStr)
-                    val score = scoreCandidate(json, cleanTitle, cleanArtist, durationSec)
-                    if (score > 0) {
-                        val syncedLyrics = json.optString("syncedLyrics", "")
-                        if (syncedLyrics.isNotBlank()) {
-                            val parsed = parseLrc(syncedLyrics)
-                            if (parsed.isNotEmpty()) {
-                                val state = LyricsState.Success(parsed, isSynced = true)
-                                lyricsCache.put(cacheKey, state)
-                                return@withContext state
-                            }
+            val jsonStr = NetworkService.httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+            }
+            if (jsonStr.isNotBlank()) {
+                val json = JSONObject(jsonStr)
+                val score = scoreCandidate(json, cleanTitle, cleanArtist, durationSec)
+                if (score > 0) {
+                    val syncedLyrics = json.optString("syncedLyrics", "")
+                    if (syncedLyrics.isNotBlank()) {
+                        val parsed = parseLrc(syncedLyrics)
+                        if (parsed.isNotEmpty()) {
+                            val state = LyricsState.Success(parsed, isSynced = true)
+                            lyricsCache.put(cacheKey, state)
+                            return@withContext state
                         }
                     }
                 }
@@ -132,39 +130,40 @@ object LyricsService {
                 .url(saavnSearchUrl)
                 .header("User-Agent", "Mozilla/5.0")
                 .build()
-            val respSaavn = NetworkService.httpClient.newCall(reqSaavn).execute()
-            if (respSaavn.isSuccessful) {
-                val jsonStr = respSaavn.body?.string().orEmpty()
-                if (jsonStr.isNotBlank()) {
-                    val root = JSONObject(jsonStr)
-                    val songsArr = root.optJSONObject("songs")?.optJSONArray("data")
-                    val songId = songsArr?.optJSONObject(0)?.optString("id", "")
-                    if (!songId.isNullOrBlank()) {
-                        val lyricsUrl = "https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&lyrics_id=$songId&_format=json&_marker=0&ctx=android"
-                        val reqLyrics = okhttp3.Request.Builder().url(lyricsUrl).header("User-Agent", "Mozilla/5.0").build()
-                        val respLyrics = NetworkService.httpClient.newCall(reqLyrics).execute()
-                        if (respLyrics.isSuccessful) {
-                            val lyricJson = JSONObject(respLyrics.body?.string().orEmpty())
-                            val rawLyrics = lyricJson.optString("lyrics", "")
-                            if (rawLyrics.isNotBlank()) {
-                                val cleanLyrics = rawLyrics
-                                    .replace("<br />", "\n")
-                                    .replace("<br>", "\n")
-                                    .replace("<br/>", "\n")
-                                    .replace("&quot;", "\"")
-                                    .replace("&amp;", "&")
-                                    .lines()
-                                    .map { it.trim() }
-                                    .filter { it.isNotBlank() }
+            val jsonStr = NetworkService.httpClient.newCall(reqSaavn).execute().use { respSaavn ->
+                if (respSaavn.isSuccessful) respSaavn.body?.string().orEmpty() else ""
+            }
+            if (jsonStr.isNotBlank()) {
+                val root = JSONObject(jsonStr)
+                val songsArr = root.optJSONObject("songs")?.optJSONArray("data")
+                val songId = songsArr?.optJSONObject(0)?.optString("id", "")
+                if (!songId.isNullOrBlank()) {
+                    val lyricsUrl = "https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&lyrics_id=$songId&_format=json&_marker=0&ctx=android"
+                    val reqLyrics = okhttp3.Request.Builder().url(lyricsUrl).header("User-Agent", "Mozilla/5.0").build()
+                    val lyricJsonStr = NetworkService.httpClient.newCall(reqLyrics).execute().use { respLyrics ->
+                        if (respLyrics.isSuccessful) respLyrics.body?.string().orEmpty() else ""
+                    }
+                    if (lyricJsonStr.isNotBlank()) {
+                        val lyricJson = JSONObject(lyricJsonStr)
+                        val rawLyrics = lyricJson.optString("lyrics", "")
+                        if (rawLyrics.isNotBlank()) {
+                            val cleanLyrics = rawLyrics
+                                .replace("<br />", "\n")
+                                .replace("<br>", "\n")
+                                .replace("<br/>", "\n")
+                                .replace("&quot;", "\"")
+                                .replace("&amp;", "&")
+                                .lines()
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
 
-                                if (cleanLyrics.isNotEmpty()) {
-                                    val plainParsed = cleanLyrics.mapIndexed { idx, line ->
-                                        LyricLine(timestampMs = idx * 4000L, text = line)
-                                    }
-                                    val state = LyricsState.Success(plainParsed, isSynced = false)
-                                    lyricsCache.put(cacheKey, state)
-                                    return@withContext state
+                            if (cleanLyrics.isNotEmpty()) {
+                                val plainParsed = cleanLyrics.mapIndexed { idx, line ->
+                                    LyricLine(timestampMs = idx * 4000L, text = line)
                                 }
+                                val state = LyricsState.Success(plainParsed, isSynced = false)
+                                lyricsCache.put(cacheKey, state)
+                                return@withContext state
                             }
                         }
                     }

@@ -1457,7 +1457,7 @@ fun FavoriteSparkleButton(
                     val px = (center.x + distance * kotlin.math.cos(angleRad)).toFloat()
                     val py = (center.y + distance * kotlin.math.sin(angleRad)).toFloat()
                     drawCircle(
-                        color = Color(0xFFFF5252).copy(alpha = particleAlpha),
+                        color = colors.error.copy(alpha = particleAlpha),
                         radius = particleRadius,
                         center = Offset(px, py)
                     )
@@ -1467,7 +1467,7 @@ fun FavoriteSparkleButton(
                     val gx = (center.x + goldDist * kotlin.math.cos(goldAngle)).toFloat()
                     val gy = (center.y + goldDist * kotlin.math.sin(goldAngle)).toFloat()
                     drawCircle(
-                        color = Color(0xFFFFD166).copy(alpha = particleAlpha * 0.85f),
+                        color = colors.secondary.copy(alpha = particleAlpha * 0.85f),
                         radius = particleRadius * 0.75f,
                         center = Offset(gx, gy)
                     )
@@ -1485,7 +1485,7 @@ fun FavoriteSparkleButton(
             Icon(
                 imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
-                tint = if (isFavorite) Color(0xFFFF5252) else colors.onSurfaceVariant,
+                tint = if (isFavorite) colors.error else colors.onSurfaceVariant,
                 modifier = Modifier
                     .size(24.dp)
                     .scale(heartScale.value)

@@ -134,7 +134,11 @@ fun SyncedLyricsView(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    itemsIndexed(lines) { _, line ->
+                    itemsIndexed(
+                        items = lines,
+                        key = { idx, line -> "${idx}_${line.hashCode()}" },
+                        contentType = { _, _ -> "PlainLyricLine" }
+                    ) { _, line ->
                         Text(
                             text = line,
                             color = Color.White.copy(alpha = 0.88f),
@@ -182,7 +186,11 @@ fun SyncedLyricsView(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    itemsIndexed(lines, key = { idx, line -> "${line.timestampMs}_$idx" }) { index, line ->
+                    itemsIndexed(
+                        items = lines,
+                        key = { idx, line -> "${line.timestampMs}_$idx" },
+                        contentType = { _, _ -> "SyncedLyricLine" }
+                    ) { index, line ->
                         val isActive = index == activeIndex
                         val isPast = activeIndex >= 0 && index < activeIndex
 
@@ -208,8 +216,8 @@ fun SyncedLyricsView(
                                 .graphicsLayer {
                                     scaleX = animatedScale
                                     scaleY = animatedScale
+                                    alpha = animatedAlpha
                                 }
-                                .alpha(animatedAlpha)
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },

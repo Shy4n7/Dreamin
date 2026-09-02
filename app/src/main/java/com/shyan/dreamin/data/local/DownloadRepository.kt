@@ -98,19 +98,21 @@ class DownloadRepository(
             val req = okhttp3.Request.Builder()
                 .url(streamUrl)
                 .build()
-            val resp = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute()
-            if (!resp.isSuccessful) return@withContext
-
-            val body = resp.body ?: return@withContext
-            body.byteStream().use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
+            val ok = com.shyan.dreamin.data.network.NetworkService.mediaHttpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use false
+                val body = resp.body ?: return@use false
+                body.byteStream().use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                        }
                     }
                 }
+                true
             }
+            if (!ok) return@withContext
 
             if (tempFile.length() > 100_000L) {
                 if (targetFile.exists()) targetFile.delete()
@@ -186,22 +188,23 @@ class DownloadRepository(
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                 .header("Referer", "https://www.jiosaavn.com/")
                 .build()
-            val resp = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute()
-            if (!resp.isSuccessful) throw java.io.IOException("Download HTTP error: ${resp.code}")
+            com.shyan.dreamin.data.network.NetworkService.mediaHttpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw java.io.IOException("Download HTTP error: ${resp.code}")
 
-            val body = resp.body ?: throw java.io.IOException("Empty download response body")
-            val totalBytes = body.contentLength()
-            var downloadedBytes = 0L
+                val body = resp.body ?: throw java.io.IOException("Empty download response body")
+                val totalBytes = body.contentLength()
+                var downloadedBytes = 0L
 
-            body.byteStream().use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
-                        if (totalBytes > 0) {
-                            onProgress((downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f))
+                body.byteStream().use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            if (totalBytes > 0) {
+                                onProgress((downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f))
+                            }
                         }
                     }
                 }

@@ -146,7 +146,9 @@ data class DreaminColors(
     val secondary: Color,
     val onSurface: Color,
     val onSurfaceVariant: Color,
-    val outlineVariant: Color
+    val outlineVariant: Color,
+    val error: Color = Color(0xFFF43F5E),
+    val onPrimary: Color = Color.White
 )
 
 val SonicNocturneColors = DreaminColors(
@@ -160,7 +162,9 @@ val SonicNocturneColors = DreaminColors(
     secondary = Secondary,
     onSurface = OnSurface,
     onSurfaceVariant = OnSurfaceVariant,
-    outlineVariant = OutlineVariant
+    outlineVariant = OutlineVariant,
+    error = Color(0xFFF43F5E),
+    onPrimary = Color.White
 )
 
 val LocalDreaminColors = compositionLocalOf { SonicNocturneColors }

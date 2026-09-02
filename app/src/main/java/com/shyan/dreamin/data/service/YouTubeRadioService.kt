@@ -1,19 +1,21 @@
 package com.shyan.dreamin.data.service
 
 import com.shyan.dreamin.data.model.Song
+import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.data.recommendation.OfficialSongFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
 object YouTubeRadioService {
 
     private val radioCache = ConcurrentHashMap<String, List<Pair<String, String>>>()
+    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     /**
      * Fetches real-time official YouTube Music Trending Tamil Songs.
@@ -22,18 +24,6 @@ object YouTubeRadioService {
     suspend fun fetchTrendingTamilSongs(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
         val results = mutableListOf<Pair<String, String>>()
         try {
-            val url = URL("https://music.youtube.com/youtubei/v1/search")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                setRequestProperty("X-YouTube-Client-Name", "67")
-                setRequestProperty("X-YouTube-Client-Version", "1.20240101.01.00")
-                connectTimeout = 5000
-                readTimeout = 5000
-                doOutput = true
-            }
-
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
@@ -46,13 +36,26 @@ object YouTubeRadioService {
                 put("query", "Trending Tamil songs")
             }
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
-            val text = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
+            val req = Request.Builder()
+                .url("https://music.youtube.com/youtubei/v1/search")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
 
-            val root = JSONObject(text)
-            extractWebRemixSongs(root, results)
-        } catch (_: Exception) {}
+            val text = NetworkService.httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+            }
+
+            if (text.isNotBlank()) {
+                val root = JSONObject(text)
+                extractWebRemixSongs(root, results)
+            }
+        } catch (e: Exception) {
+            android.util.Log.d("YouTubeRadioService", "fetchTrendingTamilSongs error: ${e.message}")
+        }
         return@withContext results.filter { (title, _) ->
             title.isNotBlank() && !title.contains("Playlist", ignoreCase = true) && !title.contains("Album", ignoreCase = true)
         }
@@ -104,18 +107,6 @@ object YouTubeRadioService {
 
     fun searchVideoId(query: String): String? {
         try {
-            val url = URL("https://music.youtube.com/youtubei/v1/search")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                setRequestProperty("X-YouTube-Client-Name", "67")
-                setRequestProperty("X-YouTube-Client-Version", "1.20240101.01.00")
-                connectTimeout = 6000
-                readTimeout = 6000
-                doOutput = true
-            }
-
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
@@ -128,31 +119,32 @@ object YouTubeRadioService {
                 put("query", query)
             }
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
-            val text = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
+            val req = Request.Builder()
+                .url("https://music.youtube.com/youtubei/v1/search")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
 
-            val root = JSONObject(text)
-            return findVideoId(root)
-        } catch (_: Exception) {}
+            val text = NetworkService.httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+            }
+
+            if (text.isNotBlank()) {
+                val root = JSONObject(text)
+                return findVideoId(root)
+            }
+        } catch (e: Exception) {
+            android.util.Log.d("YouTubeRadioService", "searchVideoId error: ${e.message}")
+        }
         return null
     }
 
     private fun fetchNextRadioQueue(videoId: String): List<Pair<String, String>> {
         val results = mutableListOf<Pair<String, String>>()
         try {
-            val url = URL("https://music.youtube.com/youtubei/v1/next")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                setRequestProperty("X-YouTube-Client-Name", "67")
-                setRequestProperty("X-YouTube-Client-Version", "1.20240101.01.00")
-                connectTimeout = 6000
-                readTimeout = 6000
-                doOutput = true
-            }
-
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
@@ -167,13 +159,26 @@ object YouTubeRadioService {
                 put("isAudioOnly", true)
             }
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
-            val text = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
+            val req = Request.Builder()
+                .url("https://music.youtube.com/youtubei/v1/next")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
 
-            val root = JSONObject(text)
-            extractPlaylistPanelTracks(root, results)
-        } catch (_: Exception) {}
+            val text = NetworkService.httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+            }
+
+            if (text.isNotBlank()) {
+                val root = JSONObject(text)
+                extractPlaylistPanelTracks(root, results)
+            }
+        } catch (e: Exception) {
+            android.util.Log.d("YouTubeRadioService", "fetchNextRadioQueue error: ${e.message}")
+        }
         return results
     }
 

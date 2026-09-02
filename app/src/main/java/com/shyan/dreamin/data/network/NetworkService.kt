@@ -97,9 +97,10 @@ object NetworkService {
             .create(MusicApi::class.java)
     }
 
-    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+    private val networkScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
     fun prewarmSockets() {
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        networkScope.launch {
             val prewarmHosts = listOf(
                 "https://www.jiosaavn.com/api.php",
                 "https://ac.cf.saavncdn.com",
@@ -111,7 +112,7 @@ object NetworkService {
                         .url(url)
                         .head()
                         .build()
-                    httpClient.newCall(req).execute().close()
+                    httpClient.newCall(req).execute().use { }
                 }
             }
         }

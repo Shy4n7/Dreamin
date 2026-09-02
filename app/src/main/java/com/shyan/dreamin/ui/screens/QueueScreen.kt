@@ -370,8 +370,8 @@ fun UpNextRow(
                         Brush.horizontalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color(0xFFEF4444).copy(alpha = 0.7f),
-                                Color(0xFFDC2626).copy(alpha = 0.9f)
+                                colors.error.copy(alpha = 0.7f),
+                                colors.error.copy(alpha = 0.9f)
                             )
                         )
                     )
@@ -713,7 +713,7 @@ fun QueueScreen(
         ) { data ->
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF13111C).copy(alpha = 0.95f),
+                color = colors.surfaceHighest.copy(alpha = 0.95f),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                 shadowElevation = 14.dp
             ) {
@@ -810,8 +810,8 @@ fun QueueSongRow(
                         Brush.horizontalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color(0xFFEF4444).copy(alpha = 0.7f),
-                                Color(0xFFDC2626).copy(alpha = 0.9f)
+                                colors.error.copy(alpha = 0.7f),
+                                colors.error.copy(alpha = 0.9f)
                             )
                         )
                     )

@@ -240,11 +240,16 @@ fun ArtistDetailScreen(
                     )
                 }
             } else {
-                itemsIndexed(profile.topSongs, key = { index, song -> "${song.id}_$index" }) { index, song ->
+                itemsIndexed(
+                    items = profile.topSongs,
+                    key = { index, song -> "${song.id}_$index" },
+                    contentType = { _, _ -> "ArtistSongRow" }
+                ) { index, song ->
                     val isPlaying = currentSongId == song.id
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .defaultMinSize(minHeight = 48.dp)
                             .clickable { onSongClick(song) }
                             .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -259,7 +264,7 @@ fun ArtistDetailScreen(
 
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(song.artworkUrl)
+                                .data(song.displayArtworkUrl)
                                 .crossfade(200)
                                 .build(),
                             contentDescription = null,

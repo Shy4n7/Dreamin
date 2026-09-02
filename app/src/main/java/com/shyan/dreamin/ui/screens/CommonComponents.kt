@@ -43,7 +43,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.pager.HorizontalPager
@@ -352,26 +353,7 @@ fun MiniPlayer(
         label = "mini_shimmer_gleam_intensity"
     )
 
-    val borderShimmerOffset = (elapsedTime * 360f) % 1800f - 400f
     val cardShape = RoundedCornerShape(20.dp)
-
-    val dynamicBorderBrush = remember(animatedAura, borderShimmerOffset, gleamIntensity) {
-        val baseAlpha = 0.18f + 0.05f * gleamIntensity
-        val highlightAlpha = 0.20f + 0.25f * gleamIntensity
-        val whiteAlpha = 0.08f + 0.67f * gleamIntensity
-
-        Brush.linearGradient(
-            colors = listOf(
-                animatedAura.copy(alpha = baseAlpha),
-                animatedAura.copy(alpha = highlightAlpha),
-                Color.White.copy(alpha = whiteAlpha),
-                animatedAura.copy(alpha = highlightAlpha),
-                animatedAura.copy(alpha = baseAlpha)
-            ),
-            start = Offset(borderShimmerOffset, -50f),
-            end = Offset(borderShimmerOffset + 400f, 150f)
-        )
-    }
 
     Box(
         modifier = Modifier
@@ -405,12 +387,35 @@ fun MiniPlayer(
             color = colors.surfaceHighest.copy(alpha = 0.86f),
             tonalElevation = 10.dp,
             shape = cardShape,
-            border = BorderStroke(
-                1.dp,
-                dynamicBorderBrush
-            ),
             modifier = (if (hazeState != null) Modifier.hazeEffect(state = hazeState, style = HazeMaterials.ultraThin()) else Modifier)
                 .clip(cardShape)
+                .drawWithCache {
+                    val outline = cardShape.createOutline(size, layoutDirection, this)
+                    val strokeWidth = 1.dp.toPx()
+                    onDrawWithContent {
+                        drawContent()
+                        val borderShimmerOffset = (elapsedTime * 360f) % 1800f - 400f
+                        val baseAlpha = 0.18f + 0.05f * gleamIntensity
+                        val highlightAlpha = 0.20f + 0.25f * gleamIntensity
+                        val whiteAlpha = 0.08f + 0.67f * gleamIntensity
+                        val shimmerBrush = Brush.linearGradient(
+                            colors = listOf(
+                                animatedAura.copy(alpha = baseAlpha),
+                                animatedAura.copy(alpha = highlightAlpha),
+                                Color.White.copy(alpha = whiteAlpha),
+                                animatedAura.copy(alpha = highlightAlpha),
+                                animatedAura.copy(alpha = baseAlpha)
+                            ),
+                            start = Offset(borderShimmerOffset, -50f),
+                            end = Offset(borderShimmerOffset + 400f, 150f)
+                        )
+                        drawOutline(
+                            outline = outline,
+                            brush = shimmerBrush,
+                            style = Stroke(width = strokeWidth)
+                        )
+                    }
+                }
         ) {
             Column {
                 MiniPlayerProgressBar(
@@ -1070,7 +1075,7 @@ fun CreatePlaylistDialog(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (selectedTab == 1) Color(0xFF1DB954) else Color.Transparent)
+                            .background(if (selectedTab == 1) colors.primary else Color.Transparent)
                             .clickable { selectedTab = 1 }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
@@ -1167,7 +1172,7 @@ fun CreatePlaylistDialog(
                                     },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text("Paste", fontSize = 11.sp, color = Color(0xFF1DB954), fontWeight = FontWeight.Bold)
+                                    Text("Paste", fontSize = 11.sp, color = colors.primary, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 IconButton(onClick = { spotifyUrl = "" }) {
@@ -1177,7 +1182,7 @@ fun CreatePlaylistDialog(
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF1DB954),
+                            focusedBorderColor = colors.primary,
                             unfocusedBorderColor = colors.surfaceHigh,
                             focusedTextColor = colors.onSurface,
                             unfocusedTextColor = colors.onSurface,
@@ -1201,7 +1206,7 @@ fun CreatePlaylistDialog(
                             ) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
-                                    color = Color(0xFF1DB954),
+                                    color = colors.primary,
                                     strokeWidth = 2.5.dp
                                 )
                                 Text("Connecting to Spotify...", color = colors.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -1238,7 +1243,7 @@ fun CreatePlaylistDialog(
                                         modifier = Modifier
                                             .size(52.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .border(2.dp, Color(0xFF1DB954).copy(alpha = pulseAlpha), RoundedCornerShape(10.dp))
+                                            .border(2.dp, colors.primary.copy(alpha = pulseAlpha), RoundedCornerShape(10.dp))
                                     ) {
                                         if (displayArt.isNotBlank()) {
                                             AsyncImage(
@@ -1252,10 +1257,10 @@ fun CreatePlaylistDialog(
                                             )
                                         } else {
                                             Box(
-                                                modifier = Modifier.fillMaxSize().background(Color(0xFF1DB954).copy(alpha = 0.2f)),
+                                                modifier = Modifier.fillMaxSize().background(colors.primary.copy(alpha = 0.2f)),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(Icons.Filled.MusicNote, contentDescription = null, tint = Color(0xFF1DB954))
+                                                Icon(Icons.Filled.MusicNote, contentDescription = null, tint = colors.primary)
                                             }
                                         }
                                     }
@@ -1278,7 +1283,7 @@ fun CreatePlaylistDialog(
                                             Text(
                                                 "${st.currentTrackIndex}/${st.totalTracks}",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF1DB954),
+                                                color = colors.primary,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -1288,7 +1293,7 @@ fun CreatePlaylistDialog(
                                                 .fillMaxWidth()
                                                 .height(5.dp)
                                                 .clip(RoundedCornerShape(3.dp)),
-                                            color = Color(0xFF1DB954),
+                                            color = colors.primary,
                                             trackColor = colors.surfaceHigh
                                         )
                                         Text(
@@ -1320,7 +1325,7 @@ fun CreatePlaylistDialog(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(34.dp))
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = colors.primary, modifier = Modifier.size(34.dp))
 
                                 Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Text(
@@ -1341,7 +1346,7 @@ fun CreatePlaylistDialog(
                                     ) {
                                         Text(
                                             "${st.unmatchedTracks.size} songs not found",
-                                            color = Color(0xFFFFB74D),
+                                            color = colors.secondary,
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -1352,7 +1357,11 @@ fun CreatePlaylistDialog(
                                                 .heightIn(max = 140.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            itemsIndexed(st.unmatchedTracks) { _, track ->
+                                            itemsIndexed(
+                                                items = st.unmatchedTracks,
+                                                key = { idx, track -> "${track.title}_$idx" },
+                                                contentType = { _, _ -> "UnmatchedTrackRow" }
+                                            ) { _, track ->
                                                 val query = "${track.title} ${track.artist}".trim()
                                                 Column(
                                                     modifier = Modifier
@@ -1426,11 +1435,11 @@ fun CreatePlaylistDialog(
                                                                 modifier = Modifier.weight(1f)
                                                             )
                                                             if (isAdded) {
-                                                                Text("Added", color = Color(0xFF1DB954), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                                                Text("Added", color = colors.primary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                                                             } else {
                                                                 Text(
                                                                     "+ Add",
-                                                                    color = Color(0xFF1DB954),
+                                                                    color = colors.primary,
                                                                     fontSize = 9.5.sp,
                                                                     fontWeight = FontWeight.Bold,
                                                                     modifier = Modifier
@@ -1454,7 +1463,7 @@ fun CreatePlaylistDialog(
                         is SpotifyImportState.Error -> {
                             Text(
                                 st.message,
-                                color = Color(0xFFFF5252),
+                                color = colors.error,
                                 fontSize = 12.5.sp,
                                 textAlign = TextAlign.Center
                             )
@@ -1483,7 +1492,7 @@ fun CreatePlaylistDialog(
                             },
                             enabled = spotifyUrl.isNotBlank()
                         ) {
-                            Text("Import", color = if (spotifyUrl.isNotBlank()) Color(0xFF1DB954) else colors.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+                            Text("Import", color = if (spotifyUrl.isNotBlank()) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
                         }
                     }
                     is SpotifyImportState.Success -> {
@@ -1498,14 +1507,14 @@ fun CreatePlaylistDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF1DB954))
-                                Text("Download All Offline", color = Color(0xFF1DB954), fontWeight = FontWeight.Bold)
+                                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(15.dp), tint = colors.primary)
+                                Text("Download All Offline", color = colors.primary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                     is SpotifyImportState.Error -> {
                         TextButton(onClick = onResetSpotifyImport) {
-                            Text("Try Again", color = Color(0xFF1DB954), fontWeight = FontWeight.Bold)
+                            Text("Try Again", color = colors.primary, fontWeight = FontWeight.Bold)
                         }
                     }
                     else -> {}

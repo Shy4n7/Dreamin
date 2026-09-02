@@ -15,9 +15,9 @@ import com.shyan.dreamin.data.local.entity.PlaylistEntity
 import com.shyan.dreamin.data.local.dao.ImportMatchDao
 import com.shyan.dreamin.data.local.entity.ImportMatchEntity
 import com.shyan.dreamin.data.local.entity.PlaylistSongEntity
-import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -62,14 +62,19 @@ abstract class AppDatabase : RoomDatabase() {
                 })
                 .build()
 
+        private val dbScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         /**
          * Warm up the database connection on a background thread so the first
          * Room query doesn't pay the connection-open cost on the main thread.
          */
-        @OptIn(DelicateCoroutinesApi::class)
         fun warmUp(context: Context) {
-            GlobalScope.launch(Dispatchers.IO) {
-                getInstance(context).openHelper.readableDatabase
+            dbScope.launch {
+                try {
+                    getInstance(context).openHelper.readableDatabase
+                } catch (e: Exception) {
+                    android.util.Log.w("AppDatabase", "DB warmup error: ${e.message}")
+                }
             }
         }
     }
