@@ -91,9 +91,15 @@ class MusicService : MediaSessionService() {
         const val CUSTOM_COMMAND_SHUFFLE = "com.shyan.dreamin.COMMAND_SHUFFLE"
     }
 
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
     @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+        } catch (_: Exception) {}
+
         AudioFxManager.init(applicationContext)
         AutoEqManager.init(applicationContext)
 
@@ -105,7 +111,18 @@ class MusicService : MediaSessionService() {
         // ⚡ ExoPlayer LRU Disk Cache: 512 MB disk cache for instant offline replay
         val universalDataSourceFactory = ExoPlayerCacheManager.createCacheDataSourceFactory(this)
 
-        val renderersFactory = DefaultRenderersFactory(this).apply {
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): androidx.media3.exoplayer.audio.AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(true) // 32-bit float audio: dynamic headroom prevents DSP clipping
+                    .setAudioOffloadSupportProvider(androidx.media3.exoplayer.audio.DefaultAudioOffloadSupportProvider(context))
+                    .build()
+            }
+        }.apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         }
 
@@ -121,6 +138,14 @@ class MusicService : MediaSessionService() {
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
+        val trackSelectionParameters = androidx.media3.common.TrackSelectionParameters.Builder(this)
+            .setAudioOffloadPreferences(
+                androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                    .build()
+            )
+            .build()
+
         val player = ExoPlayer.Builder(this, renderersFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
@@ -131,10 +156,16 @@ class MusicService : MediaSessionService() {
             )
             .build()
 
+        player.trackSelectionParameters = trackSelectionParameters
+
         // Attach Hardware AudioFX Equalizer & BassBoost to ExoPlayer session
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 AudioFxManager.attachAudioSession(audioSessionId)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                updateWifiLock(isPlaying)
             }
         })
         AudioFxManager.attachAudioSession(player.audioSessionId)
@@ -247,7 +278,35 @@ class MusicService : MediaSessionService() {
         }
     }
 
+    private fun updateWifiLock(isPlaying: Boolean) {
+        try {
+            if (isPlaying) {
+                if (wifiLock == null) {
+                    val wm = applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+                    val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                    }
+                    wifiLock = wm?.createWifiLock(mode, "Dreamin:StreamingWifiLock")?.apply { setReferenceCounted(false) }
+                }
+                wifiLock?.acquire()
+            } else {
+                if (wifiLock?.isHeld == true) {
+                    wifiLock?.release()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     override fun onDestroy() {
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+            wifiLock = null
+        } catch (_: Exception) {}
         AudioFxManager.release()
         mediaSession?.run { player.release(); release(); mediaSession = null }
         super.onDestroy()

@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -47,10 +48,14 @@ object ExoPlayerCacheManager {
         val cache = getSimpleCache(context)
         val httpDataSourceFactory = OkHttpDataSource.Factory(NetworkService.mediaHttpClient)
         val upstreamFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val cacheWriteDataSinkFactory = CacheDataSink.Factory()
+            .setCache(cache)
+            .setFragmentSize(4L * 1024L * 1024L) // 4 MB chunk size to optimize Linux ext4/f2fs inode allocation
 
         return CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(upstreamFactory)
+            .setCacheWriteDataSinkFactory(cacheWriteDataSinkFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
