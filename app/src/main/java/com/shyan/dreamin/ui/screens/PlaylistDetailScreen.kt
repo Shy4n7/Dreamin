@@ -882,22 +882,6 @@ fun PlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    if (sortOrder == PlaylistSortOrder.Custom && searchQuery.isBlank()) {
-                                        Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = colors.surfaceHighest.copy(alpha = 0.5f),
-                                            border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.4f))
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(Icons.Outlined.DragHandle, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
-                                                Text("Drag to order", fontSize = 11.sp, color = colors.onSurfaceVariant)
-                                            }
-                                        }
-                                    }
 
                                     // Quick Select / Multi-Select Button
                                     IconButton(
