@@ -10,17 +10,19 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.scale
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * 🌌 Fluid Liquid Mesh Background for NowPlaying Screen.
+ * 🌌 Fluid Liquid Mesh Background for NowPlaying & Playlist Screens.
  * 
  * Features:
- * - 3-Orb Elevated Harmonic Orbit: Seamless continuous drifting orbs centered higher on screen.
- * - Sub-Surface Atmospheric Blending: Soft radial gradients bleeding into dark obsidian background.
- * - Luminous Multi-Speed Breathing Pulses: Dynamic organic glow that keeps the background alive.
- * - 120fps Zero-GC Canvas: Pre-calculated math with zero heap allocations per frame.
+ * - Harmonic Lissajous Fluid Orbits: Dual-frequency wave motion ($f_1=1.0, f_2=1.618$) for molten liquid deformation.
+ * - Out-of-Phase Elliptical Stretch: Dynamic organic morphing simulating liquid surface tension.
+ * - Header Mode & Zero-GC Scroll Parallax: Upper hero concentration with phase-deferred scroll offset sampling.
+ * - Sub-Surface Atmospheric Blending: Multi-stop non-linear radial vignettes into dark obsidian.
+ * - 120fps Zero-Heap Canvas: Pre-calculated math with zero object allocations in draw loop.
  */
 @Composable
 fun FluidMeshGradientBackground(
@@ -29,9 +31,11 @@ fun FluidMeshGradientBackground(
     accentColor: Color,
     backgroundColor: Color,
     isPlaying: Boolean = true,
+    isHeaderMode: Boolean = false,
+    scrollOffsetProvider: (() -> Float)? = null,
     modifier: Modifier = Modifier
 ) {
-    // 🌊 1200ms Fluid Watercolor Color Crossfade when tracks change
+    // 🌊 1200ms Fluid Watercolor Color Crossfade when tracks or playlists change
     val animDominant by animateColorAsState(
         targetValue = dominantColor,
         animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
@@ -50,10 +54,10 @@ fun FluidMeshGradientBackground(
         label = "mesh_accent"
     )
 
-    // 🌸 Transient Color Bloom on Track Switch
+    // 🌸 Transient Color Bloom on Track / Playlist Switch
     val bloomScale = remember { Animatable(1.0f) }
     LaunchedEffect(dominantColor) {
-        bloomScale.snapTo(1.22f)
+        bloomScale.snapTo(1.25f)
         bloomScale.animateTo(
             targetValue = 1.0f,
             animationSpec = spring(
@@ -70,7 +74,7 @@ fun FluidMeshGradientBackground(
         initialValue = 0f,
         targetValue = (Math.PI * 2).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 14000 else 28000, easing = LinearEasing),
+            animation = tween(durationMillis = if (isPlaying) 15000 else 30000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit_1"
@@ -80,7 +84,7 @@ fun FluidMeshGradientBackground(
         initialValue = 0f,
         targetValue = (Math.PI * 2).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 19000 else 38000, easing = LinearEasing),
+            animation = tween(durationMillis = if (isPlaying) 21000 else 42000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit_2"
@@ -89,19 +93,19 @@ fun FluidMeshGradientBackground(
     // ✨ Organic Luminous Breathing Pulses
     val pulseTransition = rememberInfiniteTransition(label = "mesh_pulse")
     val pulse1 by pulseTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.10f,
+        initialValue = 0.93f,
+        targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 3600 else 6000, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = if (isPlaying) 3800 else 6400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_1"
     )
     val pulse2 by pulseTransition.animateFloat(
-        initialValue = 1.08f,
-        targetValue = 0.92f,
+        initialValue = 1.10f,
+        targetValue = 0.90f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 4800 else 7200, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = if (isPlaying) 5200 else 7800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_2"
@@ -113,95 +117,137 @@ fun FluidMeshGradientBackground(
             .drawWithCache {
                 val width = size.width
                 val height = size.height
-                val vignetteBrush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.00f to backgroundColor.copy(alpha = 0.12f),
-                        0.30f to Color.Transparent,
-                        0.60f to backgroundColor.copy(alpha = 0.32f),
-                        0.85f to backgroundColor.copy(alpha = 0.65f),
-                        1.00f to backgroundColor.copy(alpha = 0.85f)
-                    ),
-                    startY = 0f,
-                    endY = height
-                )
+
+                // Custom non-linear atmospheric vignette depending on header mode
+                val vignetteBrush = if (isHeaderMode) {
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.00f to backgroundColor.copy(alpha = 0.05f),
+                            0.20f to Color.Transparent,
+                            0.42f to backgroundColor.copy(alpha = 0.40f),
+                            0.65f to backgroundColor.copy(alpha = 0.85f),
+                            0.88f to backgroundColor,
+                            1.00f to backgroundColor
+                        ),
+                        startY = 0f,
+                        endY = height
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.00f to backgroundColor.copy(alpha = 0.12f),
+                            0.30f to Color.Transparent,
+                            0.60f to backgroundColor.copy(alpha = 0.32f),
+                            0.85f to backgroundColor.copy(alpha = 0.65f),
+                            1.00f to backgroundColor.copy(alpha = 0.85f)
+                        ),
+                        startY = 0f,
+                        endY = height
+                    )
+                }
 
                 onDrawBehind {
                     val t1 = orbitPhase1.toDouble()
                     val t2 = orbitPhase2.toDouble()
                     val bloom = bloomScale.value
 
+                    // Phase-deferred scroll parallax reading
+                    val scrollY = scrollOffsetProvider?.invoke() ?: 0f
+                    val parallaxY = if (isHeaderMode) -scrollY * 0.38f else 0f
+                    val scrollAlpha = if (isHeaderMode) {
+                        (1f - (scrollY / (height * 0.55f))).coerceIn(0.15f, 1f)
+                    } else 1.0f
+
                     // Base atmospheric background
                     drawRect(color = backgroundColor)
 
-                    // 1. Orb 1 (Dominant Color Aura - Radiant Upper Center/Left)
-                    val orb1X = (0.44 + 0.24 * sin(t1)).toFloat() * width
-                    val orb1Y = (0.20 + 0.12 * cos(t1)).toFloat() * height
-                    val orb1Radius = width * 0.95f * bloom * pulse1
+                    // Vertical offset anchor adjustments for header vs full screen
+                    val yAnchor1 = if (isHeaderMode) 0.14 else 0.20
+                    val yAnchor2 = if (isHeaderMode) 0.24 else 0.34
+                    val yAnchor3 = if (isHeaderMode) 0.30 else 0.46
+                    val coreYAnchor = if (isHeaderMode) 0.20f else 0.32f
 
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                animDominant.copy(alpha = 0.78f),
-                                animDominant.copy(alpha = 0.42f),
-                                animDominant.copy(alpha = 0.14f),
-                                Color.Transparent
+                    // 1. Orb 1 (Dominant Color Aura - Lissajous Harmonic Drift)
+                    val orb1X = (0.46 + 0.26 * sin(t1) + 0.10 * cos(t1 * 1.618)).toFloat() * width
+                    val orb1Y = ((yAnchor1 + 0.12 * cos(t1 * 1.2) + 0.06 * sin(t1 * 2.1)).toFloat() * height) + parallaxY
+                    val orb1Radius = width * (if (isHeaderMode) 0.88f else 0.95f) * bloom * pulse1
+                    val orb1ScaleX = 1f + 0.09f * sin(t1 * 2.0).toFloat()
+                    val orb1ScaleY = 1f + 0.09f * cos(t1 * 2.0).toFloat()
+
+                    scale(scaleX = orb1ScaleX, scaleY = orb1ScaleY, pivot = Offset(orb1X, orb1Y)) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    animDominant.copy(alpha = 0.78f * scrollAlpha),
+                                    animDominant.copy(alpha = 0.42f * scrollAlpha),
+                                    animDominant.copy(alpha = 0.14f * scrollAlpha),
+                                    Color.Transparent
+                                ),
+                                center = Offset(orb1X, orb1Y),
+                                radius = orb1Radius
                             ),
                             center = Offset(orb1X, orb1Y),
                             radius = orb1Radius
-                        ),
-                        center = Offset(orb1X, orb1Y),
-                        radius = orb1Radius
-                    )
+                        )
+                    }
 
-                    // 2. Orb 2 (Secondary Color Aura - Radiant Center Right Artwork Region)
-                    val orb2X = (0.64 + 0.22 * cos(t2 + 1.25)).toFloat() * width
-                    val orb2Y = (0.34 + 0.14 * sin(t2 + 1.25)).toFloat() * height
-                    val orb2Radius = width * 1.02f * bloom * pulse2
+                    // 2. Orb 2 (Secondary Color Aura - Radiant Center Right Lissajous Wave)
+                    val orb2X = (0.62 + 0.24 * cos(t2 + 1.25) + 0.09 * sin(t2 * 1.4)).toFloat() * width
+                    val orb2Y = ((yAnchor2 + 0.14 * sin(t2 + 1.25) + 0.05 * cos(t2 * 1.9)).toFloat() * height) + parallaxY
+                    val orb2Radius = width * (if (isHeaderMode) 0.92f else 1.02f) * bloom * pulse2
+                    val orb2ScaleX = 1f + 0.11f * cos(t2 * 1.8).toFloat()
+                    val orb2ScaleY = 1f + 0.11f * sin(t2 * 1.8).toFloat()
 
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                animSecondary.copy(alpha = 0.68f),
-                                animSecondary.copy(alpha = 0.36f),
-                                animSecondary.copy(alpha = 0.12f),
-                                Color.Transparent
+                    scale(scaleX = orb2ScaleX, scaleY = orb2ScaleY, pivot = Offset(orb2X, orb2Y)) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    animSecondary.copy(alpha = 0.68f * scrollAlpha),
+                                    animSecondary.copy(alpha = 0.36f * scrollAlpha),
+                                    animSecondary.copy(alpha = 0.12f * scrollAlpha),
+                                    Color.Transparent
+                                ),
+                                center = Offset(orb2X, orb2Y),
+                                radius = orb2Radius
                             ),
                             center = Offset(orb2X, orb2Y),
                             radius = orb2Radius
-                        ),
-                        center = Offset(orb2X, orb2Y),
-                        radius = orb2Radius
-                    )
+                        )
+                    }
 
-                    // 3. Orb 3 (Accent Color Glow - Mid Elevation under Artwork)
-                    val orb3X = (0.32 + 0.24 * sin(t2 + Math.PI)).toFloat() * width
-                    val orb3Y = (0.46 + 0.12 * cos(t2 + Math.PI)).toFloat() * height
-                    val orb3Radius = width * 0.92f * bloom * pulse1
+                    // 3. Orb 3 (Accent Color Glow - Mid Elevation Counter-Balance)
+                    val orb3X = (0.34 + 0.22 * sin(t2 + Math.PI) + 0.08 * cos(t2 * 1.3)).toFloat() * width
+                    val orb3Y = ((yAnchor3 + 0.12 * cos(t2 + Math.PI) + 0.06 * sin(t2 * 1.7)).toFloat() * height) + parallaxY
+                    val orb3Radius = width * (if (isHeaderMode) 0.82f else 0.92f) * bloom * pulse1
+                    val orb3ScaleX = 1f + 0.08f * sin(t2 * 2.2).toFloat()
+                    val orb3ScaleY = 1f + 0.08f * cos(t2 * 2.2).toFloat()
 
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                animAccent.copy(alpha = 0.58f),
-                                animAccent.copy(alpha = 0.28f),
-                                animAccent.copy(alpha = 0.08f),
-                                Color.Transparent
+                    scale(scaleX = orb3ScaleX, scaleY = orb3ScaleY, pivot = Offset(orb3X, orb3Y)) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    animAccent.copy(alpha = 0.58f * scrollAlpha),
+                                    animAccent.copy(alpha = 0.28f * scrollAlpha),
+                                    animAccent.copy(alpha = 0.08f * scrollAlpha),
+                                    Color.Transparent
+                                ),
+                                center = Offset(orb3X, orb3Y),
+                                radius = orb3Radius
                             ),
                             center = Offset(orb3X, orb3Y),
                             radius = orb3Radius
-                        ),
-                        center = Offset(orb3X, orb3Y),
-                        radius = orb3Radius
-                    )
+                        )
+                    }
 
-                    // 4. Luminous Center Ambient Core (Binds all 3 orbs together)
+                    // 4. Luminous Center Ambient Core (Binds all 3 orbs into unified liquid atmosphere)
                     val coreX = width * 0.5f
-                    val coreY = height * 0.32f
-                    val coreRadius = width * 1.15f * bloom
+                    val coreY = (height * coreYAnchor) + parallaxY
+                    val coreRadius = width * (if (isHeaderMode) 1.05f else 1.15f) * bloom
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                animDominant.copy(alpha = 0.35f),
-                                animSecondary.copy(alpha = 0.20f),
+                                animDominant.copy(alpha = 0.35f * scrollAlpha),
+                                animSecondary.copy(alpha = 0.20f * scrollAlpha),
                                 Color.Transparent
                             ),
                             center = Offset(coreX, coreY),
@@ -211,7 +257,7 @@ fun FluidMeshGradientBackground(
                         radius = coreRadius
                     )
 
-                    // 5. Soft Atmospheric Vignette (Keeps top/center illuminated, ensures button legibility)
+                    // 5. Atmospheric Vignette Overlay
                     drawRect(
                         brush = vignetteBrush,
                         size = size
@@ -220,3 +266,4 @@ fun FluidMeshGradientBackground(
             }
     )
 }
+

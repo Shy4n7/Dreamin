@@ -108,6 +108,7 @@ import com.shyan.dreamin.ui.components.SyncedLyricsView
 import com.shyan.dreamin.viewmodel.MusicPlayerViewModel
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 
 
 
@@ -220,28 +221,44 @@ fun PlaylistDetailScreen(
         songs.isNotEmpty() && songs.all { downloadedSongIds.contains(it.id) }
     }
 
-    // 🎨 1. Dynamic Dominant Background Bloom extracted from Top Track / Cover
-    var extractedDominant by remember(playlist.id) { mutableStateOf(colors.primary) }
+    // 🎨 1. Dynamic Tri-Tone Background Mesh extracted from Cover Art / First Song
+    var extractedTriad by remember(playlist.id) {
+        mutableStateOf(
+            com.shyan.dreamin.data.service.PaletteTriad(
+                dominant = colors.primary.toArgb(),
+                secondary = colors.secondary.toArgb(),
+                accent = colors.primaryDim.toArgb()
+            )
+        )
+    }
     val heroArt = remember(playlist.coverUrl, songs) {
         playlist.coverUrl?.takeIf { it.isNotBlank() } ?: songs.firstOrNull()?.displayArtworkUrl
     }
     LaunchedEffect(heroArt) {
         if (!heroArt.isNullOrBlank()) {
-            val cached = com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedColor(heroArt)
+            val cached = com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(heroArt)
             if (cached != null) {
-                extractedDominant = cached
+                extractedTriad = cached
             } else {
-                val color = com.shyan.dreamin.data.service.PaletteMemoryCache.extractDominantColor(context, heroArt)
-                if (color != null) {
-                    extractedDominant = color
-                }
+                val triad = com.shyan.dreamin.data.service.PaletteMemoryCache.extractPaletteTriad(context, heroArt)
+                extractedTriad = triad
             }
         }
     }
     val animatedDominant by animateColorAsState(
-        targetValue = extractedDominant,
-        animationSpec = tween(1100, easing = FastOutSlowInEasing),
+        targetValue = Color(extractedTriad.dominant),
+        animationSpec = tween(1200, easing = FastOutSlowInEasing),
         label = "playlist_ambient_dominant"
+    )
+    val animatedSecondary by animateColorAsState(
+        targetValue = Color(extractedTriad.secondary),
+        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        label = "playlist_ambient_secondary"
+    )
+    val animatedAccent by animateColorAsState(
+        targetValue = Color(extractedTriad.accent),
+        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        label = "playlist_ambient_accent"
     )
 
     // 🔍 2. In-Playlist Sorting & Instant Search
@@ -287,42 +304,19 @@ fun PlaylistDetailScreen(
             .background(colors.background)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // 🌌 Ambient Fluid Color Bloom Header at Top
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(380.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    animatedDominant.copy(alpha = 0.42f),
-                                    animatedDominant.copy(alpha = 0.14f),
-                                    Color.Transparent
-                                ),
-                                center = Offset(x = 540f, y = 180f),
-                                radius = 700f
-                            )
-                        )
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.Transparent,
-                                    0.45f to colors.background.copy(alpha = 0.65f),
-                                    0.85f to colors.background.copy(alpha = 0.95f),
-                                    1.0f to colors.background
-                                )
-                            )
-                        )
-                )
-            }
+            // 🌌 Dynamic Fluid Liquid Mesh Background with Lissajous Harmonic Motion & Scroll Parallax
+            FluidMeshGradientBackground(
+                dominantColor = animatedDominant,
+                secondaryColor = animatedSecondary,
+                accentColor = animatedAccent,
+                backgroundColor = colors.background,
+                isPlaying = isPlayingThisPlaylist,
+                isHeaderMode = true,
+                scrollOffsetProvider = {
+                    listState.firstVisibleItemScrollOffset.toFloat() + (listState.firstVisibleItemIndex * 220f)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
 
             Column(
                 modifier = Modifier
