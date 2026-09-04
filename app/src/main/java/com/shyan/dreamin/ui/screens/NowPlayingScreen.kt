@@ -304,8 +304,7 @@ fun NowPlayingProgressSlider(
 }
 
 /**
- * Animated odometer-style rolling time display with smooth vertical slide transitions.
- * When time moves forward, digits roll upwards; when seeking backwards, digits roll downwards.
+ * Formatted time display for current track position and total duration.
  */
 @Composable
 fun RollingTimeText(
@@ -315,162 +314,16 @@ fun RollingTimeText(
     fontWeight: FontWeight = FontWeight.Medium,
     modifier: Modifier = Modifier
 ) {
-    var previousTimeMs by remember { mutableLongStateOf(timeMs) }
-    val isForward = timeMs >= previousTimeMs
-    SideEffect {
-        previousTimeMs = timeMs
-    }
-
-    val totalSeconds = (timeMs.coerceAtLeast(0L) / 1000L)
-    val hours = totalSeconds / 3600
-    val minutes = if (hours > 0) (totalSeconds % 3600) / 60 else totalSeconds / 60
-    val seconds = totalSeconds % 60
-    val hoursStr = if (hours > 0) hours.toString() else ""
-    val minutesStr = if (hours > 0) minutes.toString().padStart(2, '0') else minutes.toString()
-    val secTens = (seconds / 10).toInt()
-    val secUnits = (seconds % 10).toInt()
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (hours > 0) {
-            hoursStr.forEachIndexed { idx, char ->
-                val posFromRight = hoursStr.length - 1 - idx
-                key("hour_$posFromRight") {
-                    RollingDigit(
-                        char = char,
-                        isForward = isForward,
-                        color = color,
-                        fontSize = fontSize,
-                        fontWeight = fontWeight
-                    )
-                }
-            }
-            Text(
-                text = ":",
-                color = color,
-                fontSize = fontSize,
-                fontWeight = fontWeight,
-                modifier = Modifier.padding(horizontal = 0.5.dp)
-            )
-        }
-
-        // Minutes digits with stable right-aligned keys
-        minutesStr.forEachIndexed { idx, char ->
-            val posFromRight = minutesStr.length - 1 - idx
-            key("min_$posFromRight") {
-                RollingDigit(
-                    char = char,
-                    isForward = isForward,
-                    color = color,
-                    fontSize = fontSize,
-                    fontWeight = fontWeight
-                )
-            }
-        }
-
-        // Colon separator
-        Text(
-            text = ":",
-            color = color,
-            fontSize = fontSize,
-            fontWeight = fontWeight,
-            modifier = Modifier.padding(horizontal = 0.5.dp)
-        )
-
-        // Seconds tens digit
-        key("sec_tens") {
-            RollingDigit(
-                char = ('0' + secTens),
-                isForward = isForward,
-                color = color,
-                fontSize = fontSize,
-                fontWeight = fontWeight
-            )
-        }
-
-        // Seconds units digit
-        key("sec_units") {
-            RollingDigit(
-                char = ('0' + secUnits),
-                isForward = isForward,
-                color = color,
-                fontSize = fontSize,
-                fontWeight = fontWeight
-            )
-        }
-    }
-}
-
-/**
- * Individual digit slot with vertical aperture clipping and spring-based odometer slide physics.
- */
-@Composable
-private fun RollingDigit(
-    char: Char,
-    isForward: Boolean,
-    color: Color,
-    fontSize: androidx.compose.ui.unit.TextUnit,
-    fontWeight: FontWeight,
-    modifier: Modifier = Modifier
-) {
-    Box(
+    Text(
+        text = formatDuration(timeMs),
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        style = LocalTextStyle.current.copy(
+            fontFeatureSettings = "tnum"
+        ),
         modifier = modifier
-            .widthIn(min = 8.5.dp)
-            .height(18.dp)
-            .clipToBounds(),
-        contentAlignment = Alignment.Center
-    ) {
-        AnimatedContent(
-            targetState = char,
-            transitionSpec = {
-                if (isForward) {
-                    (slideInVertically(
-                        animationSpec = spring(
-                            dampingRatio = 0.82f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) { fullHeight -> fullHeight } + fadeIn(animationSpec = tween(110)))
-                        .togetherWith(
-                            slideOutVertically(
-                                animationSpec = spring(
-                                    dampingRatio = 0.82f,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
-                            ) { fullHeight -> -fullHeight } + fadeOut(animationSpec = tween(110))
-                        )
-                } else {
-                    (slideInVertically(
-                        animationSpec = spring(
-                            dampingRatio = 0.82f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) { fullHeight -> -fullHeight } + fadeIn(animationSpec = tween(110)))
-                        .togetherWith(
-                            slideOutVertically(
-                                animationSpec = spring(
-                                    dampingRatio = 0.82f,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
-                            ) { fullHeight -> fullHeight } + fadeOut(animationSpec = tween(110))
-                        )
-                }
-            },
-            label = "rolling_digit"
-        ) { digit ->
-            Text(
-                text = "$digit",
-                color = color,
-                fontSize = fontSize,
-                fontWeight = fontWeight,
-                textAlign = TextAlign.Center,
-                style = LocalTextStyle.current.copy(
-                    fontFeatureSettings = "tnum"
-                )
-            )
-        }
-    }
+    )
 }
 
 @Composable
