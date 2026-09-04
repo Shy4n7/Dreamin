@@ -155,7 +155,29 @@ fun HomeScreen(
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val listState = rememberLazyListState()
+    val listState = remember { LazyListState(0, 0) }
+    var userHasScrolled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            userHasScrolled = true
+        }
+    }
+
+    // Keep pinned to top (index 0, offset 0) as initial Room/network data populates
+    LaunchedEffect(playlists.size, lastSession != null, recentlyPlayed.size, topSongs.size, trendingCharts.size) {
+        if (!userHasScrolled) {
+            listState.scrollToItem(0, 0)
+        }
+    }
+
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) {
+        userHasScrolled = false
+        try {
+            listState.requestScrollToItem(0, 0)
+        } catch (_: Exception) {}
+    }
+
     LaunchedEffect(Unit) {
         listState.scrollToItem(0, 0)
     }
