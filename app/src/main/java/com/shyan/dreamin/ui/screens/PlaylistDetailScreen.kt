@@ -166,7 +166,8 @@ fun PlaylistDetailScreen(
     onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
     onSyncSpotify: () -> Unit = {},
     isSyncingSpotify: Boolean = false,
-    quickPickSongs: List<Song> = emptyList()
+    quickPickSongs: List<Song> = emptyList(),
+    initialArtworkUrl: String? = null
 ) {
     val colors = LocalDreaminColors.current
     val context = LocalContext.current
@@ -221,27 +222,47 @@ fun PlaylistDetailScreen(
         songs.isNotEmpty() && songs.all { downloadedSongIds.contains(it.id) }
     }
 
+    val heroArt = remember(playlist.coverUrl, songs, initialArtworkUrl) {
+        playlist.coverUrl?.takeIf { it.isNotBlank() }
+            ?: songs.firstOrNull()?.displayArtworkUrl
+            ?: initialArtworkUrl
+    }
+
     // 🎨 1. Dynamic Tri-Tone Background Mesh extracted from Cover Art / First Song
+    // Zero-Flash Immediate Triad: Check memory cache synchronously before first composition
+    val cachedImmediateTriad = remember(playlist.id, heroArt) {
+        com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad("playlist_${playlist.id}")
+            ?: (heroArt?.let { com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(it) })
+            ?: (heroArt?.let { com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedColor(it) }?.let { dom ->
+                com.shyan.dreamin.data.service.PaletteTriad(
+                    dominant = dom.toArgb(),
+                    secondary = colors.surfaceHigh.toArgb(),
+                    accent = colors.surfaceHighest.toArgb()
+                )
+            })
+    }
+
     var extractedTriad by remember(playlist.id) {
         mutableStateOf(
-            com.shyan.dreamin.data.service.PaletteTriad(
-                dominant = colors.primary.toArgb(),
-                secondary = colors.secondary.toArgb(),
-                accent = colors.primaryDim.toArgb()
+            cachedImmediateTriad ?: com.shyan.dreamin.data.service.PaletteTriad(
+                dominant = colors.surfaceContainer.toArgb(),
+                secondary = colors.surfaceHigh.toArgb(),
+                accent = colors.surfaceHighest.toArgb()
             )
         )
     }
-    val heroArt = remember(playlist.coverUrl, songs) {
-        playlist.coverUrl?.takeIf { it.isNotBlank() } ?: songs.firstOrNull()?.displayArtworkUrl
-    }
+
     LaunchedEffect(heroArt) {
         if (!heroArt.isNullOrBlank()) {
             val cached = com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(heroArt)
+                ?: com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad("playlist_${playlist.id}")
             if (cached != null) {
                 extractedTriad = cached
+                com.shyan.dreamin.data.service.PaletteMemoryCache.putTriad("playlist_${playlist.id}", cached)
             } else {
                 val triad = com.shyan.dreamin.data.service.PaletteMemoryCache.extractPaletteTriad(context, heroArt)
                 extractedTriad = triad
+                com.shyan.dreamin.data.service.PaletteMemoryCache.putTriad("playlist_${playlist.id}", triad)
             }
         }
     }

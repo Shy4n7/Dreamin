@@ -377,6 +377,7 @@ private fun MainAppScaffold(
                 PlaylistDetailScreen(
                     playlist = openPlaylist,
                     songs = state.openPlaylistSongs,
+                    initialArtworkUrl = openPlaylist.coverUrl ?: state.playlistArtworks[openPlaylist.id]?.firstOrNull(),
                     currentSong = state.currentSong,
                     playbackState = state.playbackState,
                     progressFlow = vm.progressFlow,

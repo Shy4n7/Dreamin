@@ -251,7 +251,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 // Fetch artworks in parallel on IO, then update state once
                 val artworks = withContext(Dispatchers.IO) {
                     lists.associate { playlist ->
-                        playlist.id to playlistRepo.getFirstFourArtworks(playlist.id)
+                        val arts = playlistRepo.getFirstFourArtworks(playlist.id)
+                        val primaryArt = playlist.coverUrl ?: arts.firstOrNull()
+                        if (!primaryArt.isNullOrBlank()) {
+                            try {
+                                val triad = com.shyan.dreamin.data.service.PaletteMemoryCache.extractPaletteTriad(
+                                    getApplication(),
+                                    primaryArt
+                                )
+                                com.shyan.dreamin.data.service.PaletteMemoryCache.putTriad("playlist_${playlist.id}", triad)
+                            } catch (_: Exception) {}
+                        }
+                        playlist.id to arts
                     }
                 }
                 _uiState.update { it.copy(playlists = lists, playlistArtworks = artworks) }
@@ -317,6 +328,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun openPlaylist(playlistId: Long) {
+        val coverArt = _uiState.value.playlists.find { it.id == playlistId }?.coverUrl
+            ?: _uiState.value.playlistArtworks[playlistId]?.firstOrNull()
+        if (!coverArt.isNullOrBlank()) {
+            val cached = com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(coverArt)
+            if (cached != null) {
+                com.shyan.dreamin.data.service.PaletteMemoryCache.putTriad("playlist_$playlistId", cached)
+            }
+        }
         _uiState.update { it.copy(openPlaylistId = playlistId) }
         openPlaylistJob?.cancel()
         openPlaylistJob = viewModelScope.launch {
