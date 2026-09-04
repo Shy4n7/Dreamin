@@ -271,6 +271,20 @@ class MusicService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
+    /**
+     * 🛡️ Foreground Service Continuity Guard:
+     * On Android 12+ (API 31+), if the system or Media3 attempts to startForeground from background
+     * during edge-case state changes, catch and suppress ForegroundServiceStartNotAllowedException
+     * to prevent fatal app crashes.
+     */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        try {
+            super.onUpdateNotification(session, startInForegroundRequired)
+        } catch (e: Exception) {
+            android.util.Log.w("MusicService", "Suppressed foreground start notification exception in background: ${e.message}")
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {

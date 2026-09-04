@@ -75,6 +75,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
     private var prefetchJob: Job? = null
+    private var preloadJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
     @Volatile
@@ -967,21 +968,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val meta = mediaItem?.mediaMetadata
             val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
             val duration = controller?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
+
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                // If ExoPlayer transitioned automatically to the preloaded track at index 1,
+                // prune the finished track at index 0 so the active track remains at index 0.
+                val c = controller
+                if (c != null && c.mediaItemCount > 1 && c.currentMediaItemIndex > 0) {
+                    c.removeMediaItem(0)
+                }
+            }
+
             if (id != null) {
                 _uiState.update { state ->
                     val matching = state.queue.find { it.id == id }
                     if (matching != null) {
-                        state.copy(currentSong = matching)
+                        state.copy(
+                            currentSong = matching,
+                            currentSongIsFavorite = state.favorites.any { f -> f.id == matching.id }
+                        )
                     } else {
                         val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
                         if (title != null) {
+                            val newSong = Song(
+                                id = id,
+                                title = title,
+                                artist = meta.artist?.toString() ?: "",
+                                artworkUrl = meta.artworkUri?.toString() ?: ""
+                            )
                             state.copy(
-                                currentSong = Song(
-                                    id = id,
-                                    title = title,
-                                    artist = meta.artist?.toString() ?: "",
-                                    artworkUrl = meta.artworkUri?.toString() ?: ""
-                                )
+                                currentSong = newSong,
+                                currentSongIsFavorite = state.favorites.any { f -> f.id == newSong.id }
                             )
                         } else state
                     }
@@ -989,6 +1005,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             _progress.value = PlaybackProgress(0L, duration)
             _uiState.value.currentSong?.let { activeSong ->
+                viewModelScope.launch { historyRepo.recordPlay(activeSong) }
+                extractDominantColor(activeSong.displayArtworkUrl)
+                loadLyricsForCurrentSong()
+
+                // Auto-extend queue when reaching the last 2 songs
+                if (!_uiState.value.playlistQueueActive) {
+                    val currentQueue = _uiState.value.queue
+                    val currentIdx = currentQueue.indexOfFirst { it.id == activeSong.id }
+                    val remaining = if (currentIdx >= 0) currentQueue.size - (currentIdx + 1) else 0
+                    if (com.shyan.dreamin.data.recommendation.SmartQueueEngine.shouldAutoExtendQueue(remaining, _uiState.value.playlistQueueActive, _uiState.value.isFetchingUpNext)) {
+                        val seedSong = currentQueue.lastOrNull() ?: activeSong
+                        fetchUpNext(seedSong.id)
+                    }
+                }
+
                 if (!activeSong.isSpotifyArtwork && (activeSong.artworkUrl.isBlank() || activeSong.artworkUrl.contains("default"))) {
                     prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
                     viewModelScope.launch(Dispatchers.IO) {
@@ -1001,6 +1032,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
             }
+
+            // Immediately preload the next track into index 1
+            preloadNextMediaItemInQueue()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -1375,6 +1409,77 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         triggerSmartQueuePrefetch(nextSong?.id)
     }
 
+    /**
+     * 🚀 Preload the next track in the queue directly into ExoPlayer.
+     * By having the next MediaItem already in ExoPlayer's playlist (index 1),
+     * playback transitions seamlessly with zero gap and ExoPlayer never enters
+     * STATE_ENDED. This eliminates background service termination crashes.
+     */
+    private fun preloadNextMediaItemInQueue() {
+        preloadJob?.cancel()
+        preloadJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Wait briefly so current song finishes its immediate setup & buffering
+                delay(1200)
+
+                val state = _uiState.value
+                val currentSong = state.currentSong ?: return@launch
+                val queue = state.queue
+                val currentIdx = queue.indexOfFirst { it.id == currentSong.id }
+
+                val nextSong: Song = when {
+                    state.repeatMode == TrackRepeatMode.ONE -> currentSong
+                    currentIdx >= 0 && currentIdx + 1 < queue.size -> queue[currentIdx + 1]
+                    (state.repeatMode == TrackRepeatMode.ALL || state.playlistQueueActive) && queue.isNotEmpty() -> queue.first()
+                    else -> null
+                } ?: return@launch
+
+                val isAlreadyQueued = withContext(Dispatchers.Main) {
+                    val c = controller ?: return@withContext true
+                    if (c.mediaItemCount > 1) {
+                        val queuedId = runCatching { c.getMediaItemAt(1).mediaId }.getOrNull()
+                        queuedId == nextSong.id
+                    } else false
+                }
+                if (isAlreadyQueued) return@launch
+
+                val streamUrl = resolveStreamUrl(nextSong)
+                if (streamUrl.isBlank()) return@launch
+
+                val uri = parseAudioUri(streamUrl)
+                val mediaItem = MediaItem.Builder()
+                    .setMediaId(nextSong.id)
+                    .setUri(uri)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(nextSong.title)
+                            .setArtist(nextSong.artist)
+                            .setArtworkUri(
+                                nextSong.displayArtworkUrl.takeIf { it.isNotBlank() }
+                                    ?.let { android.net.Uri.parse(it) }
+                            )
+                            .build()
+                    )
+                    .build()
+
+                withContext(Dispatchers.Main) {
+                    val activeC = controller ?: return@withContext
+                    if (activeC.mediaItemCount > 1) {
+                        val currentQueuedId = runCatching { activeC.getMediaItemAt(1).mediaId }.getOrNull()
+                        if (currentQueuedId == nextSong.id) return@withContext
+                        activeC.removeMediaItem(1)
+                    }
+                    activeC.addMediaItem(mediaItem)
+                    android.util.Log.d("MusicVM", "Preloaded next track into ExoPlayer: ${nextSong.title}")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("MusicVM", "Failed to preload next track: ${e.message}")
+            }
+        }
+    }
+
     private suspend fun resolveStreamUrl(song: Song): String {
         return com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(
             song = song,
@@ -1511,6 +1616,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
                 fetchRecommendations(song.id)
                 triggerSmartQueuePrefetch(song.id)
+                preloadNextMediaItemInQueue()
 
                 // Real-time live official movie poster resolution (if missing)
                 if (!song.isSpotifyArtwork && (song.artworkUrl.isBlank() || song.artworkUrl.contains("default"))) {
@@ -2279,6 +2385,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val newUnique = finalQueueTracks.filter { it.id !in existingIds }
                         state.copy(queue = state.queue + newUnique)
                     }
+
+                    // Preload the next item in ExoPlayer if it only has 1 item
+                    preloadNextMediaItemInQueue()
 
                     // Pre-buffer the immediate upcoming track for seamless zero-gap transitions
                     finalQueueTracks.firstOrNull()?.let { upcomingSong ->
