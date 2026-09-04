@@ -33,7 +33,10 @@ import com.google.common.util.concurrent.SettableFuture
 import com.shyan.dreamin.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -80,6 +83,8 @@ class CoilBitmapLoader(private val context: android.content.Context) : BitmapLoa
 
 class MusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var sleepTimerJob: Job? = null
 
     companion object {
         const val ACTION_PLAY_NEXT = "com.shyan.dreamin.ACTION_PLAY_NEXT"
@@ -89,6 +94,9 @@ class MusicService : MediaSessionService() {
 
         const val CUSTOM_COMMAND_FAVORITE = "com.shyan.dreamin.COMMAND_FAVORITE"
         const val CUSTOM_COMMAND_SHUFFLE = "com.shyan.dreamin.COMMAND_SHUFFLE"
+        const val CUSTOM_COMMAND_SET_SLEEP_TIMER = "com.shyan.dreamin.COMMAND_SET_SLEEP_TIMER"
+        const val CUSTOM_COMMAND_CANCEL_SLEEP_TIMER = "com.shyan.dreamin.COMMAND_CANCEL_SLEEP_TIMER"
+        const val EXTRA_SLEEP_TIMER_END_MS = "sleep_timer_end_ms"
     }
 
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
@@ -195,7 +203,12 @@ class MusicService : MediaSessionService() {
             }
 
             override fun seekToNextMediaItem() {
-                sendBroadcast(Intent(ACTION_PLAY_NEXT).setPackage(packageName))
+                val p = player
+                if (p.mediaItemCount > 1 && p.currentMediaItemIndex < p.mediaItemCount - 1) {
+                    p.seekToNextMediaItem()
+                } else {
+                    sendBroadcast(Intent(ACTION_PLAY_NEXT).setPackage(packageName))
+                }
             }
 
             override fun seekToPrevious() {
@@ -203,7 +216,14 @@ class MusicService : MediaSessionService() {
             }
 
             override fun seekToPreviousMediaItem() {
-                sendBroadcast(Intent(ACTION_PLAY_PREVIOUS).setPackage(packageName))
+                val p = player
+                if (p.currentPosition > 3000L) {
+                    p.seekTo(0L)
+                } else if (p.mediaItemCount > 1 && p.currentMediaItemIndex > 0) {
+                    p.seekToPreviousMediaItem()
+                } else {
+                    sendBroadcast(Intent(ACTION_PLAY_PREVIOUS).setPackage(packageName))
+                }
             }
         }
 
@@ -227,6 +247,8 @@ class MusicService : MediaSessionService() {
                 val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                     .add(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
                     .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+                    .add(SessionCommand(CUSTOM_COMMAND_SET_SLEEP_TIMER, Bundle.EMPTY))
+                    .add(SessionCommand(CUSTOM_COMMAND_CANCEL_SLEEP_TIMER, Bundle.EMPTY))
                     .build()
 
                 val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
@@ -252,6 +274,13 @@ class MusicService : MediaSessionService() {
                 when (customCommand.customAction) {
                     CUSTOM_COMMAND_FAVORITE -> sendBroadcast(Intent(ACTION_TOGGLE_FAVORITE).setPackage(packageName))
                     CUSTOM_COMMAND_SHUFFLE -> sendBroadcast(Intent(ACTION_TOGGLE_SHUFFLE).setPackage(packageName))
+                    CUSTOM_COMMAND_SET_SLEEP_TIMER -> {
+                        val endEpochMs = args.getLong(EXTRA_SLEEP_TIMER_END_MS, 0L)
+                        startServiceSleepTimer(endEpochMs)
+                    }
+                    CUSTOM_COMMAND_CANCEL_SLEEP_TIMER -> {
+                        cancelServiceSleepTimer()
+                    }
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
@@ -314,7 +343,39 @@ class MusicService : MediaSessionService() {
         } catch (_: Exception) {}
     }
 
+    private fun startServiceSleepTimer(endEpochMs: Long) {
+        sleepTimerJob?.cancel()
+        val remainingMs = endEpochMs - System.currentTimeMillis()
+        if (remainingMs <= 0L) return
+
+        sleepTimerJob = serviceScope.launch {
+            if (remainingMs > 10_000L) {
+                delay(remainingMs - 10_000L)
+                val p = mediaSession?.player
+                val originalVolume = p?.volume ?: 1.0f
+                // Gentle audio fade out over 10 seconds without affecting master device volume
+                for (i in 10 downTo 1) {
+                    p?.volume = originalVolume * (i / 10f)
+                    delay(1000)
+                }
+                p?.pause()
+                p?.volume = originalVolume
+            } else {
+                delay(remainingMs)
+                mediaSession?.player?.pause()
+            }
+            sleepTimerJob = null
+        }
+    }
+
+    private fun cancelServiceSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        mediaSession?.player?.volume = 1.0f
+    }
+
     override fun onDestroy() {
+        serviceScope.cancel()
         try {
             if (wifiLock?.isHeld == true) {
                 wifiLock?.release()

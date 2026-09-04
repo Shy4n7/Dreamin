@@ -58,15 +58,29 @@ object AutoEqManager {
                 addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             }
             try {
-                context.registerReceiver(bluetoothReceiver, filter)
+                androidx.core.content.ContextCompat.registerReceiver(
+                    context,
+                    bluetoothReceiver,
+                    filter,
+                    androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+                )
                 isReceiverRegistered = true
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AutoEqManager", "Bluetooth receiver registration failed: ${e.message}")
+            }
         }
         detectCurrentAudioOutput(context)
     }
 
     fun detectCurrentAudioOutput(context: Context) {
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.BLUETOOTH_CONNECT
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!hasPermission) return
+            }
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)

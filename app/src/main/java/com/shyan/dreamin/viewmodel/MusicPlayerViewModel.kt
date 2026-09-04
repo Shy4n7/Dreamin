@@ -71,15 +71,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var isListenerAttached = false
     private var searchJob: Job? = null
-    private var sleepTimerJob: Job? = null
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
     private var prefetchJob: Job? = null
     private var preloadJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
-    @Volatile
-    private var isScreenInteractive: Boolean = true
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -88,8 +85,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 MusicService.ACTION_PLAY_PREVIOUS -> playPrevious()
                 MusicService.ACTION_TOGGLE_FAVORITE -> _uiState.value.currentSong?.let { toggleFavoriteFor(it) }
                 MusicService.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
-                android.content.Intent.ACTION_SCREEN_OFF -> isScreenInteractive = false
-                android.content.Intent.ACTION_SCREEN_ON -> isScreenInteractive = true
             }
         }
     }
@@ -138,8 +133,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             addAction(MusicService.ACTION_PLAY_PREVIOUS)
             addAction(MusicService.ACTION_TOGGLE_FAVORITE)
             addAction(MusicService.ACTION_TOGGLE_SHUFFLE)
-            addAction(android.content.Intent.ACTION_SCREEN_OFF)
-            addAction(android.content.Intent.ACTION_SCREEN_ON)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             context,
@@ -856,32 +849,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setSleepTimer(minutes: Int) {
-        sleepTimerJob?.cancel()
         val totalMs = minutes * 60_000L
         val endMs = System.currentTimeMillis() + totalMs
         _uiState.update { it.copy(sleepTimerEndMs = endMs) }
-        sleepTimerJob = viewModelScope.launch {
-            if (totalMs > 10_000L) {
-                delay(totalMs - 10_000L)
-                // Gentle audio fade out over 10 seconds
-                for (i in 10 downTo 1) {
-                    controller?.volume = (i / 10f).coerceIn(0f, 1f)
-                    delay(1000)
-                }
-            } else {
-                delay(totalMs)
-            }
-            controller?.pause()
-            controller?.volume = 1f // Reset volume back to full for next session
-            _uiState.update { it.copy(sleepTimerEndMs = null) }
+        val args = android.os.Bundle().apply {
+            putLong(MusicService.EXTRA_SLEEP_TIMER_END_MS, endMs)
         }
+        controller?.sendCustomCommand(
+            androidx.media3.session.SessionCommand(MusicService.CUSTOM_COMMAND_SET_SLEEP_TIMER, android.os.Bundle.EMPTY),
+            args
+        )
     }
 
     fun cancelSleepTimer() {
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        controller?.volume = 1f
         _uiState.update { it.copy(sleepTimerEndMs = null) }
+        controller?.sendCustomCommand(
+            androidx.media3.session.SessionCommand(MusicService.CUSTOM_COMMAND_CANCEL_SLEEP_TIMER, android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY
+        )
     }
 
     private fun connectToService() {
@@ -1066,7 +1051,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         play()
                     }
                 } catch (e: Exception) {
-                    _uiState.update { it.copy(playbackState = PlaybackState.Error(e.message ?: "Playback failed")) }
+                    android.util.Log.w("MusicVM", "Song failed to resolve after error, auto-advancing: ${e.message}")
+                    _uiState.update { state ->
+                        state.copy(
+                            queue = state.queue.filter { s -> s.id != current.id },
+                            playbackState = PlaybackState.Loading
+                        )
+                    }
+                    playNext(isAutoEnd = true)
                 }
             }
         }
@@ -1076,10 +1068,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var lastPrefetchedTrackId: String? = null
 
     private fun startPositionPoller() {
+        val powerManager = getApplication<Application>().getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
         viewModelScope.launch {
             var saveCounter = 0
             while (isActive) {
-                val pollDelay = if (isScreenInteractive) 100L else 2000L
+                val isScreenOn = powerManager?.isInteractive ?: true
+                val pollDelay = if (isScreenOn) 100L else 2500L
                 delay(pollDelay)
                 val c = controller ?: continue
                 if (!c.isPlaying) continue
@@ -1099,7 +1093,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
 
-                saveCounter += if (isScreenInteractive) 1 else 20
+                saveCounter += if (isScreenOn) 1 else 25
                 if (saveCounter >= 100) {
                     saveCounter = 0
                     _uiState.value.currentSong?.let { song ->
@@ -2507,7 +2501,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         controller?.removeListener(playerListener)
         isListenerAttached = false
-        sleepTimerJob?.cancel()
         openPlaylistJob?.cancel()
         colorExtractJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
