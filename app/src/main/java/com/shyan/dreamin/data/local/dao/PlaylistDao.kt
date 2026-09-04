@@ -56,6 +56,19 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSong(playlistId: Long, songId: String)
 
+    @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId IN (:songIds)")
+    suspend fun removeSongs(playlistId: Long, songIds: List<String>)
+
+    @Query("UPDATE playlist_songs SET position = :position WHERE playlistId = :playlistId AND songId = :songId")
+    suspend fun updateSongPosition(playlistId: Long, songId: String, position: Int)
+
+    @Transaction
+    suspend fun updateSongPositions(playlistId: Long, songIdsInOrder: List<String>) {
+        songIdsInOrder.forEachIndexed { index, songId ->
+            updateSongPosition(playlistId, songId, index)
+        }
+    }
+
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :playlistId ORDER BY position ASC")
     fun observeSongs(playlistId: Long): Flow<List<PlaylistSongEntity>>
 

@@ -71,6 +71,12 @@ class PlaylistRepository(private val dao: PlaylistDao) {
     suspend fun removeSong(playlistId: Long, songId: String) =
         dao.removeSong(playlistId, songId)
 
+    suspend fun removeSongs(playlistId: Long, songIds: List<String>) =
+        dao.removeSongs(playlistId, songIds)
+
+    suspend fun updateSongPositions(playlistId: Long, songIdsInOrder: List<String>) =
+        dao.updateSongPositions(playlistId, songIdsInOrder)
+
     fun observeSongs(playlistId: Long): Flow<List<Song>> =
         dao.observeSongs(playlistId).map { entities ->
             entities.map { it.toSong() }

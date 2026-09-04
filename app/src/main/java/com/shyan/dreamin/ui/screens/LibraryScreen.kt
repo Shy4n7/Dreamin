@@ -627,13 +627,31 @@ fun PlaylistCoverArt(
                         )
                     }
                 }
-                urls.size < 4 -> {
+                urls.size == 1 -> {
                     AsyncImage(
-                        model = urls.first(),
+                        model = urls[0],
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                }
+                urls.size == 2 -> {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(model = urls[0], contentDescription = null, modifier = Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop)
+                        Spacer(modifier = Modifier.width(1.dp).background(colors.background))
+                        AsyncImage(model = urls[1], contentDescription = null, modifier = Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop)
+                    }
+                }
+                urls.size == 3 -> {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(model = urls[0], contentDescription = null, modifier = Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop)
+                        Spacer(modifier = Modifier.width(1.dp).background(colors.background))
+                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            AsyncImage(model = urls[1], contentDescription = null, modifier = Modifier.weight(1f).fillMaxWidth(), contentScale = ContentScale.Crop)
+                            Spacer(modifier = Modifier.height(1.dp).background(colors.background))
+                            AsyncImage(model = urls[2], contentDescription = null, modifier = Modifier.weight(1f).fillMaxWidth(), contentScale = ContentScale.Crop)
+                        }
+                    }
                 }
                 else -> {
                     Column(modifier = Modifier.fillMaxSize()) {

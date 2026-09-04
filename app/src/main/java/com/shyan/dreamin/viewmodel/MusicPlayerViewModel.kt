@@ -793,6 +793,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch { playlistRepo.removeSong(playlistId, songId) }
     }
 
+    fun removeSongsFromPlaylist(playlistId: Long, songIds: Collection<String>) {
+        if (songIds.isEmpty()) return
+        val currentSongs = _uiState.value.openPlaylistSongs.filterNot { songIds.contains(it.id) }
+        _uiState.update { it.copy(openPlaylistSongs = currentSongs) }
+
+        viewModelScope.launch {
+            playlistRepo.removeSongs(playlistId, songIds.toList())
+        }
+    }
+
+    fun reorderPlaylistSongs(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        val currentSongs = _uiState.value.openPlaylistSongs.toMutableList()
+        if (fromIndex !in currentSongs.indices || toIndex !in currentSongs.indices || fromIndex == toIndex) return
+
+        val movedSong = currentSongs.removeAt(fromIndex)
+        currentSongs.add(toIndex, movedSong)
+        _uiState.update { it.copy(openPlaylistSongs = currentSongs) }
+
+        viewModelScope.launch {
+            val songIds = currentSongs.map { it.id }
+            playlistRepo.updateSongPositions(playlistId, songIds)
+        }
+    }
+
     fun playSongsFromPlaylist(playlistId: Long) {
         viewModelScope.launch {
             val songs = playlistRepo.getSongs(playlistId)

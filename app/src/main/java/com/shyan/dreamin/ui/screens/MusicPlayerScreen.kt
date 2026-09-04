@@ -394,6 +394,8 @@ private fun MainAppScaffold(
                     onDownloadSong = vm::downloadSong,
                     onDeleteDownload = vm::deleteDownload,
                     onRemoveSong = { songId -> vm.removeSongFromPlaylist(openPlaylist.id, songId) },
+                    onRemoveSongs = { songIds -> vm.removeSongsFromPlaylist(openPlaylist.id, songIds) },
+                    onReorderSong = { from, to -> vm.reorderPlaylistSongs(openPlaylist.id, from, to) },
                     onRename = { newName -> vm.renamePlaylist(openPlaylist.id, newName) },
                     onUpdateCover = { uri -> vm.updatePlaylistCover(openPlaylist.id, uri) },
                     onAddSong = { song -> vm.addSongToPlaylist(openPlaylist.id, song) },

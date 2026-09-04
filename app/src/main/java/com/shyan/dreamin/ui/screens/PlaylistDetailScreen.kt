@@ -126,6 +126,13 @@ private fun formatTotalPlaylistDuration(songs: List<Song>): String {
     }
 }
 
+enum class PlaylistSortOrder(val label: String) {
+    Custom("Custom"),
+    Title("Title"),
+    Artist("Artist"),
+    Duration("Duration")
+}
+
 @Composable
 fun PlaylistDetailScreen(
     playlist: com.shyan.dreamin.data.local.Playlist,
@@ -147,6 +154,8 @@ fun PlaylistDetailScreen(
     onDownloadSong: (Song) -> Unit = {},
     onDeleteDownload: (String) -> Unit = {},
     onRemoveSong: (String) -> Unit,
+    onRemoveSongs: (Set<String>) -> Unit = {},
+    onReorderSong: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onRename: (String) -> Unit,
     onUpdateCover: (android.net.Uri?) -> Unit = {},
     onAddSong: (Song) -> Unit = {},
@@ -158,9 +167,9 @@ fun PlaylistDetailScreen(
     isSyncingSpotify: Boolean = false,
     quickPickSongs: List<Song> = emptyList()
 ) {
-    BackHandler { onBack() }
     val colors = LocalDreaminColors.current
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showRenameDialog by remember { mutableStateOf(false) }
     var showAddSongsSheet by remember { mutableStateOf(false) }
     var selectedSongForPosterPicker by remember { mutableStateOf<Song?>(null) }
@@ -171,6 +180,23 @@ fun PlaylistDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val durationLabel = remember(songs) { formatTotalPlaylistDuration(songs) }
+
+    var sortOrder by remember { mutableStateOf(PlaylistSortOrder.Custom) }
+    var sortAscending by remember { mutableStateOf(true) }
+    var showSortDropdown by remember { mutableStateOf(false) }
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    val selectedSongIds = remember { mutableStateListOf<String>() }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val itemHeightPx = remember { mutableFloatStateOf(70f) }
+
+    BackHandler(enabled = isMultiSelectMode) {
+        isMultiSelectMode = false
+        selectedSongIds.clear()
+    }
+    BackHandler(enabled = !isMultiSelectMode) {
+        onBack()
+    }
 
     // Guard against flash of empty-state while DB flow delivers first emission
     var isInitialLoad by remember(playlist.id) { mutableStateOf(true) }
@@ -218,17 +244,35 @@ fun PlaylistDetailScreen(
         label = "playlist_ambient_dominant"
     )
 
-    // 🔍 2. In-Playlist Instant Filter & Search
+    // 🔍 2. In-Playlist Sorting & Instant Search
     val listState = rememberLazyListState()
-    val filteredSongs = remember(songs, searchQuery) {
-        if (searchQuery.isBlank()) songs
+    val sortedSongs = remember(songs, sortOrder, sortAscending) {
+        when (sortOrder) {
+            PlaylistSortOrder.Custom -> songs
+            PlaylistSortOrder.Title -> if (sortAscending) songs.sortedBy { it.displayTitle.lowercase() } else songs.sortedByDescending { it.displayTitle.lowercase() }
+            PlaylistSortOrder.Artist -> if (sortAscending) songs.sortedBy { it.artist.lowercase() } else songs.sortedByDescending { it.artist.lowercase() }
+            PlaylistSortOrder.Duration -> if (sortAscending) songs.sortedBy { it.duration } else songs.sortedByDescending { it.duration }
+        }
+    }
+    val filteredSongs = remember(sortedSongs, searchQuery) {
+        if (searchQuery.isBlank()) sortedSongs
         else {
             val q = searchQuery.trim().lowercase()
-            songs.filter {
+            sortedSongs.filter {
                 it.title.lowercase().contains(q) ||
                 it.artist.lowercase().contains(q)
             }
         }
+    }
+
+    val isScrolledPastHero by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 310
+        }
+    }
+
+    val isPlayingThisPlaylist = remember(currentSong?.id, songs, playbackState) {
+        currentSong != null && songs.any { it.id == currentSong.id } && playbackState == PlaybackState.Playing
     }
 
     // Compute readable text colour on top of the dynamic dominant button background
@@ -286,137 +330,254 @@ fun PlaylistDetailScreen(
                     .statusBarsPadding()
                     .padding(top = 8.dp)
             ) {
-                // Top App Bar with Animated Search Input & Add Songs Action
-                AnimatedContent(
-                    targetState = isSearchActive,
-                    transitionSpec = {
-                        fadeIn(tween(180)) togetherWith fadeOut(tween(140))
-                    },
-                    label = "playlist_search_bar"
-                ) { searchActive ->
-                    if (searchActive) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Top App Bar with MultiSelect, Sticky Mini Header & Search
+                if (isMultiSelectMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(
+                            onClick = {
+                                isMultiSelectMode = false
+                                selectedSongIds.clear()
+                            },
+                            modifier = Modifier.size(44.dp)
                         ) {
-                            IconButton(onClick = {
-                                isSearchActive = false
-                                searchQuery = ""
-                            }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = colors.onSurface
-                                )
-                            }
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = { Text("Filter tracks in playlist...", color = colors.onSurfaceVariant, fontSize = 13.5.sp) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(16.dp),
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Filled.Close, contentDescription = "Clear", tint = colors.onSurfaceVariant)
-                                        }
-                                    }
-                                },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = animatedDominant,
-                                    unfocusedBorderColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
-                                    focusedContainerColor = colors.surfaceHighest.copy(alpha = 0.85f),
-                                    unfocusedContainerColor = colors.surfaceHighest.copy(alpha = 0.65f),
-                                    cursorColor = animatedDominant
-                                ),
-                                modifier = Modifier.weight(1f).height(50.dp)
-                            )
+                            Icon(Icons.Filled.Close, contentDescription = "Close selection", tint = colors.onSurface)
                         }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = colors.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            val titleAlpha by remember {
-                                derivedStateOf {
-                                    if (listState.firstVisibleItemIndex > 0) 1.0f
-                                    else (listState.firstVisibleItemScrollOffset / 280f).coerceIn(0f, 1f)
+                        Text(
+                            text = "${selectedSongIds.size} selected",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.onSurface,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                        )
+                        TextButton(
+                            onClick = {
+                                if (selectedSongIds.size == filteredSongs.size) {
+                                    selectedSongIds.clear()
+                                } else {
+                                    selectedSongIds.clear()
+                                    selectedSongIds.addAll(filteredSongs.map { it.id })
                                 }
                             }
+                        ) {
                             Text(
-                                playlist.name,
-                                fontSize = 18.sp,
+                                if (selectedSongIds.size == filteredSongs.size) "Deselect" else "Select All",
+                                color = animatedDominant,
                                 fontWeight = FontWeight.Bold,
-                                color = colors.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp)
-                                    .graphicsLayer {
-                                        alpha = titleAlpha
-                                        translationY = (1f - titleAlpha) * 16f
-                                    }
+                                fontSize = 13.sp
                             )
-                            if (playlist.spotifyPlaylistId != null) {
-                                IconButton(
-                                    onClick = onSyncSpotify,
-                                    enabled = !isSyncingSpotify,
-                                    modifier = Modifier.size(44.dp)
-                                ) {
-                                    if (isSyncingSpotify) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            color = colors.primary,
-                                            strokeWidth = 2.dp
+                        }
+                    }
+                } else {
+                    AnimatedContent(
+                        targetState = isSearchActive,
+                        transitionSpec = {
+                            fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                        },
+                        label = "playlist_search_bar"
+                    ) { searchActive ->
+                        if (searchActive) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                IconButton(onClick = {
+                                    isSearchActive = false
+                                    searchQuery = ""
+                                }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = colors.onSurface
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = { Text("Filter tracks in playlist...", color = colors.onSurfaceVariant, fontSize = 13.5.sp) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Filled.Close, contentDescription = "Clear", tint = colors.onSurfaceVariant)
+                                            }
+                                        }
+                                    },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = animatedDominant,
+                                        unfocusedBorderColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
+                                        focusedContainerColor = colors.surfaceHighest.copy(alpha = 0.85f),
+                                        unfocusedContainerColor = colors.surfaceHighest.copy(alpha = 0.65f),
+                                        cursorColor = animatedDominant
+                                    ),
+                                    modifier = Modifier.weight(1f).height(50.dp)
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                if (isScrolledPastHero) {
+                                    // 🚀 Fluid Collapsing Mini Header
+                                    Row(
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        AsyncImage(
+                                            model = heroArt,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop
                                         )
-                                    } else {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                playlist.name,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                "$songCount ${if (songCount == 1) "track" else "tracks"}",
+                                                fontSize = 11.5.sp,
+                                                color = colors.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    // Pinned Play/Pause & Shuffle Mini Buttons
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                if (isPlayingThisPlaylist) onPlayPause()
+                                                else onPlayAll()
+                                            },
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(CircleShape)
+                                                .background(animatedDominant)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isPlayingThisPlaylist) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                                contentDescription = if (isPlayingThisPlaylist) "Pause" else "Play all",
+                                                tint = playAllContentColor,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = onShuffle,
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(CircleShape)
+                                                .background(colors.surfaceHigh)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Shuffle,
+                                                contentDescription = "Shuffle",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    val titleAlpha by remember {
+                                        derivedStateOf {
+                                            if (listState.firstVisibleItemIndex > 0) 1.0f
+                                            else (listState.firstVisibleItemScrollOffset / 280f).coerceIn(0f, 1f)
+                                        }
+                                    }
+                                    Text(
+                                        playlist.name,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 4.dp)
+                                            .graphicsLayer {
+                                                alpha = titleAlpha
+                                                translationY = (1f - titleAlpha) * 16f
+                                            }
+                                    )
+                                    if (playlist.spotifyPlaylistId != null) {
+                                        IconButton(
+                                            onClick = onSyncSpotify,
+                                            enabled = !isSyncingSpotify,
+                                            modifier = Modifier.size(44.dp)
+                                        ) {
+                                            if (isSyncingSpotify) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    color = colors.primary,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    Icons.Filled.Sync,
+                                                    contentDescription = "Sync with Spotify",
+                                                    tint = colors.primary,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    IconButton(onClick = { showAddSongsSheet = true }, modifier = Modifier.size(44.dp)) {
                                         Icon(
-                                            Icons.Filled.Sync,
-                                            contentDescription = "Sync with Spotify",
-                                            tint = colors.primary,
+                                            Icons.Filled.Add,
+                                            contentDescription = "Add songs to playlist",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(44.dp)) {
+                                        Icon(
+                                            Icons.Outlined.Search,
+                                            contentDescription = "Search in playlist",
+                                            tint = colors.onSurfaceVariant,
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
+                                    IconButton(onClick = { showRenameDialog = true }, modifier = Modifier.size(44.dp)) {
+                                        Icon(
+                                            Icons.Outlined.Edit,
+                                            contentDescription = "Edit Playlist",
+                                            tint = colors.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
-                            }
-                            IconButton(onClick = { showAddSongsSheet = true }, modifier = Modifier.size(44.dp)) {
-                                Icon(
-                                    Icons.Filled.Add,
-                                    contentDescription = "Add songs to playlist",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(44.dp)) {
-                                Icon(
-                                    Icons.Outlined.Search,
-                                    contentDescription = "Search in playlist",
-                                    tint = colors.onSurfaceVariant,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            IconButton(onClick = { showRenameDialog = true }, modifier = Modifier.size(44.dp)) {
-                                Icon(
-                                    Icons.Outlined.Edit,
-                                    contentDescription = "Edit Playlist",
-                                    tint = colors.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
                             }
                         }
                     }
@@ -619,6 +780,145 @@ fun PlaylistDetailScreen(
                         }
                     }
 
+                    // Sort & Filter Bar
+                    if (!isInitialLoad && songs.isNotEmpty()) {
+                        item(key = "playlist_sort_filter_bar", contentType = "SortFilterBar") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                // Sort Dropdown Chip
+                                Box {
+                                    Surface(
+                                        onClick = { showSortDropdown = true },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = colors.surfaceHigh.copy(alpha = 0.65f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (sortOrder != PlaylistSortOrder.Custom) animatedDominant.copy(alpha = 0.6f)
+                                            else colors.outlineVariant
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                                contentDescription = "Sort",
+                                                tint = if (sortOrder != PlaylistSortOrder.Custom) animatedDominant else colors.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "${sortOrder.label} ${if (sortOrder != PlaylistSortOrder.Custom) (if (sortAscending) "↑" else "↓") else ""}".trim(),
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (sortOrder != PlaylistSortOrder.Custom) colors.onSurface else colors.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showSortDropdown,
+                                        onDismissRequest = { showSortDropdown = false },
+                                        modifier = Modifier
+                                            .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
+                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                            .width(180.dp)
+                                    ) {
+                                        PlaylistSortOrder.values().forEach { order ->
+                                            val isSelected = sortOrder == order
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            order.label,
+                                                            color = if (isSelected) animatedDominant else colors.onSurface,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            fontSize = 13.5.sp
+                                                        )
+                                                        if (isSelected && order != PlaylistSortOrder.Custom) {
+                                                            Text(if (sortAscending) "Asc" else "Desc", fontSize = 11.sp, color = animatedDominant)
+                                                        }
+                                                    }
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = when (order) {
+                                                            PlaylistSortOrder.Custom -> Icons.Outlined.Reorder
+                                                            PlaylistSortOrder.Title -> Icons.Outlined.SortByAlpha
+                                                            PlaylistSortOrder.Artist -> Icons.Outlined.Person
+                                                            PlaylistSortOrder.Duration -> Icons.Outlined.Schedule
+                                                        },
+                                                        contentDescription = null,
+                                                        tint = if (isSelected) animatedDominant else colors.onSurfaceVariant,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                },
+                                                onClick = {
+                                                    if (sortOrder == order && order != PlaylistSortOrder.Custom) {
+                                                        sortAscending = !sortAscending
+                                                    } else {
+                                                        sortOrder = order
+                                                        sortAscending = true
+                                                    }
+                                                    showSortDropdown = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Mode indicators: Drag order active / Multi-select toggle
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (sortOrder == PlaylistSortOrder.Custom && searchQuery.isBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = colors.surfaceHighest.copy(alpha = 0.5f),
+                                            border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.4f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(Icons.Outlined.DragHandle, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                                                Text("Drag to order", fontSize = 11.sp, color = colors.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+
+                                    // Quick Select / Multi-Select Button
+                                    IconButton(
+                                        onClick = {
+                                            isMultiSelectMode = !isMultiSelectMode
+                                            selectedSongIds.clear()
+                                        },
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.CheckCircle,
+                                            contentDescription = "Select multiple",
+                                            tint = if (isMultiSelectMode) animatedDominant else colors.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (isInitialLoad) {
                         // Skeleton shimmer while songs are loading from DB
                         item {
@@ -741,7 +1041,7 @@ fun PlaylistDetailScreen(
                                                         }
                                                     }
                                                 },
-                                                modifier = Modifier.size(36.dp)
+                                                modifier = Modifier.size(44.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
@@ -791,11 +1091,14 @@ fun PlaylistDetailScreen(
                     } else {
                         itemsIndexed(
                             items = filteredSongs,
-                            key = { idx, song -> "${song.id}_$idx" },
+                            key = { _, song -> song.id },
                             contentType = { _, _ -> "PlaylistSongRow" }
                         ) { idx, song ->
                             val isDownloaded = downloadedSongIds.contains(song.id)
                             val isDownloading = downloadingSongIds.contains(song.id)
+                            val isSelected = selectedSongIds.contains(song.id)
+                            val isDragging = draggingIndex == idx
+                            val isReorderable = sortOrder == PlaylistSortOrder.Custom && searchQuery.isBlank() && !isMultiSelectMode
 
                             PlaylistSongRow(
                                 song = song,
@@ -803,7 +1106,75 @@ fun PlaylistDetailScreen(
                                 isPlaying = playingId == song.id,
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
-                                onClick = { onSongClick(song) },
+                                isMultiSelectMode = isMultiSelectMode,
+                                isSelected = isSelected,
+                                isReorderable = isReorderable,
+                                isDragging = isDragging,
+                                dragOffsetY = if (isDragging) dragOffsetY else 0f,
+                                onToggleSelect = {
+                                    if (isSelected) selectedSongIds.remove(song.id)
+                                    else selectedSongIds.add(song.id)
+                                },
+                                onLongClick = {
+                                    if (!isMultiSelectMode) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        isMultiSelectMode = true
+                                        selectedSongIds.add(song.id)
+                                    }
+                                },
+                                onClick = {
+                                    if (isMultiSelectMode) {
+                                        if (isSelected) selectedSongIds.remove(song.id)
+                                        else selectedSongIds.add(song.id)
+                                    } else {
+                                        onSongClick(song)
+                                    }
+                                },
+                                onDragStart = {
+                                    draggingIndex = idx
+                                    dragOffsetY = 0f
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                onDrag = { delta ->
+                                    dragOffsetY += delta
+                                    val targetIdx = (idx + (dragOffsetY / itemHeightPx.floatValue).toInt())
+                                        .coerceIn(0, filteredSongs.lastIndex)
+                                    if (targetIdx != idx) {
+                                        onReorderSong(idx, targetIdx)
+                                        dragOffsetY -= (targetIdx - idx) * itemHeightPx.floatValue
+                                        draggingIndex = targetIdx
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                },
+                                onDragEnd = {
+                                    draggingIndex = null
+                                    dragOffsetY = 0f
+                                },
+                                onHeightMeasured = { h -> itemHeightPx.floatValue = h },
+                                onSwipeAddToQueue = {
+                                    onAddToQueue(song)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Added \"${song.displayTitle}\" to queue", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onSwipeRemove = {
+                                    val removedSong = song
+                                    val title = removedSong.displayTitle
+                                    onRemoveSong(removedSong.id)
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    scope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "\"$title\" removed from playlist",
+                                            actionLabel = "Undo",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            onAddSong(removedSong)
+                                        }
+                                    }
+                                },
                                 onPlayNext = { onPlayNext(song) },
                                 onAddToQueue = { onAddToQueue(song) },
                                 onChangePoster = { selectedSongForPosterPicker = song },
@@ -828,6 +1199,83 @@ fun PlaylistDetailScreen(
                                     }
                                 }
                             )
+                        }
+
+                        // Sparse Playlist Smart Recommendations (when playlist has 1-4 songs)
+                        if (songs.size in 1..4 && searchQuery.isBlank()) {
+                            item(key = "sparse_recommendations", contentType = "SparseRecommendations") {
+                                val unaddedSuggestions = remember(quickPickSongs, songs) {
+                                    val existingIds = songs.map { it.id }.toSet()
+                                    quickPickSongs.filterNot { existingIds.contains(it.id) }.take(4)
+                                }
+                                if (unaddedSuggestions.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 12.dp, bottom = 6.dp)
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(colors.surfaceHighest.copy(alpha = 0.45f))
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "Recommended for this playlist",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = colors.onSurface
+                                            )
+                                            TextButton(
+                                                onClick = { showAddSongsSheet = true },
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) {
+                                                Text("More", color = animatedDominant, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
+
+                                        unaddedSuggestions.forEach { s ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(colors.surfaceHigh.copy(alpha = 0.35f))
+                                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = s.displayArtworkUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(42.dp)
+                                                        .clip(RoundedCornerShape(8.dp)),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(s.displayTitle, color = colors.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(s.artist, color = colors.onSurfaceVariant, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        onAddSong(s)
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        scope.launch {
+                                                            snackbarHostState.showSnackbar("Added \"${s.displayTitle}\"", duration = SnackbarDuration.Short)
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) {
+                                                    Icon(Icons.Filled.Add, contentDescription = "Add", tint = animatedDominant, modifier = Modifier.size(20.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         item {
@@ -864,6 +1312,130 @@ fun PlaylistDetailScreen(
             }
         }
     }
+
+        // Multi-select floating bottom action bar
+        AnimatedVisibility(
+            visible = isMultiSelectMode,
+            enter = slideInVertically { it } + fadeIn(tween(180)),
+            exit = slideOutVertically { it } + fadeOut(tween(140)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = if (currentSong != null) 78.dp else 16.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = colors.surfaceHighest.copy(alpha = 0.96f),
+                border = BorderStroke(1.dp, animatedDominant.copy(alpha = 0.5f)),
+                shadowElevation = 18.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "${selectedSongIds.size} selected",
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.onSurface
+                        )
+                        Text(
+                            text = if (selectedSongIds.size == filteredSongs.size) "All tracks" else "of ${filteredSongs.size} tracks",
+                            fontSize = 11.5.sp,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Queue Selected
+                        IconButton(
+                            onClick = {
+                                val toQueue = filteredSongs.filter { selectedSongIds.contains(it.id) }
+                                toQueue.forEach { onAddToQueue(it) }
+                                val count = toQueue.size
+                                isMultiSelectMode = false
+                                selectedSongIds.clear()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Added $count tracks to queue", duration = SnackbarDuration.Short)
+                                }
+                            },
+                            enabled = selectedSongIds.isNotEmpty(),
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceHigh)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.PlaylistAdd,
+                                contentDescription = "Queue selected",
+                                tint = if (selectedSongIds.isNotEmpty()) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Download Selected
+                        IconButton(
+                            onClick = {
+                                val toDownload = filteredSongs.filter { selectedSongIds.contains(it.id) }
+                                toDownload.forEach { onDownloadSong(it) }
+                                val count = toDownload.size
+                                isMultiSelectMode = false
+                                selectedSongIds.clear()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Downloading $count tracks...", duration = SnackbarDuration.Short)
+                                }
+                            },
+                            enabled = selectedSongIds.isNotEmpty(),
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceHigh)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Download,
+                                contentDescription = "Download selected",
+                                tint = if (selectedSongIds.isNotEmpty()) colors.secondary else colors.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Delete Selected
+                        IconButton(
+                            onClick = {
+                                val idsToDelete = selectedSongIds.toSet()
+                                val count = idsToDelete.size
+                                onRemoveSongs(idsToDelete)
+                                isMultiSelectMode = false
+                                selectedSongIds.clear()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Removed $count tracks from playlist", duration = SnackbarDuration.Short)
+                                }
+                            },
+                            enabled = selectedSongIds.isNotEmpty(),
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(colors.error.copy(alpha = 0.15f))
+                        ) {
+                            Icon(
+                                Icons.Outlined.DeleteOutline,
+                                contentDescription = "Remove selected",
+                                tint = if (selectedSongIds.isNotEmpty()) colors.error else colors.error.copy(alpha = 0.4f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
         // MiniPlayer floating inside playlist screen at the bottom
         AnimatedVisibility(
@@ -1295,7 +1867,20 @@ fun PlaylistSongRow(
     modifier: Modifier = Modifier,
     isDownloaded: Boolean = false,
     isDownloading: Boolean = false,
+    isMultiSelectMode: Boolean = false,
+    isSelected: Boolean = false,
+    isReorderable: Boolean = false,
+    isDragging: Boolean = false,
+    dragOffsetY: Float = 0f,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+    onToggleSelect: () -> Unit = {},
+    onDragStart: () -> Unit = {},
+    onDrag: (Float) -> Unit = {},
+    onDragEnd: () -> Unit = {},
+    onHeightMeasured: (Float) -> Unit = {},
+    onSwipeAddToQueue: () -> Unit = {},
+    onSwipeRemove: () -> Unit = {},
     onPlayNext: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
     onChangePoster: () -> Unit = {},
@@ -1303,10 +1888,12 @@ fun PlaylistSongRow(
     onRemove: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
     val rowInteractionSource = remember { MutableInteractionSource() }
     val isPressed by rowInteractionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.975f else 1f,
+        targetValue = if (isPressed) 0.98f else 1f,
         animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
         label = "playlist_row_press"
     )
@@ -1321,47 +1908,167 @@ fun PlaylistSongRow(
     val textWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold
     var showOptionsSheet by remember { mutableStateOf(false) }
 
-    Row(
+    val swipeOffsetX = remember { Animatable(0f) }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
+            .onGloballyPositioned { onHeightMeasured(it.size.height.toFloat()) }
             .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
+                translationY = if (isDragging) dragOffsetY else 0f
+                scaleX = if (isDragging) 1.03f else pressScale
+                scaleY = if (isDragging) 1.03f else pressScale
+                shadowElevation = if (isDragging) 24f else 0f
             }
+            .zIndex(if (isDragging) 10f else 0f)
             .clip(RoundedCornerShape(16.dp))
-            .background(bgColor)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(
-                    interactionSource = rowInteractionSource,
-                    indication = ripple(bounded = true, color = colors.primary)
-                ) { onClick() }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Track Index or Playing Indicator
+        // Swipe action background indicators
+        if (swipeOffsetX.value > 12f) {
             Box(
-                modifier = Modifier.width(26.dp),
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.primary.copy(alpha = 0.22f))
+                    .padding(start = 18.dp),
+                contentAlignment = Alignment.CenterStart
             ) {
-                if (isPlaying) {
-                    MiniEqualizerIndicator(color = colors.primary)
-                } else {
-                    Text(
-                        text = String.format("%02d", index),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.onSurfaceVariant.copy(alpha = 0.5f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text("Queue", color = colors.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        } else if (swipeOffsetX.value < -12f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.error.copy(alpha = 0.22f))
+                    .padding(end = 18.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("Remove", color = colors.error, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Icon(
+                        Icons.Filled.DeleteOutline,
+                        contentDescription = null,
+                        tint = colors.error,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.width(8.dp))
+        // Foreground Song Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    translationX = swipeOffsetX.value
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else bgColor)
+                .combinedClickable(
+                    interactionSource = rowInteractionSource,
+                    indication = ripple(bounded = true, color = colors.primary),
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
+                .pointerInput(isMultiSelectMode, isDragging) {
+                    if (!isMultiSelectMode && !isDragging) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                coroutineScope.launch {
+                                    if (swipeOffsetX.value > 110f) {
+                                        onSwipeAddToQueue()
+                                    } else if (swipeOffsetX.value < -110f) {
+                                        onSwipeRemove()
+                                    }
+                                    swipeOffsetX.animateTo(
+                                        0f,
+                                        spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
+                                    )
+                                }
+                            },
+                            onDragCancel = {
+                                coroutineScope.launch {
+                                    swipeOffsetX.animateTo(
+                                        0f,
+                                        spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
+                                    )
+                                }
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                coroutineScope.launch {
+                                    val current = swipeOffsetX.value
+                                    swipeOffsetX.snapTo((current + dragAmount * 0.75f).coerceIn(-150f, 150f))
+                                }
+                            }
+                        )
+                    }
+                }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Checkbox in MultiSelect mode OR Index/Equalizer
+            if (isMultiSelectMode) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable { onToggleSelect() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(colors.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, colors.onSurfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            } else {
+                Box(
+                    modifier = Modifier.width(26.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isPlaying) {
+                        MiniEqualizerIndicator(color = colors.primary)
+                    } else {
+                        Text(
+                            text = String.format("%02d", index),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            }
 
             // Artwork
             ArtworkBox(song.displayArtworkUrl, isPlaying, colors)
@@ -1387,62 +2094,86 @@ fun PlaylistSongRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.width(4.dp))
-
-        // 3 Dots — inline popup anchored to the button
-        Box {
-            IconButton(
-                onClick = { showOptionsSheet = true },
-                modifier = Modifier.size(40.dp)
-            ) {
-                if (isDownloading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.secondary, strokeWidth = 2.dp)
-                } else {
+            // Reorder handle (Custom mode, not multi-select)
+            if (isReorderable && !isMultiSelectMode) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .pointerInput(Unit) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { onDragStart() },
+                                onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
+                                onDragEnd = { onDragEnd() },
+                                onDragCancel = { onDragEnd() }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "Song options",
-                        tint = colors.onSurfaceVariant,
+                        imageVector = Icons.Outlined.DragHandle,
+                        contentDescription = "Drag to reorder",
+                        tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.45f),
                         modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            DropdownMenu(
-                expanded = showOptionsSheet,
-                onDismissRequest = { showOptionsSheet = false },
-                modifier = Modifier
-                    .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
-                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
-                    .width(210.dp)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Play next", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
-                    onClick = { showOptionsSheet = false; onPlayNext() }
-                )
-                DropdownMenuItem(
-                    text = { Text("Add to queue", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
-                    onClick = { showOptionsSheet = false; onAddToQueue() }
-                )
-                DropdownMenuItem(
-                    text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) colors.error else colors.onSurface, modifier = Modifier.size(20.dp)) },
-                    onClick = { showOptionsSheet = false; onDownload() }
-                )
-                DropdownMenuItem(
-                    text = { Text("Change Poster", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                    onClick = { showOptionsSheet = false; onChangePoster() }
-                )
-                HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-                DropdownMenuItem(
-                    text = { Text("Remove from playlist", color = colors.error, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
-                    leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = colors.error, modifier = Modifier.size(20.dp)) },
-                    onClick = { showOptionsSheet = false; onRemove() }
-                )
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // 3 Dots
+            Box {
+                IconButton(
+                    onClick = { showOptionsSheet = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = colors.secondary, strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "Song options",
+                            tint = colors.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showOptionsSheet,
+                    onDismissRequest = { showOptionsSheet = false },
+                    modifier = Modifier
+                        .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
+                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                        .width(210.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Play next", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        leadingIcon = { Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
+                        onClick = { showOptionsSheet = false; onPlayNext() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add to queue", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
+                        onClick = { showOptionsSheet = false; onAddToQueue() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) colors.error else colors.onSurface, modifier = Modifier.size(20.dp)) },
+                        onClick = { showOptionsSheet = false; onDownload() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Change Poster", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
+                        onClick = { showOptionsSheet = false; onChangePoster() }
+                    )
+                    HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                    DropdownMenuItem(
+                        text = { Text("Remove from playlist", color = colors.error, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = colors.error, modifier = Modifier.size(20.dp)) },
+                        onClick = { showOptionsSheet = false; onRemove() }
+                    )
+                }
             }
         }
     }
