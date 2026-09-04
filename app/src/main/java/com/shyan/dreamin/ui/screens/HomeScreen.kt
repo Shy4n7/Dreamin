@@ -303,7 +303,7 @@ fun HomeScreen(
                             currentSong = currentSong,
                             onSongClick = { song ->
                                 keyboard?.hide()
-                                onSongClickFromList(song, searchResults)
+                                onSongClick(song)
                             },
                             onAddToQueue = onAddToQueue,
                             isSearching = isSearching,
@@ -1489,7 +1489,7 @@ fun HomeFeedOnlyContent(
                 HorizontalSongCardsRow(
                     songs = recentlyPlayed,
                     currentSongId = currentSong?.id,
-                    onSongClick = { song -> onSongClickFromList(song, recentlyPlayed) }
+                    onSongClick = { song -> onSongClick(song) }
                 )
             }
         }
@@ -1500,7 +1500,7 @@ fun HomeFeedOnlyContent(
                 HorizontalSongCardsRow(
                     songs = topSongs,
                     currentSongId = currentSong?.id,
-                    onSongClick = { song -> onSongClickFromList(song, topSongs) }
+                    onSongClick = { song -> onSongClick(song) }
                 )
             }
         }
@@ -1522,7 +1522,7 @@ fun HomeFeedOnlyContent(
                         song = song,
                         rank = null,
                         isPlaying = currentSong?.id == song.id,
-                        onClick = { onSongClickFromList(song, recommendations) },
+                        onClick = { onSongClick(song) },
                         onAddToQueue = { onQueueById(song.id) },
                         onPlayNext = { onPlayNextById(song.id) },
                         onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }
@@ -1545,7 +1545,7 @@ fun HomeFeedOnlyContent(
                         song = song,
                         rank = index + 1,
                         isPlaying = currentSong?.id == song.id,
-                        onClick = { onSongClickFromList(song, trending) },
+                        onClick = { onSongClick(song) },
                         onAddToQueue = { onQueueById(song.id) },
                         onPlayNext = { onPlayNextById(song.id) },
                         onAddToPlaylist = { playlistId -> onPlaylistById(song.id, playlistId) }

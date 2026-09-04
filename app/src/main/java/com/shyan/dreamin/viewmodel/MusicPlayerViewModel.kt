@@ -910,10 +910,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state == Player.STATE_READY -> if (playWhenReady || isPlaying) PlaybackState.Playing else PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
                     viewModelScope.launch {
-                        delay(1500L) // 1.5s natural breathing gap between songs
                         playNext(isAutoEnd = true)
                     }
-                    PlaybackState.Idle
+                    PlaybackState.Loading
                 }
                 else -> PlaybackState.Idle
             }
@@ -1371,13 +1370,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playSong(song: Song, fromPlaylist: Boolean = false, preserveQueue: Boolean = false) {
+        val isPlaylistActive = fromPlaylist || (preserveQueue && _uiState.value.playlistQueueActive)
         val isAlreadyInQueue = _uiState.value.queue.any { it.id == song.id }
-        val isPlaylistActive = fromPlaylist || _uiState.value.playlistQueueActive
 
         // Optimistic UI: update song + state immediately so artwork/title swap is instant
         _uiState.update {
             val newQueue = when {
-                preserveQueue || isAlreadyInQueue || isPlaylistActive -> {
+                preserveQueue || (isAlreadyInQueue && isPlaylistActive) -> {
                     if (it.queue.none { s -> s.id == song.id }) {
                         val currentIdx = it.queue.indexOfFirst { s -> s.id == it.currentSong?.id }
                         val insertAt = if (currentIdx >= 0) (currentIdx + 1).coerceAtMost(it.queue.size) else it.queue.size
@@ -1389,15 +1388,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 fromPlaylist -> {
                     if (it.queue.none { s -> s.id == song.id }) listOf(song) + it.queue else it.queue
                 }
-                it.queue.isNotEmpty() -> {
-                    val currentIdx = it.queue.indexOfFirst { s -> s.id == it.currentSong?.id }
-                    val mutable = it.queue.toMutableList()
-                    mutable.removeAll { s -> s.id == song.id }
-                    val insertAt = if (currentIdx >= 0) (currentIdx + 1).coerceAtMost(mutable.size) else 0
-                    mutable.add(insertAt, song)
-                    mutable.toList()
-                }
                 else -> {
+                    // Non-playlist song: reset queue to this single song; YouTube recommendations will populate Up Next
                     listOf(song)
                 }
             }
@@ -1481,8 +1473,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     val currentIdx = currentQueue.indexOfFirst { it.id == song.id }
                     val remaining = if (currentIdx >= 0) currentQueue.size - (currentIdx + 1) else 0
                     if (remaining <= 2 && !_uiState.value.isFetchingUpNext) {
-                        val seedSong = currentQueue.lastOrNull() ?: song
-                        fetchUpNext(seedSong.id)
+                        fetchUpNext(song.id)
                     }
                 }
                 fetchRecommendations(song.id)
@@ -1734,13 +1725,28 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (!state.playlistQueueActive) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
+                    // If recommendations are currently fetching, wait briefly for them
+                    if (_uiState.value.isFetchingUpNext) {
+                        for (i in 0..15) {
+                            delay(150)
+                            val updatedQueue = _uiState.value.queue
+                            val updatedIdx = updatedQueue.indexOfFirst { it.id == current.id }
+                            if (updatedIdx >= 0 && updatedIdx + 1 < updatedQueue.size) {
+                                withContext(Dispatchers.Main) {
+                                    playSong(updatedQueue[updatedIdx + 1], fromPlaylist = false, preserveQueue = true)
+                                }
+                                return@launch
+                            }
+                        }
+                    }
+
                     val pairs = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(current)
                     for ((t, a) in pairs.take(8)) {
                         val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
                         val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
                         val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
                             ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
-                        if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
+                        if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
                             withContext(Dispatchers.Main) {
                                 playSong(cand, fromPlaylist = false, preserveQueue = true)
                             }
@@ -1759,8 +1765,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             return@launch
                         }
                     }
+
+                    // Failsafe: Never leave player in dead unhandled STATE_ENDED that drops foreground notification
+                    withContext(Dispatchers.Main) {
+                        controller?.seekTo(0L)
+                        controller?.play()
+                    }
                 } catch (e: Exception) {
                     android.util.Log.e("MusicVM", "Continuous autoplay radio error: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        controller?.seekTo(0L)
+                        controller?.play()
+                    }
                 }
             }
         }
@@ -1916,13 +1932,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
         pendingResumePositionMs = session.positionMs
-        val recent = _uiState.value.recentlyPlayed
-        if (recent.any { it.id == session.song.id }) {
-            playSongFromList(session.song, recent)
-        } else {
-            _uiState.update { it.copy(queue = listOf(session.song)) }
-            playSong(session.song, preserveQueue = true)
-        }
+        playSong(session.song)
     }
 
     fun activateSearch() {
@@ -2172,9 +2182,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     async {
                         val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
                         val firstArtist = a.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil").firstOrNull()
-                            ?: searchOnDevice(cleanT, limit = 1, targetLanguage = "tamil").firstOrNull()
-                        if (cand != null && OfficialSongFilter.isOfficial(cand, rejectHindi = true)) {
+                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
+                            ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
+                        if (cand != null && cand.id != currentSong.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
                             cand
                         } else null
                     }
@@ -2228,6 +2238,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         val newUnique = finalQueueTracks.filter { it.id !in existingIds }
                         state.copy(queue = state.queue + newUnique)
                     }
+
+                    // Pre-buffer the immediate upcoming track for seamless zero-gap transitions
+                    finalQueueTracks.firstOrNull()?.let { upcomingSong ->
+                        launch(Dispatchers.IO) {
+                            try {
+                                val stream = resolveStreamUrl(upcomingSong)
+                                if (stream.isNotBlank()) {
+                                    val context = getApplication<Application>()
+                                    com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(context, stream, viewModelScope)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+
                     finalQueueTracks.forEach { qSong ->
                         launch(Dispatchers.IO) {
                             try {

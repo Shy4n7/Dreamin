@@ -57,10 +57,14 @@ abstract class AppDatabase : RoomDatabase() {
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         super.onOpen(db)
-                        db.execSQL("PRAGMA synchronous = NORMAL;")
-                        db.execSQL("PRAGMA temp_store = MEMORY;")
-                        db.execSQL("PRAGMA cache_size = -4000;")
-                        db.execSQL("PRAGMA mmap_size = 268435456;") // 256MB kernel mmap
+                        try {
+                            db.execSQL("PRAGMA synchronous = NORMAL;")
+                            db.query("PRAGMA temp_store = MEMORY;").close()
+                            db.query("PRAGMA cache_size = -4000;").close()
+                            db.query("PRAGMA mmap_size = 268435456;").close() // 256MB kernel mmap
+                        } catch (e: Exception) {
+                            android.util.Log.w("AppDatabase", "Failed to apply PRAGMA optimization: ${e.message}")
+                        }
                     }
                 })
                 .build()

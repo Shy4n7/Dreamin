@@ -76,11 +76,10 @@ object YouTubeRadioService {
         val primaryArtist = song.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
         val cleanTitle = song.displayTitle.replace(Regex("""\s*[\(\[].*?[\)\]]\s*$"""), "").trim()
 
-        val queries = listOf(
-            "$cleanTitle $primaryArtist tamil song",
-            "$cleanTitle $primaryArtist tamil",
-            "$cleanTitle $primaryArtist"
-        )
+        val queries = listOfNotNull(
+            if (primaryArtist.isNotBlank()) "$cleanTitle $primaryArtist" else null,
+            cleanTitle
+        ).distinct()
 
         for (q in queries) {
             try {
@@ -91,7 +90,7 @@ object YouTubeRadioService {
                     val rawTracks = fetchNextRadioQueue(videoId)
                     val filtered = rawTracks.filter { (title, artist) ->
                         val dummy = Song(id = "", title = title, artist = artist)
-                        OfficialSongFilter.isOfficial(dummy, rejectHindi = true)
+                        OfficialSongFilter.isOfficial(dummy, rejectHindi = false)
                     }
 
                     if (filtered.isNotEmpty()) {
@@ -112,7 +111,7 @@ object YouTubeRadioService {
                     put("client", JSONObject().apply {
                         put("clientName", "WEB_REMIX")
                         put("clientVersion", "1.20240101.01.00")
-                        put("hl", "ta")
+                        put("hl", "en")
                         put("gl", "IN")
                     })
                 })
@@ -150,7 +149,7 @@ object YouTubeRadioService {
                     put("client", JSONObject().apply {
                         put("clientName", "WEB_REMIX")
                         put("clientVersion", "1.20240101.01.00")
-                        put("hl", "ta")
+                        put("hl", "en")
                         put("gl", "IN")
                     })
                 })

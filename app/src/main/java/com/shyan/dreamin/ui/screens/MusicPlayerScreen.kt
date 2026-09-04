@@ -108,7 +108,13 @@ private fun MainAppScaffold(
         { song: Song, list: List<Song> -> vm.playSongFromList(song, list); onOpenNowPlaying() }
     }
     val onHomeShuffleFab = remember(onOpenNowPlaying, trendingCharts) {
-        { vm.shuffleAndPlayList(trendingCharts); onOpenNowPlaying() }
+        {
+            val seed = trendingCharts.randomOrNull()
+            if (seed != null) {
+                vm.playSong(seed)
+                onOpenNowPlaying()
+            }
+        }
     }
     val onLibrarySongClick = remember(onOpenNowPlaying) {
         { song: Song -> vm.playSong(song); onOpenNowPlaying() }

@@ -59,7 +59,7 @@ object OfficialSongFilter {
         return HINDI_EXCLUSIVE_KEYWORDS.any { text.contains(it) }
     }
 
-    fun isOfficial(song: Song, rejectHindi: Boolean = true): Boolean {
+    fun isOfficial(song: Song, rejectHindi: Boolean = false): Boolean {
         val title = song.displayTitle.trim()
         val artist = song.artist.trim().lowercase()
 
@@ -86,7 +86,7 @@ object OfficialSongFilter {
         return PARTY_FAST_KEYWORDS.any { text.contains(it) }
     }
 
-    fun cleanOfficialList(songs: List<Song>, targetVibe: SongVibe? = null, rejectHindi: Boolean = true): List<Song> {
+    fun cleanOfficialList(songs: List<Song>, targetVibe: SongVibe? = null, rejectHindi: Boolean = false): List<Song> {
         val seen = mutableSetOf<String>()
         return songs.filter { isOfficial(it, rejectHindi = rejectHindi) }
             .filter { s ->
