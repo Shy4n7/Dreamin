@@ -186,7 +186,7 @@ fun HomeScreen(
         }
     }
 
-    BackHandler(enabled = isSearchActive) { handleCloseSearch() }
+    BackHandler(enabled = isSearchActive || searchQuery.isNotEmpty()) { handleCloseSearch() }
 
     val onSongClickWithKeyboardDismiss = remember(onSongClick, keyboard) {
         { song: Song -> keyboard?.hide(); onSongClick(song) }
@@ -417,10 +417,18 @@ fun DreaminSearchBar(
     val colors = LocalDreaminColors.current
     val focusManager = LocalFocusManager.current
     var isFocused by remember { mutableStateOf(false) }
-    val showRecents = isFocused && query.isEmpty() && recentSearches.isNotEmpty()
+    val showRecents = showBackButton && isFocused && query.isEmpty() && recentSearches.isNotEmpty()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val interactionSource = remember { MutableInteractionSource() }
+
+    LaunchedEffect(showBackButton) {
+        if (!showBackButton) {
+            isFocused = false
+            focusManager.clearFocus()
+            keyboard?.hide()
+        }
+    }
 
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
@@ -516,6 +524,7 @@ fun DreaminSearchBar(
                     if (isBack) {
                         IconButton(
                             onClick = {
+                                isFocused = false
                                 keyboard?.hide()
                                 focusManager.clearFocus()
                                 onBack()
@@ -540,7 +549,7 @@ fun DreaminSearchBar(
             },
             trailingIcon = {
                 AnimatedVisibility(
-                    visible = query.isNotEmpty(),
+                    visible = showBackButton || isFocused || query.isNotEmpty(),
                     enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)) + fadeIn(tween(150)),
                     exit = scaleOut(tween(120)) + fadeOut(tween(120))
                 ) {
@@ -548,14 +557,18 @@ fun DreaminSearchBar(
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            isFocused = false
+                            keyboard?.hide()
+                            focusManager.clearFocus()
                             onQueryChange("")
                             onClear()
+                            onBack()
                         },
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             Icons.Outlined.Close,
-                            contentDescription = "Clear search query",
+                            contentDescription = "Close search",
                             tint = colors.primary,
                             modifier = Modifier.size(20.dp)
                         )
