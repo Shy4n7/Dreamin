@@ -156,4 +156,43 @@ class OfficialArtworkServiceTest {
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Dhanush Mass"))
         assertTrue(OfficialArtworkService.COMPILATION_REGEX.containsMatchIn("Pachai Nirame (From \"Alaipayuthey\") [Trap Vibe] - Single"))
     }
+
+    @Test
+    fun testArtworkResolutionScaling() {
+        val googleThumb = "https://lh3.googleusercontent.com/abc=w120-h120-l90-rj"
+        assertEquals("https://lh3.googleusercontent.com/abc=w800-h800-l90-rj", Song.resolvePoster("Test", googleThumb))
+
+        val ytThumb = "https://i.ytimg.com/vi/abc123xyz/mqdefault.jpg"
+        assertEquals("https://i.ytimg.com/vi/abc123xyz/maxresdefault.jpg", Song.resolvePoster("Test", ytThumb))
+
+        val saavnThumb = "https://c.saavncdn.com/123/Song_150x150.jpg"
+        assertEquals("https://c.saavncdn.com/123/Song_500x500.jpg", Song.resolvePoster("Test", saavnThumb))
+
+        val appleThumb = "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/abc/100x100bb.jpg"
+        assertEquals("https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/abc/1000x1000bb.jpg", Song.resolvePoster("Test", appleThumb))
+    }
+
+    @Test
+    fun testNoCrossContaminationByTitle() {
+        val punjabiSong = Song(
+            id = "punjabi_jackpot",
+            title = "Jackpot",
+            artist = "Cheema Y, Gur Sidhu",
+            artworkUrl = "https://c.saavncdn.com/111/Jackpot-Punjabi-500x500.jpg",
+            language = "punjabi"
+        )
+        val tamilSong = Song(
+            id = "tamil_jackpot",
+            title = "Jackpot",
+            artist = "Vishal Chandrashekhar",
+            artworkUrl = "https://c.saavncdn.com/222/Jackpot-Tamil-500x500.jpg",
+            language = "tamil"
+        )
+
+        OfficialArtworkService.putCachedPoster(punjabiSong, punjabiSong.artworkUrl)
+        OfficialArtworkService.putCachedPoster(tamilSong, tamilSong.artworkUrl)
+
+        assertEquals(punjabiSong.artworkUrl, OfficialArtworkService.getCachedPoster(punjabiSong))
+        assertEquals(tamilSong.artworkUrl, OfficialArtworkService.getCachedPoster(tamilSong))
+    }
 }

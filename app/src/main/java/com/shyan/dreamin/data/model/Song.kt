@@ -12,7 +12,9 @@ data class Song(
     val artist: String,
     @SerializedName("artwork_url") val artworkUrl: String = "",
     val duration: Long = 0L,
-    @SerializedName("play_count") val playCount: Long = 0L
+    @SerializedName("play_count") val playCount: Long = 0L,
+    val language: String = "",
+    val album: String = ""
 ) {
     val isSpotifyArtwork: Boolean get() =
         artworkUrl.contains("scdn.co") ||
@@ -29,11 +31,37 @@ data class Song(
     companion object {
         fun resolvePoster(title: String, rawUrl: String): String {
             if (rawUrl.isBlank()) return ""
-            val highResUrl = rawUrl
+            var url = if (rawUrl.startsWith("http://")) "https://" + rawUrl.substring(7) else rawUrl
+
+            // 1. Google / YouTube Music UserContent high-res scaling (ViMusic / InnerTune standard)
+            if (url.contains("googleusercontent.com") || url.contains("ggpht.com")) {
+                url = if (url.contains("=")) {
+                    url.replace(Regex("=w\\d+-h\\d+.*$"), "=w800-h800-l90-rj")
+                        .replace(Regex("=s\\d+.*$"), "=w800-h800-l90-rj")
+                } else {
+                    "$url=w800-h800-l90-rj"
+                }
+                return url
+            }
+
+            // 2. Standard YouTube video thumbnail maxres resolution
+            if (url.contains("ytimg.com/vi/")) {
+                url = url.replace("mqdefault.jpg", "maxresdefault.jpg")
+                    .replace("sddefault.jpg", "maxresdefault.jpg")
+                return url
+            }
+
+            // 3. Apple Music / iTunes high-res artwork (1000x1000)
+            if (url.contains("mzstatic.com") || url.contains("itunes.apple.com")) {
+                return url.replace(Regex("\\d+x\\d+bb"), "1000x1000bb")
+            }
+
+            // 4. JioSaavn CDN 500x500 artwork upgrade
+            val highResUrl = url
                 .replace(Regex("_\\d+x\\d+\\."), "_500x500.")
                 .replace("50x50", "500x500")
                 .replace("150x150", "500x500")
-            return if (highResUrl.startsWith("http://")) "https://" + highResUrl.substring(7) else highResUrl
+            return highResUrl
         }
     }
     val displayTitle: String get() {

@@ -55,6 +55,7 @@ object OfficialArtworkService {
     ) {
         songs.forEach { song ->
             if (song.isSpotifyArtwork) return@forEach
+            if (song.artworkUrl.isNotBlank() && !song.artworkUrl.contains("default") && !song.artworkUrl.contains("50x50") && !song.artworkUrl.contains("150x150")) return@forEach
             scope.launch(Dispatchers.IO) {
                 try {
                     prefetchSemaphore.withPermit {
@@ -73,20 +74,16 @@ object OfficialArtworkService {
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
         }
-        val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
+        val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
         artworkCache[fullKey]?.let { return it }
-        val titleOnlyKey = song.displayTitle.lowercase().trim()
-        artworkCache[titleOnlyKey]?.let { return it }
         return null
     }
 
     fun putCachedPoster(song: Song, posterUrl: String): Unit = synchronized(artworkCache) {
         if (posterUrl.isBlank()) return
         if (song.id.isNotBlank()) artworkCache[song.id] = posterUrl
-        val fullKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
+        val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
         artworkCache[fullKey] = posterUrl
-        val titleOnlyKey = song.displayTitle.lowercase().trim()
-        artworkCache[titleOnlyKey] = posterUrl
     }
 
     fun clearCache(): Unit = synchronized(artworkCache) {
@@ -97,12 +94,11 @@ object OfficialArtworkService {
      * Dynamically fetches the 100% official original movie soundtrack poster
      * directly from official movie catalogs matching the song's language and DNA.
      */
-    suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = "tamil"): String? = withContext(Dispatchers.IO) {
+    suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = ""): String? = withContext(Dispatchers.IO) {
         if (song.isSpotifyArtwork) return@withContext song.artworkUrl
         getCachedPoster(song)?.let { return@withContext it }
 
-        val cacheKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
-        val titleKey = song.displayTitle.lowercase().trim()
+        val cacheKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
 
         val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(song.displayTitle)
         val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else fullClean
@@ -112,13 +108,37 @@ object OfficialArtworkService {
         val nonLyricists = allArtists.filter { a -> KNOWN_LYRICISTS.none { a.contains(it, ignoreCase = true) } }
         val primaryArtist = nonLyricists.firstOrNull() ?: allArtists.firstOrNull() ?: ""
 
-        // Context-aware language inference for regional soundtrack accuracy
+        // Comprehensive multi-language detection
+        val titleLower = song.title.lowercase()
+        val artistLower = song.artist.lowercase()
+
         val detectedLang = when {
-            song.title.contains("tamil", ignoreCase = true) || song.artist.contains("anirudh", ignoreCase = true) || song.artist.contains("rahman", ignoreCase = true) || song.artist.contains("yuvan", ignoreCase = true) || song.artist.contains("ilayaraja", ignoreCase = true) || song.artist.contains("harris", ignoreCase = true) || song.artist.contains("santhosh", ignoreCase = true) || song.artist.contains("g.v.", ignoreCase = true) || song.artist.contains("gv prakash", ignoreCase = true) || song.artist.contains("sid sriram", ignoreCase = true) || song.artist.contains("dhibu", ignoreCase = true) -> "tamil"
-            song.title.contains("telugu", ignoreCase = true) || song.artist.contains("thaman", ignoreCase = true) || song.artist.contains("devi sri prasad", ignoreCase = true) || song.artist.contains("dsp", ignoreCase = true) || song.artist.contains("keeravani", ignoreCase = true) || song.artist.contains("anurag kulkarni", ignoreCase = true) -> "telugu"
-            song.title.contains("malayalam", ignoreCase = true) || song.artist.contains("sushin shyam", ignoreCase = true) || song.artist.contains("rajesh murugesan", ignoreCase = true) || song.artist.contains("vijay yesudas", ignoreCase = true) || song.artist.contains("shaan rahman", ignoreCase = true) || song.artist.contains("hesham", ignoreCase = true) || song.artist.contains("gopi sundar", ignoreCase = true) || song.artist.contains("vidyasagar", ignoreCase = true) -> "malayalam"
-            song.title.contains("hindi", ignoreCase = true) || song.artist.contains("arijit", ignoreCase = true) || song.artist.contains("pritam", ignoreCase = true) || song.artist.contains("vishal", ignoreCase = true) || song.artist.contains("shekhar", ignoreCase = true) || song.artist.contains("atif", ignoreCase = true) || song.artist.contains("badshah", ignoreCase = true) -> "hindi"
-            else -> targetLanguage
+            song.language.isNotBlank() -> song.language.lowercase().trim()
+            titleLower.contains("punjabi") || artistLower.contains("sidhu") || artistLower.contains("cheema") ||
+                artistLower.contains("gur sidhu") || artistLower.contains("karan aujla") || artistLower.contains("diljit") ||
+                artistLower.contains("ap dhillon") || artistLower.contains("shubh") || artistLower.contains("amrit maan") ||
+                artistLower.contains("b praak") || artistLower.contains("jassi") || artistLower.contains("harrdy") -> "punjabi"
+            titleLower.contains("telugu") || artistLower.contains("thaman") || artistLower.contains("devi sri prasad") ||
+                artistLower.contains("dsp") || artistLower.contains("keeravani") || artistLower.contains("anurag kulkarni") ||
+                artistLower.contains("ram miriyala") -> "telugu"
+            titleLower.contains("malayalam") || artistLower.contains("sushin shyam") || artistLower.contains("rajesh murugesan") ||
+                artistLower.contains("vijay yesudas") || artistLower.contains("shaan rahman") || artistLower.contains("hesham") ||
+                artistLower.contains("gopi sundar") || artistLower.contains("vidyasagar") -> "malayalam"
+            titleLower.contains("hindi") || artistLower.contains("arijit") || artistLower.contains("pritam") ||
+                artistLower.contains("vishal") || artistLower.contains("shekhar") || artistLower.contains("atif") ||
+                artistLower.contains("badshah") || artistLower.contains("shreya") || artistLower.contains("neha kakkar") ||
+                artistLower.contains("sachet") || artistLower.contains("parampara") || artistLower.contains("darshan raval") -> "hindi"
+            titleLower.contains("tamil") || artistLower.contains("anirudh") || artistLower.contains("rahman") ||
+                artistLower.contains("yuvan") || artistLower.contains("ilayaraja") || artistLower.contains("harris") ||
+                artistLower.contains("santhosh") || artistLower.contains("g.v.") || artistLower.contains("gv prakash") ||
+                artistLower.contains("sid sriram") || artistLower.contains("dhibu") || artistLower.contains("hiphop tamizha") ||
+                artistLower.contains("sean roldan") || artistLower.contains("sam c.s.") || artistLower.contains("ghibran") -> "tamil"
+            artistLower.contains("weeknd") || artistLower.contains("ed sheeran") || artistLower.contains("taylor swift") ||
+                artistLower.contains("drake") || artistLower.contains("eminem") || artistLower.contains("billie eilish") ||
+                artistLower.contains("post malone") || artistLower.contains("dua lipa") || artistLower.contains("coldplay") ||
+                artistLower.contains("imagine dragons") -> "english"
+            targetLanguage.isNotBlank() -> targetLanguage.lowercase().trim()
+            else -> ""
         }
 
         // Try extracting movie name from title tag (e.g. From "Duet", From '3', From Paiyaa, From "24")
@@ -146,38 +166,37 @@ object OfficialArtworkService {
 
         if (!bestPoster.isNullOrBlank()) {
             artworkCache.put(cacheKey, bestPoster)
-            artworkCache.put(titleKey, bestPoster)
             if (song.id.isNotBlank()) artworkCache.put(song.id, bestPoster)
             return@withContext bestPoster
         }
 
         // Query JioSaavn Official Movie Album API if movie name is identified
-        if (movieName.isNotBlank()) {
+        if (movieName.isNotBlank() && detectedLang != "english") {
             val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
             if (!albumPoster.isNullOrBlank()) {
                 artworkCache.put(cacheKey, albumPoster)
-                artworkCache.put(titleKey, albumPoster)
                 if (song.id.isNotBlank()) artworkCache.put(song.id, albumPoster)
                 return@withContext albumPoster
             }
         }
 
-        // Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye")
-        val phoneticAlt = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(cleanTitle)
-        if (!phoneticAlt.isNullOrBlank()) {
-            val altApple = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
-            val altSaavn = fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
-            val altPoster = when {
-                altApple != null && altSaavn != null -> if (altApple.second >= altSaavn.second) altApple.first else altSaavn.first
-                altApple != null -> altApple.first
-                altSaavn != null -> altSaavn.first
-                else -> null
-            }
-            if (!altPoster.isNullOrBlank()) {
-                artworkCache.put(cacheKey, altPoster)
-                artworkCache.put(titleKey, altPoster)
-                if (song.id.isNotBlank()) artworkCache.put(song.id, altPoster)
-                return@withContext altPoster
+        // Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye") for Indian regional songs
+        if (detectedLang.isNotBlank() && detectedLang != "english") {
+            val phoneticAlt = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(cleanTitle)
+            if (!phoneticAlt.isNullOrBlank()) {
+                val altApple = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
+                val altSaavn = fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
+                val altPoster = when {
+                    altApple != null && altSaavn != null -> if (altApple.second >= altSaavn.second) altApple.first else altSaavn.first
+                    altApple != null -> altApple.first
+                    altSaavn != null -> altSaavn.first
+                    else -> null
+                }
+                if (!altPoster.isNullOrBlank()) {
+                    artworkCache.put(cacheKey, altPoster)
+                    if (song.id.isNotBlank()) artworkCache.put(song.id, altPoster)
+                    return@withContext altPoster
+                }
             }
         }
 
@@ -197,8 +216,10 @@ object OfficialArtworkService {
         try {
             val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(title)
             val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else title
-            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
-            
+            val langHint = if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                targetLanguage.replaceFirstChar { it.uppercase() }
+            } else ""
+
             val searchQueries = mutableListOf<String>()
             val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
             for (a in artistTokens.take(2)) {
@@ -207,7 +228,9 @@ object OfficialArtworkService {
             if (artist.isNotBlank() && !searchQueries.contains("$cleanTitle $artist")) {
                 searchQueries.add("$cleanTitle $artist")
             }
-            searchQueries.add("$cleanTitle $langHint")
+            if (langHint.isNotBlank()) {
+                searchQueries.add("$cleanTitle $langHint")
+            }
             searchQueries.add(cleanTitle)
 
             var bestCover: String? = null
@@ -269,24 +292,40 @@ object OfficialArtworkService {
                         score -= 40000
                     }
 
-                    // Language Affinity Guard
-                    val textCombined = "$trackName $collectionName".lowercase()
-                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
-                        .filter { it != targetLanguage.lowercase() }
-                    for (other in otherLangs) {
-                        if (textCombined.contains("($other)") || 
-                            textCombined.contains("[$other]") || 
-                            textCombined.contains("- $other") || 
-                            textCombined.contains("from \"$other\"")
-                        ) {
-                            score -= 30000
+                    // Candidate Artist Verification
+                    val candidateArtist = unescape(it.optString("artistName", ""))
+                    if (artist.isNotBlank() && candidateArtist.isNotBlank()) {
+                        val candNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(candidateArtist)
+                        val primNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(artist)
+                        val artistSim = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(primNorm, candNorm)
+                        val artistContains = candNorm.contains(primNorm) || primNorm.contains(candNorm)
+                        if (!artistContains && artistSim < 0.60) {
+                            score -= 50000
+                        } else if (artistContains || artistSim >= 0.85) {
+                            score += 15000
                         }
                     }
-                    if (textCombined.contains("($targetLanguage)") || 
-                        textCombined.contains("[$targetLanguage]") || 
-                        textCombined.contains("- $targetLanguage")
-                    ) {
-                        score += 15000
+
+                    // Language Affinity Guard
+                    if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                        val textCombined = "$trackName $collectionName".lowercase()
+                        val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
+                            .filter { it != targetLanguage.lowercase() }
+                        for (other in otherLangs) {
+                            if (textCombined.contains("($other)") || 
+                                textCombined.contains("[$other]") || 
+                                textCombined.contains("- $other") || 
+                                textCombined.contains("from \"$other\"")
+                            ) {
+                                score -= 30000
+                            }
+                        }
+                        if (textCombined.contains("($targetLanguage)") || 
+                            textCombined.contains("[$targetLanguage]") || 
+                            textCombined.contains("- $targetLanguage")
+                        ) {
+                            score += 15000
+                        }
                     }
 
                     // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
@@ -313,8 +352,11 @@ object OfficialArtworkService {
 
     private fun fetchJioSaavnMovieAlbumCover(movieName: String, targetLanguage: String): String? {
         try {
-            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
-            val encoded = URLEncoder.encode("$movieName $langHint", "UTF-8")
+            val langHint = if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                targetLanguage.replaceFirstChar { it.uppercase() }
+            } else ""
+            val queryText = if (langHint.isNotBlank()) "$movieName $langHint" else movieName
+            val encoded = URLEncoder.encode(queryText, "UTF-8")
             val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=5&p=1"
             val req = okhttp3.Request.Builder()
                 .url(urlStr)
@@ -337,7 +379,9 @@ object OfficialArtworkService {
                     val albLower = albTitle.lowercase()
                     val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi")
                         .filter { it != targetLanguage.lowercase() }
-                    val isOtherLang = otherLangs.any { albLower.contains("($it)") || albLower.contains("[$it]") }
+                    val isOtherLang = if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                        otherLangs.any { albLower.contains("($it)") || albLower.contains("[$it]") }
+                    } else false
 
                     if (albImage.isNotBlank() && !isCompilation && !isEditorial && !isOtherLang) {
                         return toHighResCover(albImage)
@@ -357,7 +401,9 @@ object OfficialArtworkService {
         targetLanguage: String
     ): Pair<String, Int>? {
         try {
-            val langHint = if (targetLanguage.isNotBlank()) targetLanguage.replaceFirstChar { it.uppercase() } else "Tamil"
+            val langHint = if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                targetLanguage.replaceFirstChar { it.uppercase() }
+            } else ""
             val searchQueries = mutableListOf<String>()
             val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
             for (a in artistTokens.take(2)) {
@@ -366,7 +412,9 @@ object OfficialArtworkService {
             if (artist.isNotBlank() && !searchQueries.contains("$title $artist")) {
                 searchQueries.add("$title $artist")
             }
-            searchQueries.add("$title $langHint")
+            if (langHint.isNotBlank()) {
+                searchQueries.add("$title $langHint")
+            }
             searchQueries.add(title)
 
             var bestCover: String? = null
@@ -403,6 +451,28 @@ object OfficialArtworkService {
 
                     var score = (jaro * 5000).toInt()
 
+                    // Candidate Artist Verification
+                    val candidateSingers = unescape(more.optString("singers", ""))
+                    val candidateMusic = unescape(more.optString("music", ""))
+                    val artistMap = more.optJSONObject("artistMap")
+                    val primaryArr = artistMap?.optJSONArray("primary_artists")
+                    val candidatePrimary = if (primaryArr != null && primaryArr.length() > 0) {
+                        (0 until primaryArr.length()).joinToString(", ") { unescape(primaryArr.getJSONObject(it).optString("name")) }
+                    } else ""
+                    val candidateCombinedArtists = "$candidateSingers $candidateMusic $candidatePrimary".lowercase()
+
+                    if (artist.isNotBlank() && candidateCombinedArtists.isNotBlank()) {
+                        val primNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(artist)
+                        val candNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(candidateCombinedArtists)
+                        val artistSim = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(primNorm, candNorm)
+                        val artistContains = candNorm.contains(primNorm) || primNorm.contains(candNorm)
+                        if (!artistContains && artistSim < 0.60) {
+                            score -= 50000
+                        } else if (artistContains || artistSim >= 0.85) {
+                            score += 15000
+                        }
+                    }
+
                     if (movieHint.isNotBlank() && alb.contains(movieHint, ignoreCase = true)) {
                         score += 15000
                     }
@@ -435,22 +505,24 @@ object OfficialArtworkService {
                     }
 
                     // Language Affinity Guard
-                    val textCombined = "$resTitle $alb".lowercase()
-                    val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
-                        .filter { it != targetLanguage.lowercase() }
-                    for (other in otherLangs) {
-                        if (textCombined.contains("($other)") || 
-                            textCombined.contains("[$other]") || 
-                            textCombined.contains("- $other")
-                        ) {
-                            score -= 30000
+                    if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                        val textCombined = "$resTitle $alb".lowercase()
+                        val otherLangs = listOf("telugu", "hindi", "kannada", "malayalam", "tamil", "punjabi", "bengali")
+                            .filter { it != targetLanguage.lowercase() }
+                        for (other in otherLangs) {
+                            if (textCombined.contains("($other)") || 
+                                textCombined.contains("[$other]") || 
+                                textCombined.contains("- $other")
+                            ) {
+                                score -= 30000
+                            }
                         }
-                    }
-                    if (textCombined.contains("($targetLanguage)") || 
-                        textCombined.contains("[$targetLanguage]") || 
-                        textCombined.contains("- $targetLanguage")
-                    ) {
-                        score += 15000
+                        if (textCombined.contains("($targetLanguage)") || 
+                            textCombined.contains("[$targetLanguage]") || 
+                            textCombined.contains("- $targetLanguage")
+                        ) {
+                            score += 15000
+                        }
                     }
 
                     // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
@@ -496,7 +568,7 @@ object OfficialArtworkService {
         for (q in queries) {
             try {
                 val encoded = URLEncoder.encode(q, "UTF-8")
-                val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&country=IN&limit=8"
+                val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&limit=8"
                 val req = okhttp3.Request.Builder()
                     .url(urlStr)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")

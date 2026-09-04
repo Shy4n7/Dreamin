@@ -12,17 +12,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
+data class YouTubeRadioTrack(
+    val title: String,
+    val artist: String,
+    val videoId: String = "",
+    val artworkUrl: String = "",
+    val album: String = ""
+)
+
 object YouTubeRadioService {
 
-    private val radioCache = ConcurrentHashMap<String, List<Pair<String, String>>>()
+    private val radioCache = ConcurrentHashMap<String, List<YouTubeRadioTrack>>()
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     /**
      * Fetches real-time official YouTube Music Trending Tamil Songs.
      * 100% Free, untrackable, anonymous Innertube request.
      */
-    suspend fun fetchTrendingTamilSongs(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<Pair<String, String>>()
+    suspend fun fetchTrendingTamilSongs(): List<YouTubeRadioTrack> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<YouTubeRadioTrack>()
         try {
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
@@ -67,9 +75,9 @@ object YouTubeRadioService {
 
     /**
      * Fetches the official YouTube Music Radio Queue for a given seed track.
-     * Returns a list of (TrackTitle, Artist) recommendations.
+     * Returns a list of [YouTubeRadioTrack] with authentic studio high-res artwork, videoId, and artist.
      */
-    suspend fun fetchRadioRecommendations(song: Song): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+    suspend fun fetchRadioRecommendations(song: Song): List<YouTubeRadioTrack> = withContext(Dispatchers.IO) {
         val cacheKey = "${song.displayTitle.lowercase()}_${song.artist.lowercase()}".trim()
         radioCache[cacheKey]?.let { return@withContext it }
 
@@ -88,8 +96,8 @@ object YouTubeRadioService {
                 if (videoId != null) {
                     // 2. Fetch official Next / Radio Queue from Innertube
                     val rawTracks = fetchNextRadioQueue(videoId)
-                    val filtered = rawTracks.filter { (title, artist) ->
-                        val dummy = Song(id = "", title = title, artist = artist)
+                    val filtered = rawTracks.filter { track ->
+                        val dummy = Song(id = track.videoId, title = track.title, artist = track.artist)
                         OfficialSongFilter.isOfficial(dummy, rejectHindi = false)
                     }
 
@@ -141,8 +149,8 @@ object YouTubeRadioService {
         return null
     }
 
-    private fun fetchNextRadioQueue(videoId: String): List<Pair<String, String>> {
-        val results = mutableListOf<Pair<String, String>>()
+    private fun fetchNextRadioQueue(videoId: String): List<YouTubeRadioTrack> {
+        val results = mutableListOf<YouTubeRadioTrack>()
         try {
             val body = JSONObject().apply {
                 put("context", JSONObject().apply {
@@ -203,29 +211,60 @@ object YouTubeRadioService {
         return null
     }
 
-    private fun extractPlaylistPanelTracks(json: Any, out: MutableList<Pair<String, String>>) {
+    private fun extractPlaylistPanelTracks(json: Any, out: MutableList<YouTubeRadioTrack>) {
         when (json) {
             is JSONObject -> {
                 val panel = json.optJSONObject("playlistPanelVideoRenderer")
                 if (panel != null) {
+                    val videoId = panel.optString("videoId")
                     val titleRuns = panel.optJSONObject("title")?.optJSONArray("runs")
                     val title = titleRuns?.optJSONObject(0)?.optString("text") ?: ""
 
                     val bylineRuns = panel.optJSONObject("longBylineText")?.optJSONArray("runs")
                         ?: panel.optJSONObject("shortBylineText")?.optJSONArray("runs")
                     val artistList = mutableListOf<String>()
+                    var albumName = ""
                     if (bylineRuns != null) {
+                        var foundBullet = false
                         for (i in 0 until bylineRuns.length()) {
-                            val txt = bylineRuns.optJSONObject(i)?.optString("text") ?: ""
-                            if (txt != " • " && !txt.contains("views", ignoreCase = true) && !txt.matches(Regex("""\d+:\d+"""))) {
+                            val txt = bylineRuns.optJSONObject(i)?.optString("text")?.trim() ?: ""
+                            if (txt == "•") {
+                                foundBullet = true
+                                continue
+                            }
+                            if (txt.contains("views", ignoreCase = true) || txt.matches(Regex("""\d+:\d+"""))) {
+                                continue
+                            }
+                            if (!foundBullet) {
                                 artistList.add(txt)
+                            } else if (albumName.isBlank()) {
+                                albumName = txt
                             }
                         }
                     }
                     val artist = artistList.firstOrNull() ?: ""
 
+                    // Extract authentic high-res artwork
+                    var rawThumb = ""
+                    val thumbArr = panel.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                    if (thumbArr != null && thumbArr.length() > 0) {
+                        rawThumb = thumbArr.optJSONObject(thumbArr.length() - 1)?.optString("url") ?: ""
+                    }
+                    if (rawThumb.isBlank() && videoId.isNotBlank()) {
+                        rawThumb = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    }
+                    val highResArtwork = Song.resolvePoster(title, rawThumb)
+
                     if (title.isNotBlank() && !title.contains("Playlist", ignoreCase = true)) {
-                        out.add(Pair(title, artist))
+                        out.add(
+                            YouTubeRadioTrack(
+                                title = title,
+                                artist = artist,
+                                videoId = videoId,
+                                artworkUrl = highResArtwork,
+                                album = albumName
+                            )
+                        )
                     }
                     return
                 }
@@ -243,7 +282,7 @@ object YouTubeRadioService {
         }
     }
 
-    private fun extractWebRemixSongs(json: Any, out: MutableList<Pair<String, String>>) {
+    private fun extractWebRemixSongs(json: Any, out: MutableList<YouTubeRadioTrack>) {
         when (json) {
             is JSONObject -> {
                 val item = json.optJSONObject("musicResponsiveListItemRenderer")
@@ -256,17 +295,43 @@ object YouTubeRadioService {
                         val title = col1?.optJSONObject("text")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
                         val artistRuns = col2?.optJSONObject("text")?.optJSONArray("runs")
                         val artistList = mutableListOf<String>()
+                        var albumName = ""
                         if (artistRuns != null) {
+                            var foundBullet = false
                             for (i in 0 until artistRuns.length()) {
-                                val txt = artistRuns.optJSONObject(i)?.optString("text") ?: ""
-                                if (txt != " • " && txt != "Song" && txt != "Album" && txt != "Video" && txt != "Artist") {
-                                    artistList.add(txt)
+                                val txt = artistRuns.optJSONObject(i)?.optString("text")?.trim() ?: ""
+                                if (txt == "•") {
+                                    foundBullet = true
+                                    continue
+                                }
+                                if (txt != "Song" && txt != "Album" && txt != "Video" && txt != "Artist") {
+                                    if (!foundBullet) {
+                                        artistList.add(txt)
+                                    } else if (albumName.isBlank()) {
+                                        albumName = txt
+                                    }
                                 }
                             }
                         }
                         val artist = artistList.joinToString(" ").trim()
+
+                        var rawThumb = ""
+                        val thumbObj = item.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer")
+                            ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                        if (thumbObj != null && thumbObj.length() > 0) {
+                            rawThumb = thumbObj.optJSONObject(thumbObj.length() - 1)?.optString("url") ?: ""
+                        }
+                        val highResArtwork = Song.resolvePoster("", rawThumb)
+
                         if (title.isNotBlank() && !title.contains("Top Hits", ignoreCase = true) && !title.contains("Tamil New Songs", ignoreCase = true)) {
-                            out.add(Pair(title, artist))
+                            out.add(
+                                YouTubeRadioTrack(
+                                    title = title,
+                                    artist = artist,
+                                    artworkUrl = highResArtwork,
+                                    album = albumName
+                                )
+                            )
                         }
                     }
                 }
