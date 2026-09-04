@@ -14,6 +14,13 @@ class DesTest {
         assertNotNull(decrypted)
         assertTrue(decrypted!!.startsWith("https://aac.saavncdn.com/"))
         assertTrue(decrypted.endsWith("_320.mp4"))
+
+        val song = com.shyan.dreamin.data.model.Song(id = "GiKfOu44", title = "New York Nagaram", artist = "A.R. Rahman")
+        kotlinx.coroutines.runBlocking {
+            val stream = com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(song)
+            assertNotNull(stream)
+            assertTrue(stream.startsWith("https://") && stream.endsWith(".mp4"))
+        }
     }
 
     @Test

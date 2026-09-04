@@ -56,9 +56,9 @@ object NetworkService {
 
     val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectionPool(connectionPool)
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
-        .writeTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val orig = chain.request()
             val host = orig.url.host
