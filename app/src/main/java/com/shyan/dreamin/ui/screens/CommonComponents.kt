@@ -120,15 +120,26 @@ fun GlassmorphismCard(
     content: @Composable () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        colors.outlineVariant.copy(alpha = 0.35f),
+                        Color.White.copy(alpha = 0.04f)
+                    )
+                ),
+                shape = cardShape
+            )
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        colors.surfaceHighest.copy(alpha = 0.72f),
-                        colors.surfaceHigh.copy(alpha = 0.64f)
+                        colors.surfaceHighest.copy(alpha = 0.62f),
+                        colors.surfaceHigh.copy(alpha = 0.48f)
                     )
                 )
             )
@@ -160,10 +171,29 @@ fun BottomNavBar(
         )
     } else Modifier
 
+    val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     Surface(
-        color = if (hazeState != null) colors.surfaceContainer.copy(alpha = 0.70f) else colors.surfaceContainer,
+        color = if (hazeState != null) colors.surfaceContainer.copy(alpha = 0.58f) else colors.surfaceContainer,
         tonalElevation = 0.dp,
+        shape = navShape,
         modifier = hazeModifier
+            .clip(navShape)
+            .drawBehind {
+                // Top-edge 1dp specular rim highlight
+                val strokeWidth = 1.dp.toPx()
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.05f),
+                            Color.White.copy(alpha = 0.28f),
+                            Color.White.copy(alpha = 0.05f)
+                        )
+                    ),
+                    start = Offset(0f, strokeWidth / 2),
+                    end = Offset(size.width, strokeWidth / 2),
+                    strokeWidth = strokeWidth
+                )
+            }
     ) {
         BoxWithConstraints(
             modifier = Modifier
@@ -185,14 +215,31 @@ fun BottomNavBar(
                 label = "nav_pill_slide"
             )
 
-            // 🔘 Smooth Sliding Background Pill
+            // 🔘 Smooth Sliding Background Frosted Glass Pill
             Box(
                 modifier = Modifier
                     .offset(x = animatedPillOffset)
                     .width(pillWidth)
                     .height(42.dp)
                     .clip(RoundedCornerShape(21.dp))
-                    .background(colors.primary.copy(alpha = 0.16f))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                colors.primary.copy(alpha = 0.24f),
+                                colors.primary.copy(alpha = 0.12f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.20f),
+                                colors.primary.copy(alpha = 0.08f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(21.dp)
+                    )
             )
 
             Row(
@@ -327,8 +374,8 @@ fun MiniPlayer(
 
     val infiniteTransition = rememberInfiniteTransition(label = "mini_glow")
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.14f,
-        targetValue = if (isPlaying) 0.28f else 0.12f,
+        initialValue = 0.22f,
+        targetValue = if (isPlaying) 0.45f else 0.18f,
         animationSpec = infiniteRepeatable(
             animation = tween(2400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -368,16 +415,16 @@ fun MiniPlayer(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .padding(horizontal = 6.dp)
-                .blur(22.dp)
+                .padding(horizontal = 4.dp)
+                .blur(26.dp)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
                             animatedAura.copy(alpha = glowAlpha),
-                            animatedAura.copy(alpha = glowAlpha * 0.40f),
+                            animatedAura.copy(alpha = glowAlpha * 0.45f),
                             Color.Transparent
                         ),
-                        radius = 450f
+                        radius = 480f
                     ),
                     cardShape
                 )
@@ -385,27 +432,40 @@ fun MiniPlayer(
 
         // 🏝️ Floating Glassmorphic Pill Surface
         Surface(
-            color = colors.surfaceHighest.copy(alpha = 0.86f),
-            tonalElevation = 10.dp,
+            color = colors.surfaceContainer.copy(alpha = 0.58f),
+            tonalElevation = 0.dp,
             shape = cardShape,
             modifier = (if (hazeState != null) Modifier.hazeEffect(state = hazeState, style = HazeMaterials.ultraThin()) else Modifier)
                 .clip(cardShape)
                 .drawWithCache {
                     val outline = cardShape.createOutline(size, layoutDirection, this)
                     val strokeWidth = 1.dp.toPx()
+                    val staticBorderBrush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.28f),
+                            animatedAura.copy(alpha = 0.18f),
+                            Color.White.copy(alpha = 0.06f)
+                        )
+                    )
                     onDrawWithContent {
                         drawContent()
+                        // 1. Permanent physical specular highlight outline
+                        drawOutline(
+                            outline = outline,
+                            brush = staticBorderBrush,
+                            style = Stroke(width = strokeWidth)
+                        )
+                        // 2. Dynamic light refraction gleam sweep
                         val borderShimmerOffset = (elapsedTime * 360f) % 1800f - 400f
-                        val baseAlpha = 0.18f + 0.05f * gleamIntensity
-                        val highlightAlpha = 0.20f + 0.25f * gleamIntensity
-                        val whiteAlpha = 0.08f + 0.67f * gleamIntensity
+                        val highlightAlpha = 0.15f + 0.35f * gleamIntensity
+                        val whiteAlpha = 0.10f + 0.70f * gleamIntensity
                         val shimmerBrush = Brush.linearGradient(
                             colors = listOf(
-                                animatedAura.copy(alpha = baseAlpha),
+                                Color.Transparent,
                                 animatedAura.copy(alpha = highlightAlpha),
                                 Color.White.copy(alpha = whiteAlpha),
                                 animatedAura.copy(alpha = highlightAlpha),
-                                animatedAura.copy(alpha = baseAlpha)
+                                Color.Transparent
                             ),
                             start = Offset(borderShimmerOffset, -50f),
                             end = Offset(borderShimmerOffset + 400f, 150f)

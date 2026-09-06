@@ -195,7 +195,6 @@ private fun MainAppScaffold(
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(state = hazeState)
-                    .padding(bottom = padding.calculateBottomPadding())
             ) {
                 // 1. Home Screen (Rendered & Interactive when active)
                 if (homeAlpha > 0f || isHome) {
@@ -206,6 +205,7 @@ private fun MainAppScaffold(
                             .zIndex(if (isHome) 1f else 0f)
                     ) {
                         HomeScreen(
+                            bottomPadding            = padding.calculateBottomPadding(),
                             trendingCharts           = trendingCharts,
                             recommendations          = state.recommendations,
                             recentlyPlayed           = state.recentlyPlayed,
@@ -255,6 +255,7 @@ private fun MainAppScaffold(
                             .zIndex(if (isLibrary) 1f else 0f)
                     ) {
                         LibraryScreen(
+                            bottomPadding            = padding.calculateBottomPadding(),
                             state                    = state,
                             onSongClick              = onLibrarySongClick,
                             onCreatePlaylist         = { name, coverUri -> vm.createPlaylist(name, coverUri) },

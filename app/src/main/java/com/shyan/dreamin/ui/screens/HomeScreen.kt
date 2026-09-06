@@ -115,6 +115,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 
 @Composable
 fun HomeScreen(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     trendingCharts: List<Song>,
     recommendations: List<Song>,
     recentlyPlayed: List<Song>,
@@ -321,6 +322,7 @@ fun HomeScreen(
                 ) {
                     if (searchQuery.isNotEmpty()) {
                         SearchResults(
+                            bottomPadding = bottomPadding,
                             songs = searchResults,
                             currentSong = currentSong,
                             onSongClick = { song ->
@@ -366,6 +368,7 @@ fun HomeScreen(
                             ShimmerFeedSkeleton()
                         } else {
                             HomeFeedOnlyContent(
+                                bottomPadding = bottomPadding,
                                 trending = trendingCharts,
                                 recommendations = recommendations,
                                 recentlyPlayed = recentlyPlayed,
@@ -396,7 +399,7 @@ fun HomeScreen(
                 onClick = onShuffleFab,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(16.dp),
+                    .padding(end = 16.dp, bottom = bottomPadding + 16.dp),
                 containerColor = colors.primary,
                 contentColor = colors.background,
                 shape = RoundedCornerShape(16.dp)
@@ -502,12 +505,16 @@ fun DreaminSearchBar(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .border(
-                    width = 1.3.dp,
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            colors.primary.copy(alpha = if (isFocused) 0.85f else 0.4f),
-                            colors.secondary.copy(alpha = if (isFocused) 0.7f else 0.25f),
-                            colors.primary.copy(alpha = if (isFocused) 0.5f else 0.18f)
+                    width = 1.2.dp,
+                    brush = Brush.verticalGradient(
+                        colors = if (isFocused) listOf(
+                            colors.primary.copy(alpha = 0.90f),
+                            colors.secondary.copy(alpha = 0.65f),
+                            colors.primary.copy(alpha = 0.40f)
+                        ) else listOf(
+                            Color.White.copy(alpha = 0.22f),
+                            colors.outlineVariant.copy(alpha = 0.25f),
+                            Color.White.copy(alpha = 0.05f)
                         )
                     ),
                     shape = RoundedCornerShape(22.dp)
@@ -600,8 +607,8 @@ fun DreaminSearchBar(
             singleLine = true,
             shape = RoundedCornerShape(22.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = colors.surfaceContainer,
-                unfocusedContainerColor = colors.surfaceContainer,
+                focusedContainerColor = colors.surfaceContainer.copy(alpha = 0.65f),
+                unfocusedContainerColor = colors.surfaceContainer.copy(alpha = 0.52f),
                 focusedBorderColor = Color.Transparent,
                 unfocusedBorderColor = Color.Transparent,
                 cursorColor = colors.primary,
@@ -653,6 +660,7 @@ fun DreaminSearchBar(
 
 @Composable
 fun SearchResults(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     songs: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
@@ -769,6 +777,9 @@ fun SearchResults(
         }
         if (isLoadingMore) {
             item(contentType = "ShimmerRow") { ShimmerSongRow() }
+        }
+        item(key = "search_bottom_spacer", contentType = "Spacer") {
+            Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
         }
     }
 }
@@ -1239,13 +1250,28 @@ fun JumpBackInCard(
         (session.positionMs.toFloat() / session.song.duration).coerceIn(0f, 1f)
     else 0f
 
+    val cardShape = RoundedCornerShape(20.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        colors.primary.copy(alpha = 0.20f),
+                        Color.White.copy(alpha = 0.04f)
+                    )
+                ),
+                shape = cardShape
+            )
             .background(
                 Brush.horizontalGradient(
-                    listOf(colors.primary.copy(alpha = 0.18f), colors.surfaceHigh)
+                    listOf(
+                        colors.primary.copy(alpha = 0.22f),
+                        colors.surfaceHigh.copy(alpha = 0.65f)
+                    )
                 )
             )
             .clickable(
@@ -1462,6 +1488,7 @@ fun SpotifyPlaylistPill(
 
 @Composable
 fun HomeFeedOnlyContent(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     trending: List<Song>,
     recommendations: List<Song>,
     recentlyPlayed: List<Song>,
@@ -1633,7 +1660,7 @@ fun HomeFeedOnlyContent(
         }
 
         
-        item(key = "home_bottom_spacer", contentType = "Spacer") { Spacer(modifier = Modifier.height(16.dp)) }
+        item(key = "home_bottom_spacer", contentType = "Spacer") { Spacer(modifier = Modifier.height(bottomPadding + 16.dp)) }
     }
 }
 

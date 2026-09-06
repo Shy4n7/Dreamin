@@ -108,13 +108,9 @@ import com.shyan.dreamin.viewmodel.MusicPlayerViewModel
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 
-
-
-
-
-
 @Composable
 fun LibraryScreen(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     state: PlayerUiState,
     onSongClick: (Song) -> Unit,
     onCreatePlaylist: (String, android.net.Uri?) -> Unit = { _, _ -> },
@@ -158,6 +154,12 @@ fun LibraryScreen(
         returnSpringKey++
     }
     lastOpenPlaylistId = state.openPlaylistId
+
+    val playlistAlpha by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow),
+        label = "library_playlist_alpha"
+    )
 
     CompositionLocalProvider(LocalPlaylists provides state.playlists) {
 
@@ -220,6 +222,7 @@ fun LibraryScreen(
                 ) {
                     when (page) {
                         0 -> PlaylistsTab(
+                            bottomPadding = bottomPadding,
                             playlists = state.playlists,
                             playlistArtworks = state.playlistArtworks,
                             onCreatePlaylist = onCreatePlaylist,
@@ -241,6 +244,7 @@ fun LibraryScreen(
                             triggerKey = returnSpringKey
                         )
                         1 -> FavoritesTab(
+                            bottomPadding = bottomPadding,
                             favorites = state.favorites,
                             currentSong = state.currentSong,
                             onSongClick = onSongClick,
@@ -248,6 +252,7 @@ fun LibraryScreen(
                             triggerKey = returnSpringKey
                         )
                         else -> DownloadsTab(
+                            bottomPadding = bottomPadding,
                             downloadedSongs = state.downloadedSongs,
                             currentSong = state.currentSong,
                             onSongClick = onSongClick,
@@ -267,7 +272,7 @@ fun LibraryScreen(
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = (bottomPadding + 8.dp).coerceAtLeast(16.dp), start = 16.dp, end = 16.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -315,6 +320,7 @@ fun LibraryScreen(
 
 @Composable
 fun DownloadsTab(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     downloadedSongs: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
@@ -395,13 +401,14 @@ fun DownloadsTab(
                     )
                 }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(bottomPadding + 16.dp)) }
         }
     }
 }
 
 @Composable
 fun FavoritesTab(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     favorites: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
@@ -449,13 +456,14 @@ fun FavoritesTab(
                     )
                 }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(bottomPadding + 16.dp)) }
         }
     }
 }
 
 @Composable
 fun PlaylistsTab(
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     playlists: List<com.shyan.dreamin.data.local.Playlist>,
     playlistArtworks: Map<Long, List<String>> = emptyMap(),
     onCreatePlaylist: (String, android.net.Uri?) -> Unit,
@@ -555,7 +563,7 @@ fun PlaylistsTab(
             }
 
             item(span = { GridItemSpan(2) }) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
             }
         }
     }
