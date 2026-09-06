@@ -21,4 +21,7 @@ interface FavoriteDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE songId = :songId)")
     fun isFavorite(songId: String): Flow<Boolean>
+
+    @Query("UPDATE favorites SET artworkUrl = :artworkUrl WHERE songId = :songId")
+    suspend fun updateArtwork(songId: String, artworkUrl: String)
 }

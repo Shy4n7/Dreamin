@@ -28,6 +28,10 @@ class FavoritesRepository(private val dao: FavoriteDao) {
     suspend fun removeFavorite(songId: String) {
         dao.delete(songId)
     }
+
+    suspend fun updateArtwork(songId: String, artworkUrl: String) {
+        dao.updateArtwork(songId, artworkUrl)
+    }
 }
 
 private fun FavoriteEntity.toSong() = Song(

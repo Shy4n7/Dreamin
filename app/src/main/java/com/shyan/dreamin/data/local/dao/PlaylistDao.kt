@@ -76,7 +76,7 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :playlistId ORDER BY position ASC")
     suspend fun getSongs(playlistId: Long): List<PlaylistSongEntity>
 
-    @Query("UPDATE playlist_songs SET artworkUrl = :artworkUrl WHERE songId = :songId AND artworkUrl NOT LIKE '%scdn.co%' AND artworkUrl NOT LIKE '%spotify%'")
+    @Query("UPDATE playlist_songs SET artworkUrl = :artworkUrl WHERE songId = :songId")
     suspend fun updateSongArtwork(songId: String, artworkUrl: String)
 
     @Query("SELECT * FROM playlist_songs WHERE playlistId = :playlistId ORDER BY position ASC LIMIT 4")

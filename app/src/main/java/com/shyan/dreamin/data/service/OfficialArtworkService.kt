@@ -68,12 +68,20 @@ object OfficialArtworkService {
         }
     }
 
+    private fun normalizeKey(title: String, artist: String): String {
+        val t = title.lowercase().replace(Regex("[^a-z0-9]"), "")
+        val a = artist.lowercase().split(",", "&", "feat.", "ft.", "/").firstOrNull()?.replace(Regex("[^a-z0-9]"), "") ?: ""
+        return "${t}___${a}".trim()
+    }
+
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
         }
         val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
         artworkCache[fullKey]?.let { return it }
+        val normKey = normalizeKey(song.displayTitle, song.artist)
+        artworkCache[normKey]?.let { return it }
         return null
     }
 
@@ -82,6 +90,8 @@ object OfficialArtworkService {
         if (song.id.isNotBlank()) artworkCache[song.id] = posterUrl
         val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
         artworkCache[fullKey] = posterUrl
+        val normKey = normalizeKey(song.displayTitle, song.artist)
+        artworkCache[normKey] = posterUrl
     }
 
     fun clearCache(): Unit = synchronized(artworkCache) {
@@ -173,8 +183,7 @@ object OfficialArtworkService {
         }
 
         if (!bestPoster.isNullOrBlank()) {
-            artworkCache.put(cacheKey, bestPoster)
-            if (song.id.isNotBlank()) artworkCache.put(song.id, bestPoster)
+            putCachedPoster(song, bestPoster)
             return@withContext bestPoster
         }
 
@@ -182,8 +191,7 @@ object OfficialArtworkService {
         if (movieName.isNotBlank() && detectedLang != "english") {
             val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
             if (!albumPoster.isNullOrBlank()) {
-                artworkCache.put(cacheKey, albumPoster)
-                if (song.id.isNotBlank()) artworkCache.put(song.id, albumPoster)
+                putCachedPoster(song, albumPoster)
                 return@withContext albumPoster
             }
         }
@@ -201,8 +209,7 @@ object OfficialArtworkService {
                     else -> null
                 }
                 if (!altPoster.isNullOrBlank()) {
-                    artworkCache.put(cacheKey, altPoster)
-                    if (song.id.isNotBlank()) artworkCache.put(song.id, altPoster)
+                    putCachedPoster(song, altPoster)
                     return@withContext altPoster
                 }
             }

@@ -24,7 +24,6 @@ data class Song(
     val displayArtworkUrl: String get() {
         val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(this)
         if (!cached.isNullOrBlank()) return cached
-        if (isSpotifyArtwork) return artworkUrl
         return resolvePoster(title, artworkUrl)
     }
 

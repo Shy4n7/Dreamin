@@ -169,9 +169,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 songs.forEach { song ->
                     launch(Dispatchers.IO) {
                         try {
-                            if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default")) {
+                            if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) == null) {
                                 val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                                if (!poster.isNullOrBlank()) {
+                                if (!poster.isNullOrBlank() && poster != song.artworkUrl) {
                                     updateSongArtworkAcrossApp(song.id, poster)
                                     historyRepo.updateArtwork(song.id, poster)
                                 }
@@ -190,9 +190,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 songs.forEach { song ->
                     launch(Dispatchers.IO) {
                         try {
-                            if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default")) {
+                            if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) == null) {
                                 val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                                if (!poster.isNullOrBlank()) {
+                                if (!poster.isNullOrBlank() && poster != song.artworkUrl) {
                                     updateSongArtworkAcrossApp(song.id, poster)
                                     historyRepo.updateArtwork(song.id, poster)
                                 }
@@ -1101,16 +1101,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
 
-                if (!activeSong.isSpotifyArtwork && (activeSong.artworkUrl.isBlank() || activeSong.artworkUrl.contains("default"))) {
-                    prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
-                            if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
-                                updateSongArtworkAcrossApp(activeSong.id, official)
-                            }
-                        } catch (_: Exception) {}
-                    }
+                prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
+                        if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
+                            updateSongArtworkAcrossApp(activeSong.id, official)
+                        }
+                    } catch (_: Exception) {}
                 }
             }
 
@@ -1212,15 +1210,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             nextSongs.forEach { song ->
                 launch(Dispatchers.IO) {
                     try {
-                        val finalUrl = if (song.isSpotifyArtwork || (song.artworkUrl.isNotBlank() && !song.artworkUrl.contains("default"))) {
-                            song.artworkUrl
-                        } else {
-                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                            if (!official.isNullOrBlank() && official != song.artworkUrl) {
-                                updateSongArtworkAcrossApp(song.id, official)
-                            }
-                            official ?: song.displayArtworkUrl
+                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
+                        if (!official.isNullOrBlank() && official != song.artworkUrl) {
+                            updateSongArtworkAcrossApp(song.id, official)
                         }
+                        val finalUrl = official ?: song.displayArtworkUrl
                         if (finalUrl.isNotBlank()) {
                             val req = coil.request.ImageRequest.Builder(context)
                                 .data(finalUrl)
@@ -1633,16 +1627,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         extractDominantColor(song.displayArtworkUrl)
         loadLyricsForCurrentSong()
 
-        // Resolve official original movie soundtrack artwork only if artwork is missing
-        if (!song.isSpotifyArtwork && (song.artworkUrl.isBlank() || song.artworkUrl.contains("default"))) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                    if (!official.isNullOrBlank() && official != song.artworkUrl) {
-                        updateSongArtworkAcrossApp(song.id, official)
-                    }
-                } catch (_: Exception) {}
-            }
+        // Resolve official original movie soundtrack artwork
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
+                if (!official.isNullOrBlank() && official != song.artworkUrl) {
+                    updateSongArtworkAcrossApp(song.id, official)
+                    extractDominantColor(official)
+                }
+            } catch (_: Exception) {}
         }
 
         viewModelScope.launch {
@@ -1707,19 +1700,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 fetchRecommendations(song.id)
                 triggerSmartQueuePrefetch(song.id)
                 preloadNextMediaItemInQueue()
-
-                // Real-time live official movie poster resolution (if missing)
-                if (!song.isSpotifyArtwork && (song.artworkUrl.isBlank() || song.artworkUrl.contains("default"))) {
-                    launch(Dispatchers.IO) {
-                        try {
-                            val officialPoster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                            if (!officialPoster.isNullOrBlank()) {
-                                updateSongArtworkAcrossApp(song.id, officialPoster)
-                                extractDominantColor(officialPoster)
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1731,11 +1711,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun updateSongArtworkAcrossApp(songId: String, officialPoster: String) {
         if (officialPoster.isBlank()) return
-        val current = _uiState.value.currentSong
-        if (current?.id == songId && current.isSpotifyArtwork) return
 
         _uiState.update { state ->
-            fun shouldUpdate(s: Song?): Boolean = s != null && s.id == songId && !s.isSpotifyArtwork
+            fun shouldUpdate(s: Song?): Boolean = s != null && s.id == songId
 
             val newCurrentSong = if (shouldUpdate(state.currentSong)) {
                 state.currentSong!!.copy(artworkUrl = officialPoster)
@@ -1763,15 +1741,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             )
         }
 
-        if (_uiState.value.currentSong?.id == songId && !_uiState.value.currentSong!!.isSpotifyArtwork) {
+        if (_uiState.value.currentSong?.id == songId) {
             extractDominantColor(officialPoster)
         }
 
-        // Persist to Room database so playlists and offline library reflect updated posters!
+        // Persist to Room database so playlists, favorites, history, and offline library reflect updated posters!
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 playlistRepo.updateSongArtwork(songId, officialPoster)
                 downloadRepo.updateArtwork(songId, officialPoster)
+                historyRepo.updateArtwork(songId, officialPoster)
+                favoritesRepo.updateArtwork(songId, officialPoster)
             } catch (_: Exception) {}
         }
     }
@@ -2349,7 +2329,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 finalTrending.forEach { chartSong ->
                     launch(Dispatchers.IO) {
                         try {
-                            if (chartSong.artworkUrl.isBlank() || chartSong.artworkUrl.contains("default")) {
+                            if (chartSong.artworkUrl.isBlank() || chartSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(chartSong) == null) {
                                 val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(chartSong)
                                 if (!poster.isNullOrBlank()) {
                                     updateSongArtworkAcrossApp(chartSong.id, poster)
@@ -2495,7 +2475,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     finalQueueTracks.forEach { qSong ->
                         launch(Dispatchers.IO) {
                             try {
-                                if (qSong.artworkUrl.isBlank() || qSong.artworkUrl.contains("default")) {
+                                if (qSong.artworkUrl.isBlank() || qSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(qSong) == null) {
                                     val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(qSong)
                                     if (!poster.isNullOrBlank()) {
                                         updateSongArtworkAcrossApp(qSong.id, poster)
@@ -2534,7 +2514,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 finalRecs.forEach { recSong ->
                     launch(Dispatchers.IO) {
                         try {
-                            if (recSong.artworkUrl.isBlank() || recSong.artworkUrl.contains("default")) {
+                            if (recSong.artworkUrl.isBlank() || recSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(recSong) == null) {
                                 val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(recSong)
                                 if (!poster.isNullOrBlank()) {
                                     updateSongArtworkAcrossApp(recSong.id, poster)

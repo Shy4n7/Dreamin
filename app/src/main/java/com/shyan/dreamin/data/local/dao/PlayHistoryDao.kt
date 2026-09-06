@@ -21,7 +21,7 @@ interface PlayHistoryDao {
     @Insert
     suspend fun insert(entry: PlayHistoryEntity)
 
-    @Query("UPDATE play_history SET artworkUrl = :artworkUrl WHERE songId = :songId AND artworkUrl NOT LIKE '%scdn.co%' AND artworkUrl NOT LIKE '%spotify%'")
+    @Query("UPDATE play_history SET artworkUrl = :artworkUrl WHERE songId = :songId")
     suspend fun updateArtwork(songId: String, artworkUrl: String)
 
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT :limit")
