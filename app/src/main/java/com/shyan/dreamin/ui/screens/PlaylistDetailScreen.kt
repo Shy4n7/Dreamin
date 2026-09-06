@@ -303,6 +303,15 @@ fun PlaylistDetailScreen(
         }
     }
 
+    val playlistSongKeys = remember(filteredSongs) {
+        val countMap = HashMap<String, Int>(filteredSongs.size)
+        filteredSongs.map { song ->
+            val count = countMap[song.id] ?: 0
+            countMap[song.id] = count + 1
+            if (count == 0) song.id else "${song.id}#$count"
+        }
+    }
+
     val isScrolledPastHero by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 310
@@ -1090,7 +1099,7 @@ fun PlaylistDetailScreen(
                     } else {
                         itemsIndexed(
                             items = filteredSongs,
-                            key = { _, song -> song.id },
+                            key = { idx, song -> playlistSongKeys.getOrNull(idx) ?: "${song.id}_$idx" },
                             contentType = { _, _ -> "PlaylistSongRow" }
                         ) { idx, song ->
                             val isDownloaded = downloadedSongIds.contains(song.id)
@@ -1638,6 +1647,14 @@ fun AddSongsToPlaylistDialog(
         if (query.trim().length >= 2) searchResults
         else quickPickSongs
     }
+    val addSongKeys = remember(displayList) {
+        val countMap = HashMap<String, Int>(displayList.size)
+        displayList.map { song ->
+            val count = countMap[song.id] ?: 0
+            countMap[song.id] = count + 1
+            if (count == 0) song.id else "${song.id}#$count"
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1769,11 +1786,11 @@ fun AddSongsToPlaylistDialog(
                         }
                     }
 
-                    items(
+                    itemsIndexed(
                         items = displayList,
-                        key = { it.id },
-                        contentType = { "AddSongRow" }
-                    ) { song ->
+                        key = { idx, song -> addSongKeys.getOrNull(idx) ?: "${song.id}_$idx" },
+                        contentType = { _, _ -> "AddSongRow" }
+                    ) { _, song ->
                         val isAlreadyInPlaylist = existingSongIds.contains(song.id) || addedSongIds.contains(song.id)
 
                         Row(

@@ -629,16 +629,24 @@ fun QueueScreen(
         } else {
             var removingQueueSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
+            val queueKeys = remember(state.queue) {
+                val countMap = HashMap<String, Int>(state.queue.size)
+                state.queue.map { song ->
+                    val count = countMap[song.id] ?: 0
+                    countMap[song.id] = count + 1
+                    if (count == 0) song.id else "${song.id}#$count"
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(
+                itemsIndexed(
                     items = state.queue,
-                    key = { it.id },
-                    contentType = { "QueueSongRow" }
-                ) { song ->
-                    val index = state.queue.indexOfFirst { it.id == song.id }
+                    key = { idx, song -> queueKeys.getOrNull(idx) ?: "${song.id}_$idx" },
+                    contentType = { _, _ -> "QueueSongRow" }
+                ) { index, song ->
                     val isDragging = draggingIndex == index
                     val offsetY = if (isDragging) dragOffsetY else 0f
                     val isRemoving = removingQueueSongIds.contains(song.id)
