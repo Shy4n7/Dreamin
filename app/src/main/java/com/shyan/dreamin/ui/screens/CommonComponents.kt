@@ -383,10 +383,6 @@ fun MiniPlayer(
         label = "mini_glow_alpha"
     )
 
-    val swipeXAnim = remember { Animatable(0f) }
-    val swipeYAnim = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-
     val expandInteraction = remember { MutableInteractionSource() }
     val isPressed by expandInteraction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
@@ -489,65 +485,8 @@ fun MiniPlayer(
                         .fillMaxWidth()
                         .height(68.dp)
                         .graphicsLayer {
-                            val dragX = swipeXAnim.value
-                            val dragY = swipeYAnim.value
-                            translationX = dragX
-                            translationY = dragY
-                            rotationZ = (dragX / 35f).coerceIn(-4f, 4f)
-                            val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1400f)).coerceIn(0.92f, 1f)
-                            scaleX = pressScale * dynamicScale
-                            scaleY = pressScale * dynamicScale
-                            alpha = (1f - (kotlin.math.abs(dragX) / 500f)).coerceIn(0.6f, 1f)
-                        }
-                        .pointerInput(onNext, onPrevious, onExpand) {
-                            var totalX = 0f
-                            var totalY = 0f
-                            var isDragging = false
-                            detectDragGestures(
-                                onDragStart = {
-                                    totalX = 0f
-                                    totalY = 0f
-                                    isDragging = false
-                                },
-                                onDrag = { change, dragAmount ->
-                                    totalX += dragAmount.x
-                                    totalY += dragAmount.y
-                                    val absX = kotlin.math.abs(totalX)
-                                    val absY = kotlin.math.abs(totalY)
-
-                                    if (!isDragging && (absX > 10f || absY > 10f)) {
-                                        isDragging = true
-                                    }
-
-                                    if (isDragging) {
-                                        change.consume()
-                                        if (absY > absX && totalY < -15f) {
-                                            scope.launch { swipeYAnim.snapTo(totalY.coerceIn(-120f, 0f)) }
-                                        } else if (absX > absY && absX > 15f) {
-                                            scope.launch { swipeXAnim.snapTo(totalX.coerceIn(-200f, 200f)) }
-                                        }
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (swipeYAnim.value < -60f) onExpand()
-                                    when {
-                                        swipeXAnim.value < -90f -> onNext()
-                                        swipeXAnim.value > 90f -> onPrevious()
-                                    }
-                                    val snapSpring = spring<Float>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                                    scope.launch {
-                                        launch { swipeXAnim.animateTo(0f, snapSpring) }
-                                        launch { swipeYAnim.animateTo(0f, snapSpring) }
-                                    }
-                                },
-                                onDragCancel = {
-                                    val snapSpring = spring<Float>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                                    scope.launch {
-                                        launch { swipeXAnim.animateTo(0f, snapSpring) }
-                                        launch { swipeYAnim.animateTo(0f, snapSpring) }
-                                    }
-                                }
-                            )
+                            scaleX = pressScale
+                            scaleY = pressScale
                         }
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
