@@ -167,7 +167,8 @@ fun PlaylistDetailScreen(
     onSyncSpotify: () -> Unit = {},
     isSyncingSpotify: Boolean = false,
     quickPickSongs: List<Song> = emptyList(),
-    initialArtworkUrl: String? = null
+    initialArtworkUrl: String? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val colors = LocalDreaminColors.current
     val context = LocalContext.current
@@ -1303,10 +1304,12 @@ fun PlaylistDetailScreen(
                             }
                         }
 
-                        item { Spacer(modifier = Modifier.height(if (currentSong != null) 90.dp else 24.dp)) }
+                        val effectiveBottom = if (bottomPadding > 0.dp) bottomPadding + 16.dp else (if (currentSong != null) 90.dp else 24.dp)
+                        item { Spacer(modifier = Modifier.height(effectiveBottom)) }
                     }
                 }
                 if (filteredSongs.size >= 8) {
+                    val fastScrollBottom = if (bottomPadding > 0.dp) bottomPadding + 16.dp else (if (currentSong != null) 96.dp else 24.dp)
                     PlaylistFastScroller(
                         listState = listState,
                         itemCount = filteredSongs.size,
@@ -1315,7 +1318,7 @@ fun PlaylistDetailScreen(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .fillMaxHeight()
-                            .padding(top = 16.dp, bottom = if (currentSong != null) 96.dp else 24.dp, end = 2.dp)
+                            .padding(top = 16.dp, bottom = fastScrollBottom, end = 2.dp)
                     )
                 }
             }
@@ -1330,7 +1333,7 @@ fun PlaylistDetailScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = if (currentSong != null) 78.dp else 16.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = if (bottomPadding > 0.dp) bottomPadding + 12.dp else (if (currentSong != null) 78.dp else 16.dp), start = 16.dp, end = 16.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(22.dp),

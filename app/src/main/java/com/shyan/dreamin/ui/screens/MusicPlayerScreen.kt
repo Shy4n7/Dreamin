@@ -161,6 +161,9 @@ private fun MainAppScaffold(
                         currentScreen  = currentScreen,
                         hazeState      = hazeState,
                         onScreenChange = { screen ->
+                            if (state.openPlaylistId != null) {
+                                vm.closePlaylist()
+                            }
                             if (screen == Screen.Home && state.isSearchActive) {
                                 keyboard?.hide()
                                 vm.clearSearch()
@@ -171,6 +174,8 @@ private fun MainAppScaffold(
                 }
             }
         ) { padding ->
+            val openPlaylist = state.openPlaylistId?.let { id -> state.playlists.find { it.id == id } }
+            val isPlaylistOpen = openPlaylist != null
             val isHome = currentScreen == Screen.Home
             val isLibrary = currentScreen == Screen.Library
 
@@ -191,6 +196,23 @@ private fun MainAppScaffold(
                 label = "library_tab_alpha"
             )
 
+            val homeParallaxX by animateFloatAsState(
+                targetValue = if (isPlaylistOpen && isHome) -0.22f else 0f,
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "home_playlist_parallax"
+            )
+            val libraryParallaxX by animateFloatAsState(
+                targetValue = if (isPlaylistOpen && isLibrary) -0.22f else 0f,
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "library_playlist_parallax"
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -201,8 +223,11 @@ private fun MainAppScaffold(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer { alpha = homeAlpha }
-                            .zIndex(if (isHome) 1f else 0f)
+                            .graphicsLayer {
+                                alpha = homeAlpha
+                                translationX = homeParallaxX * size.width
+                            }
+                            .zIndex(if (isHome && !isPlaylistOpen) 1f else 0f)
                     ) {
                         HomeScreen(
                             bottomPadding            = padding.calculateBottomPadding(),
@@ -251,8 +276,11 @@ private fun MainAppScaffold(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer { alpha = libraryAlpha }
-                            .zIndex(if (isLibrary) 1f else 0f)
+                            .graphicsLayer {
+                                alpha = libraryAlpha
+                                translationX = libraryParallaxX * size.width
+                            }
+                            .zIndex(if (isLibrary && !isPlaylistOpen) 1f else 0f)
                     ) {
                         LibraryScreen(
                             bottomPadding            = padding.calculateBottomPadding(),
@@ -287,6 +315,68 @@ private fun MainAppScaffold(
                             onUnlinkSpotifyPlaylist  = vm::unlinkSpotifyPlaylist,
                             onPlayNext               = vm::playNext,
                             onAddToQueue             = vm::addToQueue
+                        )
+                    }
+                }
+
+                // 3. Playlist Detail Screen (Seamless horizontal slide transition + persistent bottom bar)
+                AnimatedVisibility(
+                    visible = isPlaylistOpen,
+                    enter = slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = spring(
+                            dampingRatio = 0.84f,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(tween(220)),
+                    exit = slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = spring(
+                            dampingRatio = 0.84f,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeOut(tween(180)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f)
+                ) {
+                    if (openPlaylist != null) {
+                        PlaylistDetailScreen(
+                            playlist = openPlaylist,
+                            songs = state.openPlaylistSongs,
+                            bottomPadding = padding.calculateBottomPadding(),
+                            initialArtworkUrl = openPlaylist.coverUrl ?: state.playlistArtworks[openPlaylist.id]?.firstOrNull(),
+                            currentSong = state.currentSong,
+                            playbackState = state.playbackState,
+                            progressFlow = vm.progressFlow,
+                            onPlayPause = vm::togglePlayPause,
+                            onNext = vm::playNext,
+                            onPrevious = vm::playPrevious,
+                            onExpandNowPlaying = onOpenNowPlaying,
+                            downloadedSongIds = remember(state.downloadedSongs) { state.downloadedSongs.map { it.id }.toSet() },
+                            downloadingSongIds = state.downloadingSongIds,
+                            onBack = vm::closePlaylist,
+                            onSongClick = { song -> vm.playSongFromPlaylist(song, state.openPlaylistSongs); onOpenNowPlaying() },
+                            onPlayAll = { vm.playSongsFromPlaylist(openPlaylist.id); onOpenNowPlaying() },
+                            onShuffle = { vm.shuffleAndPlayPlaylist(state.openPlaylistSongs); onOpenNowPlaying() },
+                            onDownloadAll = { vm.downloadAllSongsInPlaylist(state.openPlaylistSongs) },
+                            onDownloadSong = vm::downloadSong,
+                            onDeleteDownload = vm::deleteDownload,
+                            onRemoveSong = { songId -> vm.removeSongFromPlaylist(openPlaylist.id, songId) },
+                            onRemoveSongs = { songIds -> vm.removeSongsFromPlaylist(openPlaylist.id, songIds) },
+                            onReorderSong = { from, to -> vm.reorderPlaylistSongs(openPlaylist.id, from, to) },
+                            onRename = { newName -> vm.renamePlaylist(openPlaylist.id, newName) },
+                            onUpdateCover = { uri -> vm.updatePlaylistCover(openPlaylist.id, uri) },
+                            onAddSong = { song -> vm.addSongToPlaylist(openPlaylist.id, song) },
+                            onSearchOnline = vm::searchSongsDirect,
+                            onPlayNext = vm::playNext,
+                            onAddToQueue = vm::addToQueue,
+                            onUpdateSongArtwork = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
+                            onSyncSpotify = { vm.syncSpotifyPlaylist(openPlaylist.id) },
+                            isSyncingSpotify = state.isSyncingSpotifyPlaylist,
+                            quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
+                                (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
+                            }
                         )
                     }
                 }
@@ -350,65 +440,6 @@ private fun MainAppScaffold(
                             vm.shuffleAndPlayList(songs)
                             onOpenNowPlaying()
                         }
-                    }
-                )
-            }
-        }
-
-        // Playlist detail overlay — shown full-screen with floating MiniPlayer at bottom when playing
-        val openPlaylist = state.openPlaylistId?.let { id -> state.playlists.find { it.id == id } }
-        AnimatedVisibility(
-            visible = openPlaylist != null,
-            enter = scaleIn(
-                initialScale = 0.95f,
-                animationSpec = spring(
-                    dampingRatio = 0.82f,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ) + slideInVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.82f,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ) { 45 } + fadeIn(tween(140)),
-            exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { 50 },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            if (openPlaylist != null) {
-                PlaylistDetailScreen(
-                    playlist = openPlaylist,
-                    songs = state.openPlaylistSongs,
-                    initialArtworkUrl = openPlaylist.coverUrl ?: state.playlistArtworks[openPlaylist.id]?.firstOrNull(),
-                    currentSong = state.currentSong,
-                    playbackState = state.playbackState,
-                    progressFlow = vm.progressFlow,
-                    onPlayPause = vm::togglePlayPause,
-                    onNext = vm::playNext,
-                    onPrevious = vm::playPrevious,
-                    onExpandNowPlaying = onOpenNowPlaying,
-                    downloadedSongIds = remember(state.downloadedSongs) { state.downloadedSongs.map { it.id }.toSet() },
-                    downloadingSongIds = state.downloadingSongIds,
-                    onBack = vm::closePlaylist,
-                    onSongClick = { song -> vm.playSongFromPlaylist(song, state.openPlaylistSongs); onOpenNowPlaying() },
-                    onPlayAll = { vm.playSongsFromPlaylist(openPlaylist.id); onOpenNowPlaying() },
-                    onShuffle = { vm.shuffleAndPlayPlaylist(state.openPlaylistSongs); onOpenNowPlaying() },
-                    onDownloadAll = { vm.downloadAllSongsInPlaylist(state.openPlaylistSongs) },
-                    onDownloadSong = vm::downloadSong,
-                    onDeleteDownload = vm::deleteDownload,
-                    onRemoveSong = { songId -> vm.removeSongFromPlaylist(openPlaylist.id, songId) },
-                    onRemoveSongs = { songIds -> vm.removeSongsFromPlaylist(openPlaylist.id, songIds) },
-                    onReorderSong = { from, to -> vm.reorderPlaylistSongs(openPlaylist.id, from, to) },
-                    onRename = { newName -> vm.renamePlaylist(openPlaylist.id, newName) },
-                    onUpdateCover = { uri -> vm.updatePlaylistCover(openPlaylist.id, uri) },
-                    onAddSong = { song -> vm.addSongToPlaylist(openPlaylist.id, song) },
-                    onSearchOnline = vm::searchSongsDirect,
-                    onPlayNext = vm::playNext,
-                    onAddToQueue = vm::addToQueue,
-                    onUpdateSongArtwork = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
-                    onSyncSpotify = { vm.syncSpotifyPlaylist(openPlaylist.id) },
-                    isSyncingSpotify = state.isSyncingSpotifyPlaylist,
-                    quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
-                        (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
                     }
                 )
             }
