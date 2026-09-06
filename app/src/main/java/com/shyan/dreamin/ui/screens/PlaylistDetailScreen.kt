@@ -623,7 +623,7 @@ fun PlaylistDetailScreen(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = if (filteredSongs.size >= 8) 20.dp else 16.dp, top = 6.dp, bottom = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                     // Hero Header Item (Always shown)
                     if (!isSearchActive || searchQuery.isBlank()) {
@@ -1949,14 +1949,14 @@ fun PlaylistSongRow(
                 shadowElevation = if (isDragging) 24f else 0f
             }
             .zIndex(if (isDragging) 10f else 0f)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
     ) {
         // Swipe action background indicators
         if (swipeOffsetX.value > 12f) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(colors.primary.copy(alpha = 0.22f))
                     .padding(start = 18.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1978,7 +1978,7 @@ fun PlaylistSongRow(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(colors.error.copy(alpha = 0.22f))
                     .padding(end = 18.dp),
                 contentAlignment = Alignment.CenterEnd
@@ -1998,15 +1998,54 @@ fun PlaylistSongRow(
             }
         }
 
-        // Foreground Song Row
+        // Foreground Song Row (Glassmorphic Bar)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
                     translationX = swipeOffsetX.value
                 }
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else bgColor)
+                .clip(RoundedCornerShape(18.dp))
+                .border(
+                    width = 1.dp,
+                    brush = if (isPlaying) {
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.35f),
+                                colors.primary.copy(alpha = 0.60f),
+                                Color.White.copy(alpha = 0.08f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    },
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .background(
+                    if (isSelected) {
+                        androidx.compose.ui.graphics.SolidColor(colors.primary.copy(alpha = 0.25f))
+                    } else if (isPlaying) {
+                        Brush.horizontalGradient(
+                            listOf(
+                                colors.primary.copy(alpha = 0.22f),
+                                colors.surfaceHighest.copy(alpha = 0.65f),
+                                colors.primary.copy(alpha = 0.08f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(
+                                colors.surfaceHighest.copy(alpha = 0.40f),
+                                colors.surfaceHigh.copy(alpha = 0.25f)
+                            )
+                        )
+                    }
+                )
                 .combinedClickable(
                     interactionSource = rowInteractionSource,
                     indication = ripple(bounded = true, color = colors.primary),
@@ -2047,7 +2086,7 @@ fun PlaylistSongRow(
                         )
                     }
                 }
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Checkbox in MultiSelect mode OR Index/Equalizer
@@ -2081,7 +2120,7 @@ fun PlaylistSongRow(
                 Spacer(modifier = Modifier.width(6.dp))
             } else {
                 Box(
-                    modifier = Modifier.width(26.dp),
+                    modifier = Modifier.width(28.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isPlaying) {
@@ -2089,19 +2128,19 @@ fun PlaylistSongRow(
                     } else {
                         Text(
                             text = String.format("%02d", index),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = colors.onSurfaceVariant.copy(alpha = 0.5f)
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (index <= 3) colors.secondary else colors.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(10.dp))
             }
 
             // Artwork
             ArtworkBox(song.displayArtworkUrl, isPlaying, colors)
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             // Song Info
             Column(modifier = Modifier.weight(1f)) {
@@ -2214,7 +2253,10 @@ fun ArtworkBox(
     colors: DreaminColors
 ) {
     Box(
-        modifier = Modifier.size(52.dp)
+        modifier = Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
     ) {
         AsyncImage(
             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
@@ -2223,14 +2265,13 @@ fun ArtworkBox(
                 .crossfade(false)
                 .build(),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
         if (isPlaying) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(14.dp))
                     .background(BlackOverlay50),
                 contentAlignment = Alignment.Center
             ) {
