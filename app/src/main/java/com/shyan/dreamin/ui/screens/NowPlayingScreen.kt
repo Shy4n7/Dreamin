@@ -1028,157 +1028,130 @@ fun NowPlayingScreen(
                     )
                 }
 
-                // Playback controls — prev / play / next encased in frosted glass capsule
-                val controlsShape = RoundedCornerShape(36.dp)
-                Box(
-                    modifier = Modifier
-                        .clip(controlsShape)
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.28f),
-                                    animatedDominant.copy(alpha = 0.20f),
-                                    Color.White.copy(alpha = 0.06f)
-                                )
-                            ),
-                            shape = controlsShape
-                        )
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    colors.surfaceHighest.copy(alpha = 0.65f),
-                                    colors.surfaceHigh.copy(alpha = 0.45f)
+                // Playback controls — prev / play / next
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val prevInteraction = remember { MutableInteractionSource() }
+                    val isPrevPressed by prevInteraction.collectIsPressedAsState()
+                    val prevNudgeX by animateFloatAsState(
+                        targetValue = if (isPrevPressed) -10f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                        label = "prev_nudge"
+                    )
+                    val prevScale by animateFloatAsState(
+                        targetValue = if (isPrevPressed) 0.82f else 1f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                        label = "prev_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .graphicsLayer {
+                                translationX = prevNudgeX.dp.toPx()
+                                scaleX = prevScale
+                                scaleY = prevScale
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = prevInteraction,
+                                indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
+                            ) { triggerPreviousAnimated() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.onSurface, modifier = Modifier.size(32.dp))
+                    }
+
+                    Spacer(modifier = Modifier.width(20.dp))
+
+                    val isLoading = state.playbackState == PlaybackState.Loading
+                    val isPlaying = state.playbackState is PlaybackState.Playing
+                    val playInteraction = remember { MutableInteractionSource() }
+                    val isPlayPressed by playInteraction.collectIsPressedAsState()
+                    val playScale by animateFloatAsState(
+                        targetValue = if (isPlayPressed) 0.84f else if (isPlaying) 1.05f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "hero_play_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .graphicsLayer {
+                                val s = if (isLoading) 0.95f else playScale
+                                scaleX = s
+                                scaleY = s
+                                shadowElevation = (if (isPlayPressed) 6f else 18f).dp.toPx()
+                                shape = CircleShape
+                                clip = false
+                            }
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(animatedDominant, animatedSecondary)
                                 )
                             )
-                        )
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable(
+                                interactionSource = playInteraction,
+                                indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.45f), radius = 36.dp),
+                                enabled = !isLoading
+                            ) { onPlayPause() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        val prevInteraction = remember { MutableInteractionSource() }
-                        val isPrevPressed by prevInteraction.collectIsPressedAsState()
-                        val prevNudgeX by animateFloatAsState(
-                            targetValue = if (isPrevPressed) -10f else 0f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                            label = "prev_nudge"
-                        )
-                        val prevScale by animateFloatAsState(
-                            targetValue = if (isPrevPressed) 0.82f else 1f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
-                            label = "prev_scale"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .graphicsLayer {
-                                    translationX = prevNudgeX.dp.toPx()
-                                    scaleX = prevScale
-                                    scaleY = prevScale
-                                }
-                                .clip(CircleShape)
-                                .clickable(
-                                    interactionSource = prevInteraction,
-                                    indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
-                                ) { triggerPreviousAnimated() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = colors.onSurface, modifier = Modifier.size(32.dp))
-                        }
-
-                        Spacer(modifier = Modifier.width(18.dp))
-
-                        val isLoading = state.playbackState == PlaybackState.Loading
-                        val isPlaying = state.playbackState is PlaybackState.Playing
-                        val playInteraction = remember { MutableInteractionSource() }
-                        val isPlayPressed by playInteraction.collectIsPressedAsState()
-                        val playScale by animateFloatAsState(
-                            targetValue = if (isPlayPressed) 0.84f else if (isPlaying) 1.05f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
-                            label = "hero_play_scale"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(68.dp)
-                                .graphicsLayer {
-                                    val s = if (isLoading) 0.95f else playScale
-                                    scaleX = s
-                                    scaleY = s
-                                    shadowElevation = (if (isPlayPressed) 6f else 18f).dp.toPx()
-                                    shape = CircleShape
-                                    clip = false
-                                }
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(animatedDominant, animatedSecondary)
-                                    )
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White, strokeWidth = 2.5.dp)
+                        } else {
+                            AnimatedContent(
+                                targetState = isPlaying,
+                                transitionSpec = {
+                                    (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                                        .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                                },
+                                label = "play_pause_morph"
+                            ) { playing ->
+                                Icon(
+                                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    contentDescription = if (playing) "Pause" else "Play",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(34.dp)
                                 )
-                                .clickable(
-                                    interactionSource = playInteraction,
-                                    indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.45f), radius = 36.dp),
-                                    enabled = !isLoading
-                                ) { onPlayPause() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White, strokeWidth = 2.5.dp)
-                            } else {
-                                AnimatedContent(
-                                    targetState = isPlaying,
-                                    transitionSpec = {
-                                        (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
-                                            .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
-                                    },
-                                    label = "play_pause_morph"
-                                ) { playing ->
-                                    Icon(
-                                        imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                        contentDescription = if (playing) "Pause" else "Play",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(34.dp)
-                                    )
-                                }
                             }
                         }
+                    }
 
-                        Spacer(modifier = Modifier.width(18.dp))
+                    Spacer(modifier = Modifier.width(20.dp))
 
-                        val nextInteraction = remember { MutableInteractionSource() }
-                        val isNextPressed by nextInteraction.collectIsPressedAsState()
-                        val nextNudgeX by animateFloatAsState(
-                            targetValue = if (isNextPressed) 10f else 0f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                            label = "next_nudge"
-                        )
-                        val nextScale by animateFloatAsState(
-                            targetValue = if (isNextPressed) 0.82f else 1f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
-                            label = "next_scale"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .graphicsLayer {
-                                    translationX = nextNudgeX.dp.toPx()
-                                    scaleX = nextScale
-                                    scaleY = nextScale
-                                }
-                                .clip(CircleShape)
-                                .clickable(
-                                    interactionSource = nextInteraction,
-                                    indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
-                                ) { triggerNextAnimated() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.onSurface, modifier = Modifier.size(32.dp))
-                        }
+                    val nextInteraction = remember { MutableInteractionSource() }
+                    val isNextPressed by nextInteraction.collectIsPressedAsState()
+                    val nextNudgeX by animateFloatAsState(
+                        targetValue = if (isNextPressed) 10f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                        label = "next_nudge"
+                    )
+                    val nextScale by animateFloatAsState(
+                        targetValue = if (isNextPressed) 0.82f else 1f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                        label = "next_scale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .graphicsLayer {
+                                translationX = nextNudgeX.dp.toPx()
+                                scaleX = nextScale
+                                scaleY = nextScale
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = nextInteraction,
+                                indication = ripple(bounded = false, radius = 24.dp, color = animatedDominant)
+                            ) { triggerNextAnimated() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = colors.onSurface, modifier = Modifier.size(32.dp))
                     }
                 }
 
