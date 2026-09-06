@@ -168,6 +168,7 @@ fun PlaylistDetailScreen(
     isSyncingSpotify: Boolean = false,
     quickPickSongs: List<Song> = emptyList(),
     initialArtworkUrl: String? = null,
+    ambientDominantColor: Color = Color.Unspecified,
     bottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val colors = LocalDreaminColors.current
@@ -243,10 +244,14 @@ fun PlaylistDetailScreen(
             })
     }
 
+    val fallbackDominant = remember(ambientDominantColor, colors.primary) {
+        if (ambientDominantColor != Color.Unspecified) ambientDominantColor.toArgb() else colors.primary.toArgb()
+    }
+
     var extractedTriad by remember(playlist.id) {
         mutableStateOf(
             cachedImmediateTriad ?: com.shyan.dreamin.data.service.PaletteTriad(
-                dominant = colors.surfaceContainer.toArgb(),
+                dominant = fallbackDominant,
                 secondary = colors.surfaceHigh.toArgb(),
                 accent = colors.surfaceHighest.toArgb()
             )
@@ -337,9 +342,9 @@ fun PlaylistDetailScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             // 🌌 Dynamic Fluid Liquid Mesh Background with Lissajous Harmonic Motion & Scroll Parallax
             FluidMeshGradientBackground(
-                dominantColor = animatedDominant,
-                secondaryColor = animatedSecondary,
-                accentColor = animatedAccent,
+                dominantColor = Color(extractedTriad.dominant),
+                secondaryColor = Color(extractedTriad.secondary),
+                accentColor = Color(extractedTriad.accent),
                 backgroundColor = colors.background,
                 isPlaying = isPlayingThisPlaylist,
                 isHeaderMode = true,
@@ -1001,7 +1006,10 @@ fun PlaylistDetailScreen(
                                     }
                                 }
 
-                                val suggested = quickPickSongs.take(6)
+                                val suggested = remember(quickPickSongs, songs) {
+                                    val existingIds = songs.map { it.id }.toSet()
+                                    quickPickSongs.filterNot { existingIds.contains(it.id) }.take(6)
+                                }
                                 if (suggested.isNotEmpty()) {
                                     suggested.forEach { s ->
                                         val isAdded = songs.any { it.id == s.id }
@@ -1647,9 +1655,9 @@ fun AddSongsToPlaylistDialog(
         }
     }
 
-    val displayList = remember(query, searchResults, quickPickSongs) {
-        if (query.trim().length >= 2) searchResults
-        else quickPickSongs
+    val displayList = remember(query, searchResults, quickPickSongs, existingSongIds) {
+        val raw = if (query.trim().length >= 2) searchResults else quickPickSongs
+        raw.filterNot { existingSongIds.contains(it.id) }
     }
     val addSongKeys = remember(displayList) {
         val countMap = HashMap<String, Int>(displayList.size)

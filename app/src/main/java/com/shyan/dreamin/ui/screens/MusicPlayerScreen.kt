@@ -376,7 +376,8 @@ private fun MainAppScaffold(
                             isSyncingSpotify = state.isSyncingSpotifyPlaylist,
                             quickPickSongs = remember(state.favorites, state.trendingCharts, state.recentlyPlayed) {
                                 (state.favorites + state.trendingCharts + state.recentlyPlayed).distinctBy { it.id }
-                            }
+                            },
+                            ambientDominantColor = Color(state.dominantColor)
                         )
                     }
                 }

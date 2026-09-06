@@ -35,46 +35,52 @@ fun FluidMeshGradientBackground(
     scrollOffsetProvider: (() -> Float)? = null,
     modifier: Modifier = Modifier
 ) {
-    // 🌊 1200ms Fluid Watercolor Color Crossfade when tracks or playlists change
+    // 🌊 1400ms Fluid Watercolor Color Crossfade when tracks or playlists change
     val animDominant by animateColorAsState(
         targetValue = dominantColor,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
         label = "mesh_dominant"
     )
 
     val animSecondary by animateColorAsState(
         targetValue = secondaryColor,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
         label = "mesh_secondary"
     )
 
     val animAccent by animateColorAsState(
         targetValue = accentColor,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
         label = "mesh_accent"
     )
 
-    // 🌸 Transient Color Bloom on Track / Playlist Switch
+    // 🌸 Transient Color Bloom on Track / Playlist Switch (Smooth ease without snapping)
     val bloomScale = remember { Animatable(1.0f) }
+    var isFirstBloomLaunch by remember { mutableStateOf(true) }
     LaunchedEffect(dominantColor) {
-        bloomScale.snapTo(1.25f)
+        if (isFirstBloomLaunch) {
+            isFirstBloomLaunch = false
+            return@LaunchedEffect
+        }
+        // Smoothly breathe without any abrupt jump or snapTo
+        bloomScale.animateTo(
+            targetValue = 1.05f,
+            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+        )
         bloomScale.animateTo(
             targetValue = 1.0f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessLow
-            )
+            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
         )
     }
 
-    // 🪐 Continuous Multi-Speed Orbital Drifts (120 FPS Phase-Isolated)
+    // 🪐 Continuous Multi-Speed Orbital Drifts (Constant durations ensure seamless orbit without phase reset on play/pause)
     val infiniteTransition = rememberInfiniteTransition(label = "mesh_orbit")
     
     val orbitPhase1 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (Math.PI * 2).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 15000 else 30000, easing = LinearEasing),
+            animation = tween(durationMillis = 24000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit_1"
@@ -84,19 +90,19 @@ fun FluidMeshGradientBackground(
         initialValue = 0f,
         targetValue = (Math.PI * 2).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 21000 else 42000, easing = LinearEasing),
+            animation = tween(durationMillis = 32000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit_2"
     )
 
-    // ✨ Organic Luminous Breathing Pulses
+    // ✨ Organic Luminous Breathing Pulses (Constant durations prevent sudden resets)
     val pulseTransition = rememberInfiniteTransition(label = "mesh_pulse")
     val pulse1 by pulseTransition.animateFloat(
         initialValue = 0.93f,
         targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 3800 else 6400, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 5200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_1"
@@ -105,7 +111,7 @@ fun FluidMeshGradientBackground(
         initialValue = 1.10f,
         targetValue = 0.90f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isPlaying) 5200 else 7800, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 7400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_2"
