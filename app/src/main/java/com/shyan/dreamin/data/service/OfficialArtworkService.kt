@@ -54,8 +54,7 @@ object OfficialArtworkService {
         onResolved: ((songId: String, posterUrl: String) -> Unit)? = null
     ) {
         songs.forEach { song ->
-            if (song.isSpotifyArtwork) return@forEach
-            if (song.artworkUrl.isNotBlank() && !song.artworkUrl.contains("default") && !song.artworkUrl.contains("50x50") && !song.artworkUrl.contains("150x150")) return@forEach
+            if (getCachedPoster(song) != null) return@forEach
             scope.launch(Dispatchers.IO) {
                 try {
                     prefetchSemaphore.withPermit {
@@ -70,7 +69,6 @@ object OfficialArtworkService {
     }
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
-        if (song.isSpotifyArtwork) return song.artworkUrl
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
         }
@@ -95,7 +93,6 @@ object OfficialArtworkService {
      * directly from official movie catalogs matching the song's language and DNA.
      */
     suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = ""): String? = withContext(Dispatchers.IO) {
-        if (song.isSpotifyArtwork) return@withContext song.artworkUrl
         getCachedPoster(song)?.let { return@withContext it }
 
         val cacheKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
@@ -146,13 +143,24 @@ object OfficialArtworkService {
         val m = Regex("(?i)\\s*\\(?\\s*(?:from|movie)\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*\\)?").find(song.title)
         if (m != null) {
             val cand = m.groupValues[1].replace(Regex("[\"\'\u201c\u2018\u201d\u2019]"), "").trim()
-            if (cand.isNotBlank() && cand.length >= 2) {
+            if (cand.isNotBlank()) {
                 movieName = cand
+            }
+        }
+        // Fallback to song.album if movieName not found in title, provided album is not a compilation
+        if (movieName.isBlank() && song.album.isNotBlank() && !COMPILATION_REGEX.containsMatchIn(song.album)) {
+            val cleanAlb = song.album.replace(Regex("(?i)\\s*\\(original\\s+motion\\s+picture\\s+soundtrack\\)"), "")
+                .replace(Regex("(?i)\\s*\\(original\\s+soundtrack\\)"), "")
+                .replace(Regex("(?i)\\s*\\(soundtrack\\)"), "")
+                .replace(Regex("[\"\'\u201c\u2018\u201d\u2019]"), "")
+                .trim()
+            if (cleanAlb.isNotBlank()) {
+                movieName = cleanAlb
             }
         }
 
         // Dual-Source Score Arbitration: Query both Apple Music and JioSaavn
-        val appleResult = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, detectedLang)
+        val appleResult = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
         val saavnResult = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
 
         val bestPoster = when {
@@ -184,7 +192,7 @@ object OfficialArtworkService {
         if (detectedLang.isNotBlank() && detectedLang != "english") {
             val phoneticAlt = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.generatePhoneticSuggestions(cleanTitle)
             if (!phoneticAlt.isNullOrBlank()) {
-                val altApple = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, detectedLang)
+                val altApple = fetchAppleMusicOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
                 val altSaavn = fetchJioSaavnSongOfficialCover(phoneticAlt, primaryArtist, movieName, detectedLang)
                 val altPoster = when {
                     altApple != null && altSaavn != null -> if (altApple.second >= altSaavn.second) altApple.first else altSaavn.first
@@ -212,7 +220,7 @@ object OfficialArtworkService {
             .replace("&gt;", ">")
     }
 
-    private fun fetchAppleMusicOfficialCover(title: String, artist: String, targetLanguage: String): Pair<String, Int>? {
+    private fun fetchAppleMusicOfficialCover(title: String, artist: String, movieHint: String = "", targetLanguage: String): Pair<String, Int>? {
         try {
             val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(title)
             val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else title
@@ -221,6 +229,9 @@ object OfficialArtworkService {
             } else ""
 
             val searchQueries = mutableListOf<String>()
+            if (movieHint.isNotBlank()) {
+                searchQueries.add("$cleanTitle $movieHint")
+            }
             val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
             for (a in artistTokens.take(2)) {
                 searchQueries.add("$cleanTitle $a")
@@ -328,10 +339,11 @@ object OfficialArtworkService {
                         }
                     }
 
-                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
+                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini" or movieHint "3")
                     val movieFromTrack = Regex("(?i)from\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*[\\)\\]]").find(trackName)?.groupValues?.get(1)?.trim()
-                    if (!movieFromTrack.isNullOrBlank()) {
-                        if (collectionName.contains(movieFromTrack, ignoreCase = true)) {
+                    val targetMovie = if (movieHint.isNotBlank()) movieHint else movieFromTrack
+                    if (!targetMovie.isNullOrBlank()) {
+                        if (collectionName.contains(targetMovie, ignoreCase = true)) {
                             score += 35000 // Verified Authentic Theatrical Movie Album
                         } else {
                             score -= 30000 // Repackaged into compilation/playlist
@@ -405,6 +417,9 @@ object OfficialArtworkService {
                 targetLanguage.replaceFirstChar { it.uppercase() }
             } else ""
             val searchQueries = mutableListOf<String>()
+            if (movieHint.isNotBlank()) {
+                searchQueries.add("$title $movieHint")
+            }
             val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
             for (a in artistTokens.take(2)) {
                 searchQueries.add("$title $a")
@@ -473,8 +488,15 @@ object OfficialArtworkService {
                         }
                     }
 
-                    if (movieHint.isNotBlank() && alb.contains(movieHint, ignoreCase = true)) {
-                        score += 15000
+                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini" or movieHint "3")
+                    val movieFromTrack = Regex("(?i)from\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*[\\)\\]]").find(resTitle)?.groupValues?.get(1)?.trim()
+                    val targetMovie = if (movieHint.isNotBlank()) movieHint else movieFromTrack
+                    if (!targetMovie.isNullOrBlank()) {
+                        if (alb.contains(targetMovie, ignoreCase = true)) {
+                            score += 35000 // Verified Authentic Theatrical Movie Album
+                        } else {
+                            score -= 30000 // Repackaged into compilation/playlist
+                        }
                     }
 
                     val albumType = more.optString("album_type", "").ifBlank { more.optString("type", "") }
@@ -522,16 +544,6 @@ object OfficialArtworkService {
                             textCombined.contains("- $targetLanguage")
                         ) {
                             score += 15000
-                        }
-                    }
-
-                    // Authentic Movie Album Alignment Check (e.g. From "Yaaradi Nee Mohini")
-                    val movieFromTrack = Regex("(?i)from\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*[\\)\\]]").find(resTitle)?.groupValues?.get(1)?.trim()
-                    if (!movieFromTrack.isNullOrBlank()) {
-                        if (alb.contains(movieFromTrack, ignoreCase = true)) {
-                            score += 35000 // Verified Authentic Theatrical Movie Album
-                        } else {
-                            score -= 30000 // Repackaged into compilation/playlist
                         }
                     }
 
