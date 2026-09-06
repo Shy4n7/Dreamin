@@ -157,19 +157,37 @@ object OfficialArtworkService {
                 movieName = cand
             }
         }
-        // Fallback to song.album if movieName not found in title, provided album is not a compilation
-        if (movieName.isBlank() && song.album.isNotBlank() && !COMPILATION_REGEX.containsMatchIn(song.album)) {
+        // Fallback to song.album if movieName not found in title, provided album is not a compilation and not a single
+        if (movieName.isBlank() && song.album.isNotBlank() && 
+            !COMPILATION_REGEX.containsMatchIn(song.album) && 
+            !song.album.contains("single", ignoreCase = true)
+        ) {
             val cleanAlb = song.album.replace(Regex("(?i)\\s*\\(original\\s+motion\\s+picture\\s+soundtrack\\)"), "")
                 .replace(Regex("(?i)\\s*\\(original\\s+soundtrack\\)"), "")
                 .replace(Regex("(?i)\\s*\\(soundtrack\\)"), "")
                 .replace(Regex("[\"\'\u201c\u2018\u201d\u2019]"), "")
                 .trim()
-            if (cleanAlb.isNotBlank()) {
+            if (cleanAlb.isNotBlank() && cleanAlb.length >= 2) {
                 movieName = cleanAlb
             }
         }
 
-        // Dual-Source Score Arbitration: Query both Apple Music and JioSaavn
+        // STEP 1: Authentic Theatrical Movie Album Search (Top Priority)
+        // If movie name is known, resolve the original theatrical movie soundtrack album directly
+        if (movieName.isNotBlank() && detectedLang != "english") {
+            val appleAlbum = fetchAppleMusicMovieAlbumCover(movieName, primaryArtist, detectedLang)
+            if (!appleAlbum.isNullOrBlank()) {
+                putCachedPoster(song, appleAlbum)
+                return@withContext appleAlbum
+            }
+            val saavnAlbum = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
+            if (!saavnAlbum.isNullOrBlank()) {
+                putCachedPoster(song, saavnAlbum)
+                return@withContext saavnAlbum
+            }
+        }
+
+        // STEP 2: Dual-Source Score Arbitration for song tracks (with strict anti-single rules)
         val appleResult = fetchAppleMusicOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
         val saavnResult = fetchJioSaavnSongOfficialCover(cleanTitle, primaryArtist, movieName, detectedLang)
 
@@ -185,15 +203,6 @@ object OfficialArtworkService {
         if (!bestPoster.isNullOrBlank()) {
             putCachedPoster(song, bestPoster)
             return@withContext bestPoster
-        }
-
-        // Query JioSaavn Official Movie Album API if movie name is identified
-        if (movieName.isNotBlank() && detectedLang != "english") {
-            val albumPoster = fetchJioSaavnMovieAlbumCover(movieName, detectedLang)
-            if (!albumPoster.isNullOrBlank()) {
-                putCachedPoster(song, albumPoster)
-                return@withContext albumPoster
-            }
         }
 
         // Phonetic Fallback via IntelliMatch (e.g. "mazhaye" -> "mazhaiye") for Indian regional songs
@@ -225,6 +234,66 @@ object OfficialArtworkService {
             .replace("&#39;", "'")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
+    }
+
+    private fun fetchAppleMusicMovieAlbumCover(movieName: String, artist: String, targetLanguage: String): String? {
+        try {
+            val cleanMovie = movieName.replace(Regex("(?i)[\\\"\\'\\“\\‘\\”\\’]"), "").trim()
+            if (cleanMovie.isBlank()) return null
+            val langHint = if (targetLanguage.isNotBlank() && targetLanguage != "english") {
+                targetLanguage.replaceFirstChar { it.uppercase() }
+            } else ""
+
+            val queries = mutableListOf<String>()
+            queries.add("$cleanMovie soundtrack")
+            val artistTokens = artist.split(",", "&", "/", "feat.", "ft.").map { it.trim() }.filter { it.isNotBlank() }
+            for (a in artistTokens.take(2)) {
+                queries.add("$cleanMovie $a")
+            }
+            if (langHint.isNotBlank()) {
+                queries.add("$cleanMovie $langHint")
+            }
+            queries.add(cleanMovie)
+
+            val movNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(cleanMovie)
+
+            for (q in queries) {
+                val encoded = URLEncoder.encode(q, "UTF-8")
+                val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=album&country=IN&limit=8"
+                val req = okhttp3.Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .build()
+                val text = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: continue
+
+                for (i in 0 until results.length()) {
+                    val it = results.getJSONObject(i)
+                    val collectionName = unescape(it.optString("collectionName", ""))
+                    val collectionType = it.optString("collectionType", "")
+                    val trackCount = it.optInt("trackCount", 0)
+                    val rawArtwork = it.optString("artworkUrl100", "")
+
+                    if (rawArtwork.isBlank()) continue
+
+                    val isComp = collectionType.equals("Compilation", ignoreCase = true) || COMPILATION_REGEX.containsMatchIn(collectionName)
+                    val isSingle = collectionType.equals("Single", ignoreCase = true) || collectionName.contains("Single", ignoreCase = true) || trackCount in 1..2
+                    if (isComp || isSingle) continue
+
+                    val colNorm = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.normalizePhonetics(collectionName)
+                    val isDirectMatch = colNorm == movNorm || colNorm.startsWith(movNorm) || colNorm.contains(movNorm)
+                    val isSoundtrack = collectionName.contains("Soundtrack", ignoreCase = true) || 
+                                       collectionName.contains("Original Motion Picture", ignoreCase = true) || 
+                                       collectionName.contains("Original Soundtrack", ignoreCase = true)
+
+                    if (isDirectMatch && (isSoundtrack || trackCount >= 3)) {
+                        return rawArtwork.replace("100x100bb.jpg", "1000x1000bb.jpg")
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return null
     }
 
     private fun fetchAppleMusicOfficialCover(title: String, artist: String, movieHint: String = "", targetLanguage: String): Pair<String, Int>? {
@@ -285,15 +354,21 @@ object OfficialArtworkService {
                     var score = (jaro * 5000).toInt()
 
                     val isCompilation = collectionType.equals("Compilation", ignoreCase = true) || COMPILATION_REGEX.containsMatchIn(collectionName)
+                    val isSingle = collectionType.equals("Single", ignoreCase = true) || 
+                                   collectionName.contains("Single", ignoreCase = true) || 
+                                   trackName.contains("Single", ignoreCase = true) || 
+                                   trackCount in 1..2
                     if (isCompilation) {
                         score -= 60000
+                    } else if (isSingle) {
+                        score -= 80000 // STRICT ANTI-SINGLE: User specifically requested original movie album, never the specially made single!
                     } else {
                         score += 10000
                         if (collectionType.equals("Album", ignoreCase = true) && trackCount >= 3) {
-                            score += 15000
+                            score += 25000
                         }
                         if (collectionName.contains("Soundtrack", ignoreCase = true) || collectionName.contains("Original Motion Picture", ignoreCase = true) || collectionName.contains("Original Soundtrack", ignoreCase = true)) {
-                            score += 25000
+                            score += 35000
                         }
                     }
 
@@ -392,6 +467,7 @@ object OfficialArtworkService {
                     val albTitle = unescape(alb.optString("title", ""))
                     val albImage = alb.optString("image", "")
                     val isCompilation = COMPILATION_REGEX.containsMatchIn(albTitle)
+                    val isSingle = albTitle.contains("single", ignoreCase = true) || alb.optString("type", "").equals("single", ignoreCase = true)
                     val isEditorial = albImage.contains("/editorial/") || albImage.contains("/playlist/") || albImage.contains("default")
 
                     // Language check on album title
@@ -402,7 +478,7 @@ object OfficialArtworkService {
                         otherLangs.any { albLower.contains("($it)") || albLower.contains("[$it]") }
                     } else false
 
-                    if (albImage.isNotBlank() && !isCompilation && !isEditorial && !isOtherLang) {
+                    if (albImage.isNotBlank() && !isCompilation && !isSingle && !isEditorial && !isOtherLang) {
                         return toHighResCover(albImage)
                     }
                 }
@@ -508,15 +584,20 @@ object OfficialArtworkService {
 
                     val albumType = more.optString("album_type", "").ifBlank { more.optString("type", "") }
                     val isCompilation = albumType.equals("compilation", ignoreCase = true) || COMPILATION_REGEX.containsMatchIn(alb)
+                    val isSingle = albumType.equals("single", ignoreCase = true) || 
+                                   alb.contains("single", ignoreCase = true) || 
+                                   resTitle.contains("single", ignoreCase = true)
                     if (isCompilation) {
                         score -= 60000 // Heavy rejection for compilation albums
+                    } else if (isSingle) {
+                        score -= 80000 // STRICT ANTI-SINGLE: Reject specially made single covers
                     } else {
                         score += 10000
                         if (albumType.equals("album", ignoreCase = true)) {
-                            score += 15000
+                            score += 25000
                         }
                         if (alb.contains("Soundtrack", ignoreCase = true) || alb.contains("Original Motion Picture", ignoreCase = true) || alb.contains("Original Soundtrack", ignoreCase = true)) {
-                            score += 25000
+                            score += 35000
                         }
                     }
 

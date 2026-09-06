@@ -166,7 +166,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             historyRepo.getRecentlyPlayed().distinctUntilChanged().collect { songs ->
                 _uiState.update { it.copy(recentlyPlayed = songs) }
-                songs.forEach { song ->
+                // Throttle background poster resolution for top 5 recently played after initial render settles
+                delay(3000L)
+                songs.take(5).forEach { song ->
                     launch(Dispatchers.IO) {
                         try {
                             if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) == null) {
@@ -187,7 +189,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             historyRepo.getTopSongs().distinctUntilChanged().collect { songs ->
                 _uiState.update { it.copy(topSongs = songs) }
-                songs.forEach { song ->
+                // Throttle background poster resolution for top 5 top songs after initial render settles
+                delay(4000L)
+                songs.take(5).forEach { song ->
                     launch(Dispatchers.IO) {
                         try {
                             if (song.artworkUrl.isBlank() || song.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) == null) {
@@ -215,7 +219,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         } ?: false
                     )
                 }
-                com.shyan.dreamin.data.service.OfficialArtworkService.prefetchSongListArtworks(songs, viewModelScope) { id, poster ->
+                delay(5000L)
+                com.shyan.dreamin.data.service.OfficialArtworkService.prefetchSongListArtworks(songs.take(8), viewModelScope) { id, poster ->
                     updateSongArtworkAcrossApp(id, poster)
                 }
             }
@@ -250,20 +255,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun loadPlaylists() {
         viewModelScope.launch {
             playlistRepo.observePlaylists().collect { lists ->
-                // Fetch artworks in parallel on IO, then update state once
+                // Load artworks from DB without CPU-heavy synchronous palette extraction on startup
                 val artworks = withContext(Dispatchers.IO) {
                     lists.associate { playlist ->
                         val arts = playlistRepo.getFirstFourArtworks(playlist.id)
-                        val primaryArt = playlist.coverUrl ?: arts.firstOrNull()
-                        if (!primaryArt.isNullOrBlank()) {
-                            try {
-                                val triad = com.shyan.dreamin.data.service.PaletteMemoryCache.extractPaletteTriad(
-                                    getApplication(),
-                                    primaryArt
-                                )
-                                com.shyan.dreamin.data.service.PaletteMemoryCache.putTriad("playlist_${playlist.id}", triad)
-                            } catch (_: Exception) {}
-                        }
                         playlist.id to arts
                     }
                 }
@@ -1347,17 +1342,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         // 2. Select best candidate release from the provider
                         val bestItem = items.minByOrNull { item ->
                             val alb = unescapeHtml(item.optJSONObject("more_info")?.optString("album", "")?.trim() ?: "").lowercase()
+                            val albType = item.optJSONObject("more_info")?.optString("album_type", "")?.lowercase() ?: ""
                             val itemImage = item.optString("image", "").lowercase()
                             val isEditorialOrPlaylist = itemImage.contains("/editorial/") || itemImage.contains("/playlist/") || itemImage.contains("/818/") || itemImage.contains("/888/") || itemImage.contains("compilation")
 
                             var score = 1000
                             val isComp = compilationRegex.containsMatchIn(alb)
+                            val isSingle = alb.contains("single") || albType == "single"
                             if (isComp) {
                                 score += 8000
+                            } else if (isSingle) {
+                                score += 5000 // Penalize single release so full movie soundtrack album is prioritized
                             } else {
                                 score -= 400
                                 if (alb.contains("soundtrack") || alb.contains("original motion picture")) {
-                                    score -= 600
+                                    score -= 800
                                 }
                             }
                             if (movieDetected.isNotBlank() && (alb == movieDetected || alb.contains(movieDetected) || movieDetected.contains(alb))) {
@@ -2282,28 +2281,33 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadChart(forceRefresh: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
+            val cached = userPrefs.cachedChart.first()
+            val hasStaleJunk = cached.any { it.title.contains("Scooty", ignoreCase = true) || it.title.contains("Don'u", ignoreCase = true) }
+            val hasValidCache = cached.isNotEmpty() && !hasStaleJunk && cached.any { it.artist.isNotBlank() }
+
             if (forceRefresh) {
                 _uiState.update { it.copy(isLoadingChart = true) }
+            } else if (hasValidCache) {
+                _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
+                prefetchTopTrendingArtworks(cached)
+                // Defer background Apple Music chart sync by 10s to ensure 120 FPS startup smoothness
+                delay(10000L)
             } else {
-                val cached = userPrefs.cachedChart.first()
-                val hasStaleJunk = cached.any { it.title.contains("Scooty", ignoreCase = true) || it.title.contains("Don'u", ignoreCase = true) }
-                if (cached.isNotEmpty() && !hasStaleJunk && cached.any { it.artist.isNotBlank() }) {
-                    _uiState.update { it.copy(trendingCharts = cached, isLoadingChart = false) }
-                    prefetchTopTrendingArtworks(cached)
-                } else {
-                    _uiState.update { it.copy(isLoadingChart = true) }
-                }
+                _uiState.update { it.copy(isLoadingChart = true) }
             }
 
-            // 1. Fetch Real-Time Live Top 50 Chart from Apple Music Official Feed
+            // 1. Fetch Real-Time Live Top 50 Chart from Apple Music Official Feed (bounded concurrency)
             val liveChartSongs = mutableListOf<Song>()
             try {
                 val pairs = com.shyan.dreamin.data.service.AppleChartsService.fetchLiveAppleTopCharts()
-                val deferredSearches = pairs.take(25).map { (t, a) ->
+                val chartSemaphore = Semaphore(2)
+                val deferredSearches = pairs.take(20).map { (t, a) ->
                     async {
-                        val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                        val firstArtist = a.split(",").firstOrNull()?.split("&")?.firstOrNull()?.trim() ?: ""
-                        searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil")
+                        chartSemaphore.withPermit {
+                            val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+                            val firstArtist = a.split(",").firstOrNull()?.split("&")?.firstOrNull()?.trim() ?: ""
+                            searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil")
+                        }
                     }
                 }
                 deferredSearches.forEach { def ->
@@ -2325,14 +2329,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (finalTrending.isNotEmpty()) {
                 _uiState.update { it.copy(trendingCharts = finalTrending, isLoadingChart = false) }
                 userPrefs.saveChartCache(finalTrending)
-                // Proactively resolve official movie posters for charts if missing
-                finalTrending.forEach { chartSong ->
+                // Proactively resolve official movie posters for top 6 charts throttled
+                val posterSemaphore = Semaphore(2)
+                finalTrending.take(6).forEach { chartSong ->
                     launch(Dispatchers.IO) {
                         try {
-                            if (chartSong.artworkUrl.isBlank() || chartSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(chartSong) == null) {
-                                val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(chartSong)
-                                if (!poster.isNullOrBlank()) {
-                                    updateSongArtworkAcrossApp(chartSong.id, poster)
+                            posterSemaphore.withPermit {
+                                if (chartSong.artworkUrl.isBlank() || chartSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(chartSong) == null) {
+                                    val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(chartSong)
+                                    if (!poster.isNullOrBlank()) {
+                                        updateSongArtworkAcrossApp(chartSong.id, poster)
+                                    }
                                 }
                             }
                         } catch (_: Exception) {}
