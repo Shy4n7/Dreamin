@@ -303,6 +303,22 @@ object IntelliMatchEngine {
             score += 500
         }
 
+        val hasDecentTitleMatch = targetBaseKey == candBaseKey ||
+            targetFullKey == candBaseKey ||
+            maxTitleSim >= 0.70 ||
+            (maxTitleSim >= 0.58 && artistHits > 0) ||
+            (targetBaseKey.length >= 4 && candBaseKey.contains(targetBaseKey)) ||
+            (candBaseKey.length >= 4 && targetBaseKey.contains(candBaseKey))
+
+        if (!hasDecentTitleMatch) {
+            return MatchResult(
+                song = candidate,
+                score = 0,
+                confidence = MatchConfidence.LOW,
+                reason = "Rejected: Low title similarity (${(maxTitleSim * 100).toInt()}%) and no artist match"
+            )
+        }
+
         val isExactTrackMatch = (targetBaseKey == candBaseKey || maxTitleSim >= 0.85) && artistHits > 0
 
         // 4. Adaptive Duration Tolerance (Soundtrack vs Audio Cut)
@@ -315,15 +331,17 @@ object IntelliMatchEngine {
         }
 
         // 5. Stream Popularity Weight (Logarithmic Scoring)
-        // Prioritizes official multi-million stream releases over fan/karaoke/low-stream duplicates
+        // Prioritizes official multi-million stream releases over fan/karaoke/low-stream duplicates ONLY as a tie-breaker
         if (candidate.playCount > 0L) {
             val logPopularity = kotlin.math.log10(candidate.playCount.toDouble()).coerceAtLeast(0.0)
-            score += (logPopularity * 150.0).toInt()
+            val popularityBonus = (logPopularity * 60.0).toInt().coerceAtMost(350)
+            score += popularityBonus
         }
 
         val confidence = when {
-            isExactTrackMatch || score >= 1600 -> MatchConfidence.HIGH
-            score >= 1200 -> MatchConfidence.MEDIUM
+            isExactTrackMatch -> MatchConfidence.HIGH
+            score >= 1700 && maxTitleSim >= 0.75 -> MatchConfidence.HIGH
+            score >= 1400 && (maxTitleSim >= 0.65 || artistHits > 0) -> MatchConfidence.MEDIUM
             else -> MatchConfidence.LOW
         }
 

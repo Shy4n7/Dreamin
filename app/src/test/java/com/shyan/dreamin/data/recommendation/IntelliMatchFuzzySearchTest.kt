@@ -67,4 +67,25 @@ class IntelliMatchFuzzySearchTest {
         assertTrue(cleanTitle.contains("Why_This_Kolaveri_Di") || cleanTitle.contains("Why This Kolaveri Di"))
         assertEquals("Dhanush, Anirudh", cleanArtist)
     }
+
+    @Test
+    fun testRejectUnrelatedPopularSong() {
+        val fakeCandidate = Song(
+            id = "popular_hit",
+            title = "Chaleya",
+            artist = "Arijit Singh, Shilpa Rao",
+            playCount = 100_000_000L
+        )
+
+        val result = IntelliMatchEngine.evaluateCandidate(
+            targetTitle = "En Iniya Pon Nilave",
+            targetArtist = "K.J. Yesudas",
+            targetDurationMs = 240000L,
+            candidate = fakeCandidate,
+            targetLanguage = "tamil"
+        )
+
+        assertEquals(IntelliMatchEngine.MatchConfidence.LOW, result.confidence)
+        assertEquals(0, result.score)
+    }
 }

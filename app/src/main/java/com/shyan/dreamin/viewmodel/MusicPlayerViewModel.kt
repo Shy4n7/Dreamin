@@ -77,6 +77,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var preloadJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
+    private val dismissedSyncAlertPlaylists = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val unmatchableTrackSignatures = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -549,6 +551,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun dismissSpotifySyncAlert(playlistId: Long) {
+        dismissedSyncAlertPlaylists.add(playlistId)
         _uiState.update { state ->
             state.copy(spotifySyncAlerts = state.spotifySyncAlerts.filterNot { it.playlistId == playlistId })
         }
@@ -557,8 +560,59 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun unlinkSpotifyPlaylist(playlistId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             playlistRepo.updateSpotifyPlaylistId(playlistId, null)
+            dismissedSyncAlertPlaylists.add(playlistId)
             dismissSpotifySyncAlert(playlistId)
         }
+    }
+
+    private suspend fun isTrackAlreadyInPlaylist(
+        track: com.shyan.dreamin.data.service.SpotifyImportedTrack,
+        existingSongs: List<Song>,
+        existingKeys: Set<String>
+    ): Boolean {
+        // 1. Direct normalized key
+        val key = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(track.title)
+        if (existingKeys.contains(key)) return true
+
+        // 2. Decomposed base title key & full clean key
+        val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(track.title)
+        val baseKey = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(baseTitle)
+        if (baseKey.length >= 3 && existingKeys.contains(baseKey)) return true
+        val fullCleanKey = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(fullClean)
+        if (fullCleanKey.length >= 3 && existingKeys.contains(fullCleanKey)) return true
+
+        // 3. Learning memory cache hit: if this track was previously matched to a song that is in existingSongs
+        val primaryArtist = track.artist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
+        val signature = "${baseTitle.lowercase().trim()}|${primaryArtist.lowercase().trim()}"
+        try {
+            val cached = importMatchDao.getMatch(signature)
+            if (cached != null && existingSongs.any { it.id == cached.songId }) {
+                return true
+            }
+        } catch (_: Exception) {}
+
+        // 4. Substring & artist overlap check against existing songs
+        val targetArtistsNormalized = track.artist.lowercase()
+            .split(",", "&", "feat.", "ft.", "/", ";")
+            .map { it.replace(Regex("[^a-z0-9]"), "").trim() }
+            .filter { it.length >= 2 }
+
+        val targetBaseKey = baseKey.replace(Regex("[^a-z0-9]"), "")
+        if (targetBaseKey.length >= 4) {
+            val existsWithArtist = existingSongs.any { s ->
+                val sKey = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(s.displayTitle)
+                val titleMatches = sKey == targetBaseKey ||
+                    (sKey.length >= 4 && (sKey.contains(targetBaseKey) || targetBaseKey.contains(sKey))) ||
+                    com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(sKey, targetBaseKey) >= 0.85
+                if (!titleMatches) return@any false
+
+                val sArtistNorm = s.artist.lowercase().replace(Regex("[^a-z0-9]"), "")
+                targetArtistsNormalized.isEmpty() || targetArtistsNormalized.any { sArtistNorm.contains(it) || it.contains(sArtistNorm) }
+            }
+            if (existsWithArtist) return true
+        }
+
+        return false
     }
 
     fun checkSpotifyPlaylistsForUpdates(playlists: List<com.shyan.dreamin.data.local.Playlist>? = null) {
@@ -571,6 +625,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val alerts = mutableListOf<SpotifySyncAlert>()
                 for (pl in spotifyPlaylists) {
                     val spotifyId = pl.spotifyPlaylistId ?: continue
+                    if (dismissedSyncAlertPlaylists.contains(pl.id)) continue
+
                     try {
                         val details = com.shyan.dreamin.data.service.SpotifyImportService.fetchPlaylistDetails(spotifyId, getApplication())
                         if (details == null) {
@@ -579,8 +635,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             val existingSongs = playlistRepo.getSongs(pl.id)
                             val existingKeys = existingSongs.map { com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(it.displayTitle) }.toSet()
                             val newTracks = details.tracks.filterNot { t ->
-                                val key = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(t.title)
-                                existingKeys.contains(key)
+                                val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(t.title)
+                                val primaryArtist = t.artist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
+                                val sig = "${pl.id}|${baseTitle.lowercase().trim()}|${primaryArtist.lowercase().trim()}"
+                                if (unmatchableTrackSignatures.contains(sig)) return@filterNot true
+
+                                isTrackAlreadyInPlaylist(t, existingSongs, existingKeys)
                             }
                             if (newTracks.isNotEmpty()) {
                                 alerts.add(SpotifySyncAlert(playlistId = pl.id, playlistName = pl.name, newTrackCount = newTracks.size, isUnavailable = false))
@@ -601,6 +661,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun syncSpotifyPlaylist(playlistId: Long) {
         if (_uiState.value.isSyncingSpotifyPlaylist) return
+        dismissedSyncAlertPlaylists.remove(playlistId)
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isSyncingSpotifyPlaylist = true) }
             try {
@@ -618,18 +679,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val existingKeys = existingSongs.map { com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(it.displayTitle) }.toSet()
 
                 val newTracks = details.tracks.filterNot { t ->
-                    val key = com.shyan.dreamin.data.recommendation.OfficialSongFilter.normalizeSongKey(t.title)
-                    existingKeys.contains(key)
+                    isTrackAlreadyInPlaylist(t, existingSongs, existingKeys)
                 }
 
                 if (newTracks.isNotEmpty()) {
                     val playlistLang = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.detectDominantPlaylistLanguage(details.tracks, details.title)
                     val newlyMatched = mutableListOf<Song>()
                     for (track in newTracks) {
+                        val (baseTitle, _) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(track.title)
+                        val primaryArtist = track.artist.split(",", "&", "feat.", "ft.", "/", ";").firstOrNull()?.trim() ?: ""
+                        val sig = "${playlistId}|${baseTitle.lowercase().trim()}|${primaryArtist.lowercase().trim()}"
+
                         val (matched, _) = matchSpotifyTrack(track, playlistLang)
                         if (matched != null) {
-                            val art = if (track.artworkUrl.isNotBlank()) track.artworkUrl else matched.artworkUrl
-                            newlyMatched.add(matched.copy(artworkUrl = art))
+                            if (existingSongs.none { it.id == matched.id } && newlyMatched.none { it.id == matched.id }) {
+                                val art = if (track.artworkUrl.isNotBlank()) track.artworkUrl else matched.artworkUrl
+                                newlyMatched.add(matched.copy(artworkUrl = art))
+                            }
+                        } else {
+                            unmatchableTrackSignatures.add(sig)
                         }
                     }
                     if (newlyMatched.isNotEmpty()) {
@@ -672,14 +740,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         try {
             val cached = importMatchDao.getMatch(signature)
             if (cached != null) {
-                val cachedSong = Song(
-                    id = cached.songId,
-                    title = cached.songTitle,
-                    artist = cached.songArtist,
-                    artworkUrl = cached.artworkUrl,
-                    duration = cached.duration
-                )
-                return@withContext Pair(cachedSong, null)
+                val cachedTitleClean = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(cached.songTitle).first.lowercase().replace(Regex("[^a-z0-9]"), "")
+                val targetTitleClean = cleanBaseTitle.lowercase().replace(Regex("[^a-z0-9]"), "")
+                val sim = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.jaroWinkler(cachedTitleClean, targetTitleClean)
+                val isSimilar = sim >= 0.60 ||
+                    (cachedTitleClean.length >= 4 && targetTitleClean.contains(cachedTitleClean)) ||
+                    (targetTitleClean.length >= 4 && cachedTitleClean.contains(targetTitleClean))
+
+                if (isSimilar) {
+                    val cachedSong = Song(
+                        id = cached.songId,
+                        title = cached.songTitle,
+                        artist = cached.songArtist,
+                        artworkUrl = cached.artworkUrl,
+                        duration = cached.duration
+                    )
+                    return@withContext Pair(cachedSong, null)
+                }
             }
         } catch (_: Exception) {}
 
