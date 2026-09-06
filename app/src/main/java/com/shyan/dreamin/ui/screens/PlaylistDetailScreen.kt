@@ -607,6 +607,7 @@ fun PlaylistDetailScreen(
                     }
                 }
 
+                val headerArtworks = remember(songs) { songs.take(4).map { it.displayArtworkUrl } }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -620,7 +621,7 @@ fun PlaylistDetailScreen(
                     ) {
                     // Hero Header Item (Always shown)
                     if (!isSearchActive || searchQuery.isBlank()) {
-                        item {
+                        item(key = "playlist_hero_header", contentType = "PlaylistHeroHeader") {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -640,7 +641,7 @@ fun PlaylistDetailScreen(
                                     }
                                 ) {
                                     PlaylistCoverArt(
-                                        artworkUrls = songs.map { it.displayArtworkUrl },
+                                        artworkUrls = headerArtworks,
                                         coverUrl = playlist.coverUrl,
                                         size = 164.dp,
                                         shape = RoundedCornerShape(22.dp)
@@ -1929,7 +1930,7 @@ fun PlaylistSongRow(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .onGloballyPositioned { onHeightMeasured(it.size.height.toFloat()) }
+            .then(if (isDragging) Modifier.onGloballyPositioned { onHeightMeasured(it.size.height.toFloat()) } else Modifier)
             .graphicsLayer {
                 translationY = if (isDragging) dragOffsetY else 0f
                 scaleX = if (isDragging) 1.03f else pressScale
@@ -2205,7 +2206,11 @@ fun ArtworkBox(
         modifier = Modifier.size(52.dp)
     ) {
         AsyncImage(
-            model = artworkUrl,
+            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                .data(artworkUrl)
+                .size(coil.size.Size(160, 160))
+                .crossfade(false)
+                .build(),
             contentDescription = null,
             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
             contentScale = ContentScale.Crop

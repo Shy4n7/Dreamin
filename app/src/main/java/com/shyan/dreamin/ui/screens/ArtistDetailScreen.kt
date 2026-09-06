@@ -265,7 +265,8 @@ fun ArtistDetailScreen(
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(song.displayArtworkUrl)
-                                .crossfade(200)
+                                .size(coil.size.Size(160, 160))
+                                .crossfade(false)
                                 .build(),
                             contentDescription = null,
                             modifier = Modifier

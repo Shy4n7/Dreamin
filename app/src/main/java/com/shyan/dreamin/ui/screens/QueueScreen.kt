@@ -466,7 +466,8 @@ fun UpNextRow(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(song.displayArtworkUrl)
-                    .crossfade(200)
+                    .size(coil.size.Size(128, 128))
+                    .crossfade(false)
                     .build(),
                 contentDescription = null,
                 modifier = Modifier
@@ -908,7 +909,8 @@ fun QueueSongRow(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(song.displayArtworkUrl)
-                    .crossfade(200)
+                    .size(coil.size.Size(160, 160))
+                    .crossfade(false)
                     .build(),
                 contentDescription = "Artwork for ${song.displayTitle}",
                 modifier = Modifier

@@ -1000,7 +1000,8 @@ fun HorizontalSongCard(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(song.displayArtworkUrl)
-                    .crossfade(200)
+                    .size(coil.size.Size(200, 200))
+                    .crossfade(false)
                     .build(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
@@ -1152,7 +1153,8 @@ fun FeaturedHeroCarousel(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(song.displayArtworkUrl)
-                        .crossfade(200)
+                        .size(coil.size.Size(400, 400))
+                        .crossfade(false)
                         .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
@@ -1257,7 +1259,8 @@ fun JumpBackInCard(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(session.song.displayArtworkUrl)
-                    .crossfade(200)
+                    .size(coil.size.Size(160, 160))
+                    .crossfade(false)
                     .build(),
                 contentDescription = null,
                 modifier = Modifier
@@ -1593,12 +1596,12 @@ fun HomeFeedOnlyContent(
         if (trending.isEmpty() && recommendations.isEmpty()) {
             if (isLoading) {
                 // Hoist shimmer brush so all 7 rows share one InfiniteTransition
-                item(key = "shimmer_list") {
+                item(key = "shimmer_list", contentType = "ShimmerList") {
                     ShimmerSongList(count = 7)
                 }
             } else {
                 
-                item {
+                item(key = "home_empty_state", contentType = "EmptyState") {
                     val colors = LocalDreaminColors.current
                     Box(
                         modifier = Modifier
@@ -1630,7 +1633,7 @@ fun HomeFeedOnlyContent(
         }
 
         
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item(key = "home_bottom_spacer", contentType = "Spacer") { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }
 

@@ -256,14 +256,15 @@ fun MiniPlayerProgressBar(
     val colors = LocalDreaminColors.current
     val barColor = accentColor ?: colors.primary
     val trackColor = colors.surfaceHighest.copy(alpha = 0.45f)
-    val progressState by progressFlow.collectAsStateWithLifecycle()
+    val progressState = progressFlow.collectAsStateWithLifecycle()
     Spacer(
         modifier = Modifier
             .fillMaxWidth()
             .height(2.5.dp)
             .drawBehind {
-                val progress = if (progressState.durationMs > 0) {
-                    (progressState.currentPositionMs.toFloat() / progressState.durationMs).coerceIn(0f, 1f)
+                val current = progressState.value
+                val progress = if (current.durationMs > 0) {
+                    (current.currentPositionMs.toFloat() / current.durationMs).coerceIn(0f, 1f)
                 } else 0f
                 drawRect(trackColor)
                 drawRect(
@@ -750,7 +751,7 @@ fun SongRow(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(song.displayArtworkUrl)
                         .size(coil.size.Size(160, 160))
-                        .crossfade(150)
+                        .crossfade(false)
                         .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
