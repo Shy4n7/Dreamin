@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,8 @@ fun PosterPickerBottomSheet(
 ) {
     val colors = LocalDreaminColors.current
     val scope = rememberCoroutineScope()
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
     var candidatePosters by remember(song.id) { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember(song.id) { mutableStateOf(true) }
 
@@ -55,7 +58,7 @@ fun PosterPickerBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = colors.surfaceHigh,
+        containerColor = colors.surfaceHigh.copy(alpha = 0.82f),
         contentColor = colors.onSurface,
         dragHandle = {
             Box(
@@ -67,7 +70,18 @@ fun PosterPickerBottomSheet(
                     .background(Color.White.copy(alpha = 0.3f))
             )
         },
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = sheetShape,
+        modifier = Modifier.border(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.35f),
+                    colors.primary.copy(alpha = 0.15f),
+                    Color.Transparent
+                )
+            ),
+            shape = sheetShape
+        )
     ) {
         Column(
             modifier = Modifier

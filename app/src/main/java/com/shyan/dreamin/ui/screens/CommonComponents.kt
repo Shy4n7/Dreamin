@@ -764,18 +764,40 @@ fun SongRow(
                 }
                 .clip(RoundedCornerShape(18.dp))
                 .border(
-                    1.dp,
-                    if (isPlaying) colors.primary.copy(alpha = 0.5f) else colors.outlineVariant.copy(alpha = 0.05f),
-                    RoundedCornerShape(18.dp)
+                    width = 1.dp,
+                    brush = if (isPlaying) {
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.35f),
+                                colors.primary.copy(alpha = 0.60f),
+                                Color.White.copy(alpha = 0.08f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    },
+                    shape = RoundedCornerShape(18.dp)
                 )
                 .background(
                     if (isPlaying) {
                         Brush.horizontalGradient(
-                            listOf(colors.primary.copy(alpha = 0.15f), colors.surfaceHighest.copy(alpha = 0.6f))
+                            listOf(
+                                colors.primary.copy(alpha = 0.22f),
+                                colors.surfaceHighest.copy(alpha = 0.65f),
+                                colors.primary.copy(alpha = 0.08f)
+                            )
                         )
                     } else {
                         Brush.verticalGradient(
-                            listOf(colors.surfaceHighest.copy(alpha = 0.4f), colors.surfaceHigh.copy(alpha = 0.3f))
+                            listOf(
+                                colors.surfaceHighest.copy(alpha = 0.40f),
+                                colors.surfaceHigh.copy(alpha = 0.25f)
+                            )
                         )
                     }
                 )
@@ -907,13 +929,25 @@ fun SongQuickActionsBottomSheet(
 ) {
     val colors = LocalDreaminColors.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surfaceHighest,
+        containerColor = colors.surfaceHighest.copy(alpha = 0.85f),
         contentColor = colors.onSurface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = sheetShape,
+        modifier = Modifier.border(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.35f),
+                    colors.primary.copy(alpha = 0.15f),
+                    Color.Transparent
+                )
+            ),
+            shape = sheetShape
+        )
     ) {
         Column(
             modifier = Modifier
