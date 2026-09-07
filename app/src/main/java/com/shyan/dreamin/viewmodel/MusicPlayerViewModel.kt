@@ -1060,7 +1060,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (matching != null) {
                         state.copy(
                             currentSong = matching,
-                            currentSongIsFavorite = state.favorites.any { f -> f.id == matching.id }
+                            currentSongIsFavorite = state.favorites.any { f -> f.id == matching.id },
+                            userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != matching.id }
                         )
                     } else {
                         val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
@@ -1073,7 +1074,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             )
                             state.copy(
                                 currentSong = newSong,
-                                currentSongIsFavorite = state.favorites.any { f -> f.id == newSong.id }
+                                currentSongIsFavorite = state.favorites.any { f -> f.id == newSong.id },
+                                userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != newSong.id }
                             )
                         } else state
                     }
@@ -1493,17 +1495,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     /**
-     * 🚀 Preload the next track in the queue directly into ExoPlayer.
-     * By having the next MediaItem already in ExoPlayer's playlist (index 1),
-     * playback transitions seamlessly with zero gap and ExoPlayer never enters
-     * STATE_ENDED. This eliminates background service termination crashes.
+     * Gapless Playback Engine: Preloads the immediate next media item from the active queue
+     * directly into ExoPlayer's playlist (index 1). When the current track ends, ExoPlayer
+     * seamlessly crossfades into the preloaded track with 0ms gap.
      */
-    private fun preloadNextMediaItemInQueue() {
+    private fun preloadNextMediaItemInQueue(forceImmediate: Boolean = false) {
         preloadJob?.cancel()
         preloadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Wait briefly so current song finishes its immediate setup & buffering
-                delay(1200)
+                if (!forceImmediate) {
+                    // Wait briefly so current song finishes its immediate setup & buffering
+                    delay(1200)
+                }
 
                 val state = _uiState.value
                 val currentSong = state.currentSong ?: return@launch
@@ -1555,11 +1558,46 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     activeC.addMediaItem(mediaItem)
                     android.util.Log.d("MusicVM", "Preloaded next track into ExoPlayer: ${nextSong.title}")
                 }
+
+                try {
+                    val context = getApplication<Application>()
+                    com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(context, streamUrl, viewModelScope)
+                } catch (_: Exception) {}
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.w("MusicVM", "Failed to preload next track: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Synchronizes ExoPlayer's preloaded item with queue changes immediately.
+     * When songs are queued next, reordered, or removed, any stale preloaded track
+     * at index 1 is pruned from ExoPlayer and replaced with the true upcoming song.
+     */
+    private fun syncPreloadedMediaItem() {
+        val state = _uiState.value
+        val current = state.currentSong ?: return
+        val queue = state.queue
+        val currentIdx = queue.indexOfFirst { it.id == current.id }
+        val nextSong: Song? = when {
+            state.repeatMode == TrackRepeatMode.ONE -> current
+            currentIdx >= 0 && currentIdx + 1 < queue.size -> queue[currentIdx + 1]
+            (state.repeatMode == TrackRepeatMode.ALL || state.playlistQueueActive) && queue.isNotEmpty() -> queue.first()
+            else -> null
+        }
+
+        val activeC = controller
+        if (activeC != null && activeC.mediaItemCount > 1) {
+            val queuedId = runCatching { activeC.getMediaItemAt(1).mediaId }.getOrNull()
+            if (queuedId != null && queuedId != nextSong?.id) {
+                activeC.removeMediaItem(1)
+            }
+        }
+
+        if (nextSong != null) {
+            preloadNextMediaItemInQueue(forceImmediate = true)
         }
     }
 
@@ -1619,7 +1657,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 queue = newQueue,
                 playbackState = PlaybackState.Loading,
                 currentSongIsFavorite = it.favorites.any { s -> s.id == song.id },
-                playlistQueueActive = isPlaylistActive
+                playlistQueueActive = isPlaylistActive,
+                userQueuedSongIds = it.userQueuedSongIds.filter { qId -> qId != song.id }
             )
         }
         _progress.value = PlaybackProgress(0L, 0L)
@@ -2059,6 +2098,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = updatedUserQueued
             )
         }
+        syncPreloadedMediaItem()
     }
 
     fun playNext(song: Song) {
@@ -2078,6 +2118,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = updatedUserQueued
             )
         }
+        syncPreloadedMediaItem()
     }
 
     fun removeFromQueue(song: Song) {
@@ -2087,6 +2128,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = state.userQueuedSongIds.filter { id -> id != song.id }
             )
         }
+        syncPreloadedMediaItem()
     }
 
     fun restoreToQueue(song: Song, index: Int) {
@@ -2103,6 +2145,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state
             }
         }
+        syncPreloadedMediaItem()
     }
 
     fun clearQueue() {
@@ -2113,6 +2156,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = emptyList()
             )
         }
+        syncPreloadedMediaItem()
     }
 
     fun reorderQueue(fromIndex: Int, toIndex: Int) {
@@ -2124,6 +2168,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             mutable.add(toIndex, item)
             state.copy(queue = mutable.toList())
         }
+        syncPreloadedMediaItem()
     }
 
     fun toggleQueue() {
