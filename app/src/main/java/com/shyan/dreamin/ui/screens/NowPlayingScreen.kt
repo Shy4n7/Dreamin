@@ -890,6 +890,29 @@ fun NowPlayingScreen(
                             maxLines = 1,
                             modifier = Modifier.basicMarquee()
                         )
+                        // YouTube fallback source badge
+                        if (state.currentSongStreamSource == "youtube") {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFFFB300).copy(alpha = 0.22f))
+                                    .border(
+                                        width = 0.5.dp,
+                                        color = Color(0xFFFFB300).copy(alpha = 0.55f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    "▶ YouTube",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFB300),
+                                    letterSpacing = 0.4.sp
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             song.artist,

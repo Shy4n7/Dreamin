@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shyan.dreamin.data.model.AlbumItem
 import com.shyan.dreamin.data.model.PlaybackState
 import com.shyan.dreamin.data.model.PlayerUiState
 import com.shyan.dreamin.data.model.Song
@@ -126,13 +127,16 @@ private fun MainAppScaffold(
         { vm.resumeLastSession(); onOpenNowPlaying() }
     }
 
-    BackHandler(enabled = !isNowPlayingOpen && state.openPlaylistId == null && (state.isSearchActive || currentScreen != navScreens.first())) {
+    BackHandler(enabled = !isNowPlayingOpen && state.openPlaylistId == null && state.selectedAlbum == null && (state.isSearchActive || currentScreen != navScreens.first())) {
         if (state.isSearchActive) {
             vm.clearSearch()
         } else {
             val idx = navScreens.indexOf(currentScreen)
             if (idx > 0) onScreenChange(navScreens[idx - 1])
         }
+    }
+    BackHandler(enabled = state.selectedAlbum != null && !isNowPlayingOpen) {
+        vm.closeAlbum()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -240,6 +244,7 @@ private fun MainAppScaffold(
                             isSearchActive           = state.isSearchActive,
                             searchQuery              = state.searchQuery,
                             searchResults            = state.searchResults,
+                            albums                   = state.searchAlbumResults,
                             isSearching              = state.isSearching,
                             isLoadingChart           = state.isLoadingChart,
                             isLoadingMoreSearch      = state.isLoadingMoreSearch,
@@ -251,6 +256,7 @@ private fun MainAppScaffold(
                             lastSession              = state.lastSession,
                             onSongClick              = onHomeSongClick,
                             onSongClickFromList      = onSongClickFromList,
+                            onAlbumClick             = vm::openAlbum,
                             onShuffleFab             = onHomeShuffleFab,
                             onAddToQueue             = vm::addToQueue,
                             onPlayNext               = vm::playNext,
@@ -399,6 +405,45 @@ private fun MainAppScaffold(
                         indication = null
                     ) { onCloseNowPlaying() }
             )
+        }
+
+        // 4. Album Detail Screen overlay (slides in from bottom, over home)
+        AnimatedVisibility(
+            visible = state.selectedAlbum != null,
+            enter = slideInVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) { it } + fadeIn(tween(200)),
+            exit = slideOutVertically(
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) { it } + fadeOut(tween(180)),
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(3f)
+        ) {
+            val album = state.selectedAlbum
+            if (album != null) {
+                AlbumDetailScreen(
+                    album             = album,
+                    currentSongId     = state.currentSong?.id,
+                    onBack            = vm::closeAlbum,
+                    onSongClick       = { song -> vm.playAlbum(album, song); onOpenNowPlaying() },
+                    onPlayAll         = { vm.playAlbum(album); onOpenNowPlaying() },
+                    onShuffleAll      = {
+                        if (album.songs.isNotEmpty()) {
+                            vm.shuffleAndPlayList(album.songs)
+                            onOpenNowPlaying()
+                        }
+                    },
+                    onAddToQueue      = vm::addToQueue,
+                    onPlayNext        = vm::playNext
+                )
+            }
         }
 
         AnimatedVisibility(

@@ -147,8 +147,27 @@ data class AlbumItem(
     val title: String,
     val artworkUrl: String = "",
     val year: String = "",
-    val songCount: Int = 0
-)
+    val songCount: Int = 0,
+    val artist: String = "",
+    val language: String = ""
+) {
+    val displayArtworkUrl: String get() = Song.resolvePoster(title, artworkUrl)
+}
+
+@Immutable
+data class AlbumDetail(
+    val id: String,
+    val title: String,
+    val artist: String = "",
+    val artworkUrl: String = "",
+    val year: String = "",
+    val songCount: Int = 0,
+    val language: String = "",
+    val songs: List<Song> = emptyList(),
+    val isLoading: Boolean = false
+) {
+    val displayArtworkUrl: String get() = Song.resolvePoster(title, artworkUrl)
+}
 
 enum class DownloadStatus {
     NOT_DOWNLOADED,
@@ -163,6 +182,8 @@ data class PlayerUiState(
     val playbackState: PlaybackState = PlaybackState.Idle,
     val queue: List<Song> = emptyList(),
     val searchResults: List<Song> = emptyList(),
+    val searchAlbumResults: List<AlbumItem> = emptyList(),
+    val selectedAlbum: AlbumDetail? = null,
     val trendingCharts: List<Song> = emptyList(),
     val recommendations: List<Song> = emptyList(),
     val isSearchActive: Boolean = false,
@@ -206,7 +227,9 @@ data class PlayerUiState(
     val didYouMeanQuery: String? = null,
     val detectedSpotifyClipboardUrl: String? = null,
     val isSyncingSpotifyPlaylist: Boolean = false,
-    val spotifySyncAlerts: List<SpotifySyncAlert> = emptyList()
+    val spotifySyncAlerts: List<SpotifySyncAlert> = emptyList(),
+    /** Null = JioSaavn (default). "youtube" = currently streaming via YouTube InnerTube fallback. */
+    val currentSongStreamSource: String? = null
 )
 
 @Immutable

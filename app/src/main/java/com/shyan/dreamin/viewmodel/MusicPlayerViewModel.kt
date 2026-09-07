@@ -77,6 +77,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var preloadJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
+    private var albumJob: Job? = null
     private val dismissedSyncAlertPlaylists = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val unmatchableTrackSignatures = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
@@ -1438,6 +1439,76 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    suspend fun searchAlbumsOnDevice(query: String, limit: Int = 8): List<AlbumItem> = withContext(Dispatchers.IO) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return@withContext emptyList()
+        val encoded = URLEncoder.encode(trimmed, "UTF-8")
+        val url = "https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=1"
+
+        try {
+            val req = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Origin", "https://www.jiosaavn.com")
+                .header("Referer", "https://www.jiosaavn.com/")
+                .build()
+            val resp = NetworkService.httpClient.newCall(req).execute()
+            val text = resp.body?.string().orEmpty().trim()
+            if (!text.startsWith("{")) return@withContext emptyList()
+            val root = org.json.JSONObject(text)
+            val results = root.optJSONArray("results") ?: return@withContext emptyList()
+
+            val albums = mutableListOf<AlbumItem>()
+            val seenKeys = mutableSetOf<String>()
+
+            for (i in 0 until results.length()) {
+                val it = results.getJSONObject(i)
+                val id = it.optString("id")
+                val rawTitle = unescapeHtml(it.optString("title"))
+                if (rawTitle.isBlank()) continue
+
+                val more = it.optJSONObject("more_info") ?: org.json.JSONObject()
+                val year = it.optString("year").ifBlank { more.optString("year") }
+                val songCount = more.optString("song_count").toIntOrNull() ?: 0
+
+                val artistMap = more.optJSONObject("artistMap")
+                val primaryArr = artistMap?.optJSONArray("primary_artists")
+                var artist = if (primaryArr != null && primaryArr.length() > 0) {
+                    (0 until primaryArr.length()).joinToString(", ") { idx -> unescapeHtml(primaryArr.getJSONObject(idx).optString("name")) }
+                } else {
+                    unescapeHtml(more.optString("music").ifBlank { it.optString("subtitle") })
+                }
+                if (artist.isBlank()) {
+                    artist = "Original Soundtrack"
+                }
+
+                val language = it.optString("language").ifBlank { more.optString("language") }.lowercase().trim()
+                val rawImage = it.optString("image")
+                val cleanImage = cleanArtworkUrl(rawImage)
+
+                val dedupeKey = "${rawTitle.lowercase()}_$year"
+                if (seenKeys.add(dedupeKey)) {
+                    albums.add(
+                        AlbumItem(
+                            id = id,
+                            title = rawTitle,
+                            artworkUrl = cleanImage,
+                            year = year,
+                            songCount = songCount,
+                            artist = artist,
+                            language = language
+                        )
+                    )
+                }
+            }
+            albums
+        } catch (e: Exception) {
+            android.util.Log.w("MusicVM", "searchAlbumsOnDevice failed: ${e.message}")
+            emptyList()
+        }
+    }
+
     private fun extractDominantColor(artworkUrl: String) {
         if (artworkUrl.isBlank()) return
 
@@ -1602,11 +1673,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private suspend fun resolveStreamUrl(song: Song): String {
-        return com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(
-            song = song,
-            downloadRepo = downloadRepo,
-            apiService = api
-        )
+        // 1. Try JioSaavn resolution pipeline (cache → local → API → search → backend)
+        try {
+            val url = com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(
+                song = song,
+                downloadRepo = downloadRepo,
+                apiService = api
+            )
+            _uiState.update { it.copy(currentSongStreamSource = null) }
+            return url
+        } catch (e: IllegalStateException) {
+            android.util.Log.w("MusicVM", "JioSaavn stream unavailable for '${song.title}', trying YouTube fallback")
+        }
+
+        // 2. YouTube Music InnerTube fallback (audio-only, no API key)
+        val ytUrl = com.shyan.dreamin.data.service.YtMusicFallbackResolver.resolveStreamUrl(song)
+        if (!ytUrl.isNullOrBlank()) {
+            // Cache under the song ID so subsequent plays hit the LRU cache
+            com.shyan.dreamin.data.service.AudioStreamResolver.putCachedStreamUrl(song.id, ytUrl)
+            _uiState.update { it.copy(currentSongStreamSource = "youtube") }
+            android.util.Log.d("MusicVM", "YouTube fallback stream resolved for '${song.title}'")
+            return ytUrl
+        }
+
+        _uiState.update { it.copy(currentSongStreamSource = null) }
+        throw IllegalStateException("Track unavailable: '${song.title}' could not be streamed from JioSaavn or YouTube.")
     }
 
     private fun parseAudioUri(streamUrl: String): android.net.Uri {
@@ -1658,7 +1749,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 playbackState = PlaybackState.Loading,
                 currentSongIsFavorite = it.favorites.any { s -> s.id == song.id },
                 playlistQueueActive = isPlaylistActive,
-                userQueuedSongIds = it.userQueuedSongIds.filter { qId -> qId != song.id }
+                userQueuedSongIds = it.userQueuedSongIds.filter { qId -> qId != song.id },
+                currentSongStreamSource = null
             )
         }
         _progress.value = PlaybackProgress(0L, 0L)
@@ -1891,6 +1983,115 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun closeArtistProfile() {
         _uiState.update { it.copy(selectedArtistProfile = null) }
+    }
+
+    fun openAlbum(album: AlbumItem) {
+        _uiState.update {
+            it.copy(
+                selectedAlbum = AlbumDetail(
+                    id = album.id,
+                    title = album.title,
+                    artist = album.artist,
+                    artworkUrl = album.artworkUrl,
+                    year = album.year,
+                    songCount = album.songCount,
+                    language = album.language,
+                    isLoading = true
+                )
+            )
+        }
+
+        albumJob?.cancel()
+        albumJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val url = "https://www.jiosaavn.com/api.php?__call=content.getAlbumDetails&_format=json&_marker=0&api_version=4&ctx=web6dot0&albumid=${album.id}"
+                val req = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .build()
+                val resp = NetworkService.httpClient.newCall(req).execute()
+                val text = resp.body?.string().orEmpty().trim()
+                if (!text.startsWith("{")) {
+                    _uiState.update { it.copy(selectedAlbum = it.selectedAlbum?.copy(isLoading = false)) }
+                    return@launch
+                }
+                val root = org.json.JSONObject(text)
+                val songList = root.optJSONArray("list") ?: org.json.JSONArray()
+                val songs = mutableListOf<Song>()
+                val albumTitle = unescapeHtml(root.optString("title").ifBlank { album.title })
+                val albumYear = root.optString("year").ifBlank { album.year }
+                val albumImage = cleanArtworkUrl(root.optString("image").ifBlank { album.artworkUrl })
+
+                for (i in 0 until songList.length()) {
+                    val it = songList.getJSONObject(i)
+                    val rawTitle = unescapeHtml(it.optString("title"))
+                    if (rawTitle.isBlank()) continue
+
+                    val more = it.optJSONObject("more_info") ?: org.json.JSONObject()
+                    val durationSec = more.optString("duration").toLongOrNull() ?: 0L
+                    val image = cleanArtworkUrl(it.optString("image").ifBlank { albumImage })
+                    val playCount = it.optString("play_count").toLongOrNull()
+                        ?: (more.optString("play_count").toLongOrNull() ?: 0L)
+
+                    val artistMap = more.optJSONObject("artistMap")
+                    val primaryArr = artistMap?.optJSONArray("primary_artists")
+                    var artist = if (primaryArr != null && primaryArr.length() > 0) {
+                        (0 until primaryArr.length()).joinToString(", ") { idx -> unescapeHtml(primaryArr.getJSONObject(idx).optString("name")) }
+                    } else unescapeHtml(more.optString("singers").ifBlank { it.optString("subtitle") })
+
+                    if (artist.isBlank()) {
+                        val music = unescapeHtml(more.optString("music"))
+                        artist = if (music.isNotBlank()) music else album.artist.ifBlank { "Original Soundtrack" }
+                    }
+
+                    val itemLanguage = it.optString("language").ifBlank { more.optString("language") }.lowercase().trim()
+
+                    val songItem = Song(
+                        id = it.optString("id"),
+                        title = rawTitle,
+                        artist = artist,
+                        artworkUrl = image,
+                        duration = durationSec * 1000L,
+                        playCount = playCount,
+                        language = itemLanguage,
+                        album = albumTitle
+                    )
+                    songs.add(songItem)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        selectedAlbum = it.selectedAlbum?.copy(
+                            title = albumTitle,
+                            year = albumYear,
+                            artworkUrl = albumImage,
+                            songCount = songs.size,
+                            songs = songs,
+                            isLoading = false
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MusicVM", "Failed to load album details: ${e.message}")
+                _uiState.update { it.copy(selectedAlbum = it.selectedAlbum?.copy(isLoading = false)) }
+            }
+        }
+    }
+
+    fun closeAlbum() {
+        albumJob?.cancel()
+        _uiState.update { it.copy(selectedAlbum = null) }
+    }
+
+    fun playAlbum(album: AlbumDetail, startSong: Song? = null) {
+        if (album.songs.isNotEmpty()) {
+            val songToPlay = startSong ?: album.songs.first()
+            _uiState.update { it.copy(queue = album.songs, playlistQueueActive = false) }
+            playSong(songToPlay, fromPlaylist = false, preserveQueue = true)
+        } else if (startSong != null) {
+            playSong(startSong)
+        }
     }
 
     fun togglePlayPause() {
@@ -2207,7 +2408,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 searchError = null,
                 didYouMeanQuery = didYouMean,
                 isSearching = trimmed.isNotEmpty(),
-                searchResults = if (trimmed.isEmpty()) emptyList() else it.searchResults
+                searchResults = if (trimmed.isEmpty()) emptyList() else it.searchResults,
+                searchAlbumResults = if (trimmed.isEmpty()) emptyList() else it.searchAlbumResults
             )
         }
         searchJob?.cancel()
@@ -2215,20 +2417,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             searchJob = viewModelScope.launch {
                 delay(220)
                 try {
-                    var songs = searchOnDevice(trimmed, page = 1)
-                    if (songs.isEmpty() && didYouMean != null) {
-                        val altSongs = searchOnDevice(didYouMean, page = 1)
-                        if (altSongs.isNotEmpty()) {
-                            songs = altSongs
+                    val songsDeferred = async(Dispatchers.IO) {
+                        var songs = searchOnDevice(trimmed, page = 1)
+                        if (songs.isEmpty() && didYouMean != null) {
+                            val altSongs = searchOnDevice(didYouMean, page = 1)
+                            if (altSongs.isNotEmpty()) {
+                                songs = altSongs
+                            }
                         }
+                        songs
                     }
+                    val albumsDeferred = async(Dispatchers.IO) {
+                        searchAlbumsOnDevice(trimmed, limit = 8)
+                    }
+
+                    val rawSongs = songsDeferred.await()
+                    val albums = albumsDeferred.await()
+
                     val rankedSongs = withContext(Dispatchers.Default) {
-                        com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, songs)
+                        com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, rawSongs)
                     }
                     if (trimmed.length >= 2) userPrefs.addRecentSearch(trimmed)
                     _uiState.update {
                         it.copy(
                             searchResults = rankedSongs,
+                            searchAlbumResults = albums,
                             hasMoreSearchResults = rankedSongs.size >= 15,
                             isSearching = false
                         )
@@ -2237,11 +2450,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     throw e
                 } catch (e: Exception) {
                     android.util.Log.e("MusicVM", "Search failed: ${e.javaClass.simpleName}: ${e.message}")
-                    _uiState.update { it.copy(searchResults = emptyList(), isSearching = false, searchError = "Couldn't reach search. Check your connection.") }
+                    _uiState.update {
+                        it.copy(
+                            searchResults = emptyList(),
+                            searchAlbumResults = emptyList(),
+                            isSearching = false,
+                            searchError = "Couldn't reach search. Check your connection."
+                        )
+                    }
                 }
             }
         } else {
-            _uiState.update { it.copy(isSearching = false, searchResults = emptyList(), didYouMeanQuery = null) }
+            _uiState.update {
+                it.copy(
+                    isSearching = false,
+                    searchResults = emptyList(),
+                    searchAlbumResults = emptyList(),
+                    didYouMeanQuery = null
+                )
+            }
         }
     }
 
@@ -2276,7 +2503,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun closeSearch() {
         searchJob?.cancel()
-        _uiState.update { it.copy(searchQuery = "", isSearchActive = false, isSearching = false, searchResults = emptyList(), didYouMeanQuery = null) }
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                isSearchActive = false,
+                isSearching = false,
+                searchResults = emptyList(),
+                searchAlbumResults = emptyList(),
+                didYouMeanQuery = null
+            )
+        }
     }
 
     fun clearSearch() {

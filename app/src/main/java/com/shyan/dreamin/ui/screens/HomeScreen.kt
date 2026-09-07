@@ -125,6 +125,7 @@ fun HomeScreen(
     isSearchActive: Boolean,
     searchQuery: String,
     searchResults: List<Song>,
+    albums: List<AlbumItem> = emptyList(),
     isSearching: Boolean = false,
     isLoadingChart: Boolean,
     isLoadingMoreSearch: Boolean,
@@ -136,6 +137,7 @@ fun HomeScreen(
     lastSession: com.shyan.dreamin.data.local.UserPreferencesDataStore.LastSession?,
     onSongClick: (Song) -> Unit,
     onSongClickFromList: (Song, List<Song>) -> Unit = { song, _ -> onSongClick(song) },
+    onAlbumClick: (AlbumItem) -> Unit = {},
     onShuffleFab: () -> Unit = {},
     onAddToQueue: (Song) -> Unit,
     onPlayNext: (Song) -> Unit = {},
@@ -324,10 +326,15 @@ fun HomeScreen(
                         SearchResults(
                             bottomPadding = bottomPadding,
                             songs = searchResults,
+                            albums = albums,
                             currentSong = currentSong,
                             onSongClick = { song ->
                                 keyboard?.hide()
                                 onSongClick(song)
+                            },
+                            onAlbumClick = { album ->
+                                keyboard?.hide()
+                                onAlbumClick(album)
                             },
                             onAddToQueue = onAddToQueue,
                             isSearching = isSearching,
@@ -662,8 +669,10 @@ fun DreaminSearchBar(
 fun SearchResults(
     bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     songs: List<Song>,
+    albums: List<AlbumItem> = emptyList(),
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
+    onAlbumClick: (AlbumItem) -> Unit = {},
     onAddToQueue: (Song) -> Unit,
     isSearching: Boolean = false,
     hasMore: Boolean = false,
@@ -675,11 +684,11 @@ fun SearchResults(
     onApplyDidYouMean: (String) -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
-    if (isSearching && songs.isEmpty()) {
+    if (isSearching && songs.isEmpty() && albums.isEmpty()) {
         ShimmerSearchList()
         return
     }
-    if (songs.isEmpty()) {
+    if (songs.isEmpty() && albums.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -760,6 +769,87 @@ fun SearchResults(
                 }
             }
         }
+
+        // Movie Albums section
+        if (albums.isNotEmpty()) {
+            item(key = "search_albums_section", contentType = "AlbumsSection") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Album,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Movie Albums",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${albums.size} albums",
+                            fontSize = 12.sp,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp)
+                    ) {
+                        itemsIndexed(
+                            items = albums,
+                            key = { _, album -> "search_album_${album.id}" },
+                            contentType = { _, _ -> "SearchAlbumCard" }
+                        ) { index, album ->
+                            Box(modifier = Modifier.staggeredHorizontalEntry(index)) {
+                                SearchAlbumCard(
+                                    album = album,
+                                    onClick = { onAlbumClick(album) }
+                                )
+                            }
+                        }
+                    }
+
+                    if (songs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.MusicNote,
+                                contentDescription = null,
+                                tint = colors.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Songs",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         itemsIndexed(
             items = songs,
             key = { idx, song -> "${song.id}_$idx" },
@@ -781,6 +871,153 @@ fun SearchResults(
         item(key = "search_bottom_spacer", contentType = "Spacer") {
             Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
         }
+    }
+}
+
+/**
+ * Compact movie album card rendered in search results carousel.
+ * Displays high-res cover, "ALBUM" pill badge, song count, and release metadata.
+ */
+@Composable
+fun SearchAlbumCard(
+    album: AlbumItem,
+    onClick: () -> Unit
+) {
+    val colors = LocalDreaminColors.current
+    val cardInteraction = remember { MutableInteractionSource() }
+    val isPressed by cardInteraction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = DreaminMotion.TactileBouncy,
+        label = "album_press_scale"
+    )
+
+    Column(
+        modifier = Modifier
+            .width(135.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(
+                interactionSource = cardInteraction,
+                indication = ripple(bounded = true, color = colors.primary),
+                onClick = onClick
+            )
+            .padding(bottom = 4.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .size(135.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colors.surfaceHighest)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.10f),
+                    shape = RoundedCornerShape(18.dp)
+                )
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(album.displayArtworkUrl)
+                    .size(coil.size.Size(240, 240))
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Subtle bottom gradient for contrast
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
+                        )
+                    )
+            )
+
+            // Movie Album badge at top left
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Black.copy(alpha = 0.65f),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .padding(6.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Album,
+                        contentDescription = null,
+                        tint = colors.secondary,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "ALBUM",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+
+            // Song count badge at bottom right if available
+            if (album.songCount > 0) {
+                Text(
+                    text = "${album.songCount} songs",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Album Title
+        Text(
+            text = album.title,
+            color = Color.White,
+            fontSize = 13.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // Subtitle (Year & Artist or Language)
+        val subtitle = buildString {
+            if (album.year.isNotBlank()) append(album.year)
+            if (album.artist.isNotBlank()) {
+                if (isNotEmpty()) append(" • ")
+                append(album.artist)
+            } else if (album.language.isNotBlank()) {
+                if (isNotEmpty()) append(" • ")
+                append(album.language)
+            }
+        }.ifBlank { "Movie Soundtrack" }
+
+        Text(
+            text = subtitle,
+            color = colors.onSurfaceVariant,
+            fontSize = 11.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

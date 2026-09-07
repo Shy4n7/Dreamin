@@ -226,7 +226,7 @@ object AudioStreamResolver {
             }
         }
 
-        throw IllegalStateException("Unable to resolve audio stream for song '${song.title}' ($songId)")
+        throw IllegalStateException("Unable to resolve audio stream for song '${song.title}' ($songId) after all JioSaavn fallbacks")
     }
 
     /**
