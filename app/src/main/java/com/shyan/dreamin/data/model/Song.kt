@@ -226,11 +226,31 @@ data class PlayerUiState(
     val isFetchingUpNext: Boolean = false,
     val didYouMeanQuery: String? = null,
     val detectedSpotifyClipboardUrl: String? = null,
+    val detectedYouTubeClipboardUrl: String? = null,
+    val detectedYouTubeTrack: Song? = null,
     val isSyncingSpotifyPlaylist: Boolean = false,
     val spotifySyncAlerts: List<SpotifySyncAlert> = emptyList(),
     /** Null = JioSaavn (default). "youtube" = currently streaming via YouTube InnerTube fallback. */
-    val currentSongStreamSource: String? = null
+    val currentSongStreamSource: String? = null,
+    val currentAudioFormat: AudioFormatInfo? = null
 )
+
+@Immutable
+data class AudioFormatInfo(
+    val codec: String = "AAC",
+    val bitrateKbps: Int = 320,
+    val sampleRateHz: Int = 44100,
+    val channelCount: Int = 2,
+    val isLossless: Boolean = false,
+    val source: String = "JioSaavn 320k"
+) {
+    val displayQualityBadge: String get() = when {
+        isLossless && sampleRateHz > 48000 -> "Hi-Res 24-bit"
+        isLossless -> "Lossless FLAC"
+        codec.contains("opus", ignoreCase = true) || source.contains("youtube", ignoreCase = true) -> "${if (bitrateKbps in 1..999) bitrateKbps else 160}k Opus"
+        else -> "${if (bitrateKbps in 1..999) bitrateKbps else 320}k $codec"
+    }
+}
 
 @Immutable
 data class SpotifySyncAlert(

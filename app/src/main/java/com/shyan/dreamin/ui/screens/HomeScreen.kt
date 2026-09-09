@@ -154,6 +154,11 @@ fun HomeScreen(
     searchError: String? = null,
     didYouMeanQuery: String? = null,
     onApplyDidYouMean: (String) -> Unit = onSearchChange,
+    detectedYouTubeTrack: Song? = null,
+    detectedYouTubeUrl: String? = null,
+    onPlayDetectedYouTubeTrack: () -> Unit = {},
+    onDismissDetectedYouTubeLink: () -> Unit = {},
+    onCheckClipboard: () -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -179,6 +184,7 @@ fun HomeScreen(
         try {
             listState.requestScrollToItem(0, 0)
         } catch (_: Exception) {}
+        onCheckClipboard()
     }
 
     LaunchedEffect(Unit) {
@@ -311,6 +317,69 @@ fun HomeScreen(
                 onRecentSearchClick = onSearchChange,
                 onClearRecentSearches = onClearRecentSearches
             )
+
+            // 🔴 YouTube Clipboard Detection Banner
+            if (detectedYouTubeUrl != null || detectedYouTubeTrack != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFFF0000).copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, Color(0xFFFF0000).copy(alpha = 0.40f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onPlayDetectedYouTubeTrack() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF0000).copy(alpha = 0.22f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = Color(0xFFFF5252),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = detectedYouTubeTrack?.displayTitle ?: "YouTube Track Detected",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (detectedYouTubeTrack != null) "Tap to stream in 160k Opus" else "Tap to resolve & play",
+                                fontSize = 11.5.sp,
+                                color = Color(0xFFFF8A80),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = onDismissDetectedYouTubeLink,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Dismiss",
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 

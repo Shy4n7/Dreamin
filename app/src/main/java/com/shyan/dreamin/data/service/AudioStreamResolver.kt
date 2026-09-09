@@ -95,6 +95,18 @@ object AudioStreamResolver {
             }
         }
 
+        // 2.5 Direct YouTube Resolution (0ms JioSaavn bypass)
+        if (songId.startsWith("yt_")) {
+            val videoId = songId.removePrefix("yt_")
+            val ytStreamUrl = YtMusicFallbackResolver.fetchAudioStreamUrl(videoId)
+            if (!ytStreamUrl.isNullOrBlank()) {
+                Log.d(TAG, "Direct YouTube stream resolved for $songId: $ytStreamUrl")
+                putCachedStreamUrl(songId, ytStreamUrl)
+                return@withContext ytStreamUrl
+            }
+            throw IllegalStateException("Track unavailable: YouTube stream could not be resolved for $songId")
+        }
+
         // 3. Direct On-Device JioSaavn API by PID with 320kbps CDN Token Signing
         val endpoints = listOf(
             "https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&ctx=android&pids=$songId",

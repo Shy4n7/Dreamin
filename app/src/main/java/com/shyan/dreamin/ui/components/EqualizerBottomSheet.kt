@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.SurroundSound
 import androidx.compose.material.icons.outlined.Tune
@@ -312,7 +313,96 @@ fun EqualizerBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Hardware Loudness Normalization (Auto Volume Leveling)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(colors.surfaceHighest.copy(alpha = 0.6f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.VolumeUp,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Loudness Normalization",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    "Auto-level track volumes across sources",
+                                    fontSize = 11.sp,
+                                    color = colors.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = eqState.isLoudnessNormalizationEnabled,
+                            onCheckedChange = { AudioFxManager.setLoudnessNormalization(it) },
+                            enabled = eqState.isEnabled,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = colors.primary,
+                                uncheckedThumbColor = colors.onSurfaceVariant,
+                                uncheckedTrackColor = colors.surfaceHighest
+                            )
+                        )
+                    }
+                    if (eqState.isLoudnessNormalizationEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Target Gain Level",
+                                fontSize = 12.sp,
+                                color = colors.onSurfaceVariant
+                            )
+                            val gainDb = eqState.loudnessGainMb / 100f
+                            Text(
+                                String.format(java.util.Locale.US, "+%.1f dB", gainDb),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary
+                            )
+                        }
+                        Slider(
+                            value = eqState.loudnessGainMb.toFloat(),
+                            onValueChange = { AudioFxManager.setLoudnessGain(it.toInt()) },
+                            valueRange = 0f..600f,
+                            enabled = eqState.isEnabled,
+                            colors = SliderDefaults.colors(
+                                thumbColor = colors.primary,
+                                activeTrackColor = colors.primary,
+                                inactiveTrackColor = colors.surfaceHighest
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // 5-Band Graphic Equalizer Faders
             Text(

@@ -272,7 +272,12 @@ private fun MainAppScaffold(
                             onResumeLastSession      = onResumeSession,
                             searchError              = state.searchError,
                             didYouMeanQuery          = state.didYouMeanQuery,
-                            onApplyDidYouMean        = vm::setSearchQuery
+                            onApplyDidYouMean        = vm::setSearchQuery,
+                            detectedYouTubeTrack     = state.detectedYouTubeTrack,
+                            detectedYouTubeUrl       = state.detectedYouTubeClipboardUrl,
+                            onPlayDetectedYouTubeTrack = vm::playDetectedYouTubeTrack,
+                            onDismissDetectedYouTubeLink = vm::dismissDetectedYouTubeLink,
+                            onCheckClipboard         = { vm.checkClipboard(context) }
                         )
                     }
                 }
@@ -314,7 +319,7 @@ private fun MainAppScaffold(
                                 vm.setSearchQuery(query)
                             },
                             onAddSuggestedTrack      = vm::addSuggestedTrackToPlaylist,
-                            onCheckClipboard         = { vm.checkClipboardForSpotifyLink(context) },
+                            onCheckClipboard         = { vm.checkClipboard(context) },
                             onDismissDetectedSpotifyLink = vm::dismissDetectedSpotifyLink,
                             onSyncSpotifyPlaylist    = vm::syncSpotifyPlaylist,
                             onDismissSpotifySyncAlert = vm::dismissSpotifySyncAlert,

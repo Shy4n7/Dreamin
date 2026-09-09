@@ -25,6 +25,7 @@ data class EqualizerUiState(
     val selectedPresetName: String = "Studio Flat",
     val bassBoostStrength: Int = 40,      // 0 - 100%
     val virtualizerStrength: Int = 30,    // 0 - 100%
+    val isLoudnessNormalizationEnabled: Boolean = false,
     val loudnessGainMb: Int = 200,        // 0 - 1000 mB
     val bands: List<EqualizerBand> = emptyList(),
     val availablePresets: List<String> = listOf("Studio Flat", "Bass Heavy", "Vocal Clarity", "Electronic", "Rock", "Acoustic"),
@@ -90,12 +91,15 @@ object AudioFxManager {
             android.util.Log.w("AudioFxManager", "Virtualizer init skipped: ${e.message}")
         }
 
-        // 4. Loudness Enhancer
+        // 4. Loudness Enhancer (Auto Volume Normalization)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 loudnessEnhancer = LoudnessEnhancer(sessionId).apply {
-                    enabled = _uiState.value.isEnabled
-                    setTargetGain(_uiState.value.loudnessGainMb)
+                    val active = _uiState.value.isEnabled && _uiState.value.isLoudnessNormalizationEnabled
+                    enabled = active
+                    if (active) {
+                        setTargetGain(_uiState.value.loudnessGainMb)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -167,6 +171,30 @@ object AudioFxManager {
         try {
             if (virtualizer?.strengthSupported == true) {
                 virtualizer?.setStrength(((strengthPercent / 100f) * 1000).toInt().toShort())
+            }
+            saveSettings()
+        } catch (_: Exception) {}
+    }
+
+    fun setLoudnessNormalization(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(isLoudnessNormalizationEnabled = enabled)
+        try {
+            loudnessEnhancer?.apply {
+                this.enabled = _uiState.value.isEnabled && enabled
+                if (enabled) {
+                    setTargetGain(_uiState.value.loudnessGainMb)
+                }
+            }
+            saveSettings()
+        } catch (_: Exception) {}
+    }
+
+    fun setLoudnessGain(gainMb: Int) {
+        val clamped = gainMb.coerceIn(0, 1000)
+        _uiState.value = _uiState.value.copy(loudnessGainMb = clamped)
+        try {
+            if (_uiState.value.isLoudnessNormalizationEnabled && _uiState.value.isEnabled) {
+                loudnessEnhancer?.setTargetGain(clamped)
             }
             saveSettings()
         } catch (_: Exception) {}
@@ -260,6 +288,8 @@ object AudioFxManager {
             .putString("preset", _uiState.value.selectedPresetName)
             .putInt("bass", _uiState.value.bassBoostStrength)
             .putInt("virt", _uiState.value.virtualizerStrength)
+            .putBoolean("loudness_norm_enabled", _uiState.value.isLoudnessNormalizationEnabled)
+            .putInt("loudness_gain", _uiState.value.loudnessGainMb)
             .apply()
     }
 
@@ -269,7 +299,9 @@ object AudioFxManager {
             isEnabled = p.getBoolean("enabled", true),
             selectedPresetName = p.getString("preset", "Studio Flat") ?: "Studio Flat",
             bassBoostStrength = p.getInt("bass", 40),
-            virtualizerStrength = p.getInt("virt", 30)
+            virtualizerStrength = p.getInt("virt", 30),
+            isLoudnessNormalizationEnabled = p.getBoolean("loudness_norm_enabled", false),
+            loudnessGainMb = p.getInt("loudness_gain", 200)
         )
     }
 

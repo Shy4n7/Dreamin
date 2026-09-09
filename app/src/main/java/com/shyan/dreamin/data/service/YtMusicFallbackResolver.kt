@@ -178,7 +178,7 @@ object YtMusicFallbackResolver {
         } catch (_: Exception) { 0L }
     }
 
-    private fun fetchAudioStreamUrl(videoId: String): String? {
+    fun fetchAudioStreamUrl(videoId: String): String? {
         val body = buildContext(videoId = videoId).toRequestBody(JSON_MEDIA_TYPE)
         val req = Request.Builder()
             .url("$INNERTUBE_API_URL/player?key=$INNERTUBE_API_KEY&prettyPrint=false")
@@ -227,7 +227,9 @@ object YtMusicFallbackResolver {
 
         if (audioFormats.isEmpty()) return null
 
-        val best = audioFormats.firstOrNull { it.quality == "AUDIO_QUALITY_MEDIUM" }
+        // Prioritize highest audio bitrate (e.g. 160-175kbps Opus, then 128kbps AAC)
+        val best = audioFormats.filter { it.quality == "AUDIO_QUALITY_MEDIUM" || it.bitrate >= 120000 }
+            .maxByOrNull { it.bitrate }
             ?: audioFormats.maxByOrNull { it.bitrate }
             ?: return null
 

@@ -388,6 +388,7 @@ fun NowPlayingScreen(
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showPosterPicker by remember { mutableStateOf(false) }
+    var showAudioStreamDetailsSheet by remember { mutableStateOf(false) }
     val song = state.currentSong
     val colors = LocalDreaminColors.current
 
@@ -890,41 +891,66 @@ fun NowPlayingScreen(
                             maxLines = 1,
                             modifier = Modifier.basicMarquee()
                         )
-                        // YouTube fallback source badge
-                        if (state.currentSongStreamSource == "youtube") {
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Box(
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                song.artist,
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.68f),
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier
+                                    .weight(1f, fill = false)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFFFB300).copy(alpha = 0.22f))
-                                    .border(
-                                        width = 0.5.dp,
-                                        color = Color(0xFFFFB300).copy(alpha = 0.55f),
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    .clickable { onArtistClick(song.artist) }
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Audio Quality Pill Badge
+                            val fmt = state.currentAudioFormat
+                            val isYt = state.currentSongStreamSource == "youtube" || song.id.startsWith("yt_")
+                            val badgeLabel = fmt?.displayQualityBadge ?: (if (isYt) "160k Opus" else "320k AAC")
+                            val isLossless = fmt?.isLossless == true
+                            val badgeColor = when {
+                                isLossless -> Color(0xFF00E676)
+                                isYt -> Color(0xFFFF5252)
+                                else -> colors.primary
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = badgeColor.copy(alpha = 0.16f),
+                                border = BorderStroke(0.75.dp, badgeColor.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showAudioStreamDetailsSheet = true }
                             ) {
-                                Text(
-                                    "▶ YouTube",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFB300),
-                                    letterSpacing = 0.4.sp
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isLossless) Icons.Outlined.GraphicEq else if (isYt) Icons.Filled.PlayArrow else Icons.Outlined.HighQuality,
+                                        contentDescription = null,
+                                        tint = badgeColor,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.5.dp))
+                                    Text(
+                                        text = badgeLabel,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = badgeColor,
+                                        letterSpacing = 0.3.sp
+                                    )
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            song.artist,
-                            fontSize = 14.sp,
-                            color = Color.White.copy(alpha = 0.68f),
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { onArtistClick(song.artist) }
-                        )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -1300,6 +1326,14 @@ fun NowPlayingScreen(
     if (showEqualizerSheet) {
         EqualizerBottomSheet(
             onDismiss = { showEqualizerSheet = false }
+        )
+    }
+
+    if (showAudioStreamDetailsSheet) {
+        com.shyan.dreamin.ui.components.AudioStreamDetailsSheet(
+            state = state,
+            song = song,
+            onDismiss = { showAudioStreamDetailsSheet = false }
         )
     }
 

@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -371,6 +372,56 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun dismissDetectedSpotifyLink() {
         _uiState.update { it.copy(detectedSpotifyClipboardUrl = null) }
+    }
+
+    fun checkClipboardForYouTubeLink(context: Context) {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0)?.text?.toString()?.trim()
+                if (!text.isNullOrBlank()) {
+                    val videoId = com.shyan.dreamin.data.service.YouTubeTrackResolver.extractVideoId(text)
+                    if (videoId != null && text != _uiState.value.detectedYouTubeClipboardUrl) {
+                        _uiState.update { it.copy(detectedYouTubeClipboardUrl = text) }
+                        viewModelScope.launch {
+                            val track = com.shyan.dreamin.data.service.YouTubeTrackResolver.resolveTrackFromVideoId(videoId)
+                            if (track != null) {
+                                _uiState.update { it.copy(detectedYouTubeTrack = track) }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun dismissDetectedYouTubeLink() {
+        _uiState.update { it.copy(detectedYouTubeClipboardUrl = null, detectedYouTubeTrack = null) }
+    }
+
+    fun playDetectedYouTubeTrack() {
+        val track = _uiState.value.detectedYouTubeTrack
+        val url = _uiState.value.detectedYouTubeClipboardUrl
+        dismissDetectedYouTubeLink()
+        if (track != null) {
+            playSong(track)
+        } else if (!url.isNullOrBlank()) {
+            val videoId = com.shyan.dreamin.data.service.YouTubeTrackResolver.extractVideoId(url)
+            if (videoId != null) {
+                viewModelScope.launch {
+                    val resolved = com.shyan.dreamin.data.service.YouTubeTrackResolver.resolveTrackFromVideoId(videoId)
+                    if (resolved != null) {
+                        playSong(resolved)
+                    }
+                }
+            }
+        }
+    }
+
+    fun checkClipboard(context: Context) {
+        checkClipboardForSpotifyLink(context)
+        checkClipboardForYouTubeLink(context)
     }
 
     fun importSpotifyPlaylist(url: String) {
@@ -1041,6 +1092,57 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
+        override fun onTracksChanged(tracks: Tracks) {
+            for (group in tracks.groups) {
+                if (group.type == C.TRACK_TYPE_AUDIO && group.isSelected) {
+                    for (i in 0 until group.length) {
+                        if (group.isTrackSelected(i)) {
+                            val format = group.getTrackFormat(i)
+                            val mime = format.sampleMimeType ?: ""
+                            val bitrateBps = if (format.bitrate > 0) format.bitrate else (format.averageBitrate.takeIf { it > 0 } ?: 0)
+                            val bitrateKbps = if (bitrateBps > 0) bitrateBps / 1000 else 0
+                            val sampleRate = if (format.sampleRate > 0) format.sampleRate else 44100
+                            val channels = if (format.channelCount > 0) format.channelCount else 2
+                            val isLossless = mime.contains("flac", ignoreCase = true) || mime.contains("alac", ignoreCase = true)
+                            val isOpus = mime.contains("opus", ignoreCase = true)
+                            val codecName = when {
+                                mime.contains("mp4a", ignoreCase = true) || mime.contains("aac", ignoreCase = true) -> "AAC"
+                                isOpus -> "Opus"
+                                isLossless -> "FLAC"
+                                mime.contains("mpeg", ignoreCase = true) || mime.contains("mp3", ignoreCase = true) -> "MP3"
+                                else -> mime.substringAfter("audio/").uppercase().ifBlank { "AAC" }
+                            }
+                            val state = _uiState.value
+                            val isYt = state.currentSong?.id?.startsWith("yt_") == true || state.currentSongStreamSource == "youtube"
+                            val displayBitrate = when {
+                                bitrateKbps in 1..999 -> bitrateKbps
+                                isOpus || isYt -> 160
+                                else -> 320
+                            }
+                            val source = when {
+                                isYt -> "YouTube Music ($displayBitrate k Opus)"
+                                isLossless -> "Local Lossless FLAC"
+                                else -> "JioSaavn ($displayBitrate k AAC)"
+                            }
+                            _uiState.update { s ->
+                                s.copy(
+                                    currentAudioFormat = AudioFormatInfo(
+                                        codec = codecName,
+                                        bitrateKbps = displayBitrate,
+                                        sampleRateHz = sampleRate,
+                                        channelCount = channels,
+                                        isLossless = isLossless,
+                                        source = source
+                                    )
+                                )
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val meta = mediaItem?.mediaMetadata
             val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
@@ -1680,7 +1782,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 downloadRepo = downloadRepo,
                 apiService = api
             )
-            _uiState.update { it.copy(currentSongStreamSource = null) }
+            val isYt = song.id.startsWith("yt_")
+            _uiState.update { 
+                it.copy(
+                    currentSongStreamSource = if (isYt) "youtube" else null,
+                    currentAudioFormat = if (isYt) {
+                        AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
+                    } else {
+                        AudioFormatInfo(codec = "AAC", bitrateKbps = 320, sampleRateHz = 44100, isLossless = false, source = "JioSaavn (320k AAC)")
+                    }
+                ) 
+            }
             return url
         } catch (e: IllegalStateException) {
             android.util.Log.w("MusicVM", "JioSaavn stream unavailable for '${song.title}', trying YouTube fallback")
@@ -1691,12 +1803,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (!ytUrl.isNullOrBlank()) {
             // Cache under the song ID so subsequent plays hit the LRU cache
             com.shyan.dreamin.data.service.AudioStreamResolver.putCachedStreamUrl(song.id, ytUrl)
-            _uiState.update { it.copy(currentSongStreamSource = "youtube") }
+            _uiState.update { 
+                it.copy(
+                    currentSongStreamSource = "youtube",
+                    currentAudioFormat = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
+                ) 
+            }
             android.util.Log.d("MusicVM", "YouTube fallback stream resolved for '${song.title}'")
             return ytUrl
         }
 
-        _uiState.update { it.copy(currentSongStreamSource = null) }
+        _uiState.update { it.copy(currentSongStreamSource = null, currentAudioFormat = null) }
         throw IllegalStateException("Track unavailable: '${song.title}' could not be streamed from JioSaavn or YouTube.")
     }
 
@@ -2414,6 +2531,48 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         searchJob?.cancel()
         if (trimmed.isNotEmpty()) {
+            // Direct YouTube Link or Video ID instant resolution
+            if (com.shyan.dreamin.data.service.YouTubeTrackResolver.isYouTubeQuery(trimmed)) {
+                val videoId = com.shyan.dreamin.data.service.YouTubeTrackResolver.extractVideoId(trimmed)
+                if (videoId != null) {
+                    searchJob = viewModelScope.launch {
+                        try {
+                            val ytTrack = com.shyan.dreamin.data.service.YouTubeTrackResolver.resolveTrackFromVideoId(videoId)
+                            if (ytTrack != null) {
+                                _uiState.update {
+                                    it.copy(
+                                        searchResults = listOf(ytTrack),
+                                        searchAlbumResults = emptyList(),
+                                        hasMoreSearchResults = false,
+                                        isSearching = false
+                                    )
+                                }
+                            } else {
+                                _uiState.update {
+                                    it.copy(
+                                        searchResults = emptyList(),
+                                        searchAlbumResults = emptyList(),
+                                        isSearching = false,
+                                        searchError = "Could not resolve YouTube track. Please check the video link."
+                                    )
+                                }
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            _uiState.update {
+                                it.copy(
+                                    searchResults = emptyList(),
+                                    isSearching = false,
+                                    searchError = "Error loading YouTube video: ${e.message}"
+                                )
+                            }
+                        }
+                    }
+                    return
+                }
+            }
+
             searchJob = viewModelScope.launch {
                 delay(220)
                 try {
@@ -2423,6 +2582,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             val altSongs = searchOnDevice(didYouMean, page = 1)
                             if (altSongs.isNotEmpty()) {
                                 songs = altSongs
+                            }
+                        }
+                        // Fallback to YouTube Music search if JioSaavn returns 0 results
+                        if (songs.isEmpty()) {
+                            try {
+                                val ytSongs = com.shyan.dreamin.data.service.YouTubeTrackResolver.searchYouTubeMusic(trimmed, limit = 15)
+                                if (ytSongs.isNotEmpty()) {
+                                    songs = ytSongs
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.d("MusicVM", "YouTube search fallback error: ${e.message}")
                             }
                         }
                         songs
@@ -2475,6 +2645,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun loadMoreSearchResults() {
         val state = _uiState.value
         if (!state.hasMoreSearchResults || state.isLoadingMoreSearch || state.searchQuery.length < 2) return
+        if (state.searchResults.any { it.id.startsWith("yt_") }) return
         val nextPage = state.searchPage + 1
         _uiState.update { it.copy(isLoadingMoreSearch = true) }
         viewModelScope.launch {
