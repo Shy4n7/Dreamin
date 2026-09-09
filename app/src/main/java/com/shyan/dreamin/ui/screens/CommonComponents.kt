@@ -807,43 +807,13 @@ fun SongRow(
                     fontSize = 14.sp
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (song.id.startsWith("yt_")) {
-                        Surface(
-                            shape = RoundedCornerShape(5.dp),
-                            color = Color(0xFFFF0000).copy(alpha = 0.15f),
-                            border = BorderStroke(0.5.dp, Color(0xFFFF0000).copy(alpha = 0.45f)),
-                            modifier = Modifier.padding(end = 6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Filled.PlayArrow,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFF4D4D),
-                                    modifier = Modifier.size(9.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    "YouTube",
-                                    color = Color(0xFFFF7A7A),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.2.sp
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        song.artist,
-                        color = colors.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Text(
+                    song.artist,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
