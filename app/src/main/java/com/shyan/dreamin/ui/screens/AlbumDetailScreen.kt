@@ -426,7 +426,7 @@ private fun AlbumSongRow(
                     text = String.format("%02d", index),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (index <= 3) colors.secondary else colors.onSurfaceVariant.copy(alpha = 0.70f)
+                    color = colors.onSurfaceVariant.copy(alpha = 0.70f)
                 )
             }
         }
