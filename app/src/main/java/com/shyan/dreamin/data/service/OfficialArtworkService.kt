@@ -76,11 +76,11 @@ object OfficialArtworkService {
     }
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
-        if (song.id.startsWith("yt_")) {
-            return song.artworkUrl.ifBlank { null }
-        }
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
+        }
+        if (song.id.startsWith("yt_")) {
+            return song.artworkUrl.ifBlank { null }
         }
         val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
         artworkCache[fullKey]?.let { return it }
@@ -90,7 +90,6 @@ object OfficialArtworkService {
     }
 
     fun putCachedPoster(song: Song, posterUrl: String): Unit = synchronized(artworkCache) {
-        if (song.id.startsWith("yt_")) return
         if (posterUrl.isBlank()) return
         if (song.id.isNotBlank()) artworkCache[song.id] = posterUrl
         val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
@@ -664,16 +663,39 @@ object OfficialArtworkService {
         if (song.artworkUrl.isNotBlank()) candidates.add(song.artworkUrl)
         getCachedPoster(song)?.let { if (it.isNotBlank()) candidates.add(it) }
 
+        // For YouTube songs, also include official YouTube maxres/hq thumbnails
+        if (song.id.startsWith("yt_")) {
+            val ytId = song.id.removePrefix("yt_")
+            candidates.add("https://i.ytimg.com/vi/$ytId/maxresdefault.jpg")
+            candidates.add("https://i.ytimg.com/vi/$ytId/hqdefault.jpg")
+        }
+
         val (baseTitle, fullClean) = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.decomposeTitle(song.displayTitle)
         val cleanTitle = if (baseTitle.isNotBlank()) baseTitle else fullClean
         val primaryArtist = song.artist.split(",", "&", "/", "feat.", "ft.").firstOrNull()?.trim() ?: ""
 
         val queries = mutableListOf<String>()
+
+        // Check for film / movie prefix or suffix: e.g. (From "Rathnam") or [From "Pushpa"]
+        val rawSearchText = "${song.title} ${song.displayTitle}"
+        val movieMatch = Regex("""(?i)[\(\[]?\s*from\s+["“']?([^"”'\)\]]+)["”']?\s*[\)\]]?""").find(rawSearchText)
+        val movieName = movieMatch?.groupValues?.getOrNull(1)?.trim().orEmpty()
+
+        if (movieName.isNotBlank()) {
+            if (primaryArtist.isNotBlank()) queries.add("$movieName $primaryArtist")
+            queries.add(movieName)
+        }
+
+        if (song.album.isNotBlank() && !song.album.equals("YouTube", ignoreCase = true)) {
+            if (primaryArtist.isNotBlank()) queries.add("${song.album} $primaryArtist")
+            queries.add(song.album)
+        }
+
         if (primaryArtist.isNotBlank()) queries.add("$cleanTitle $primaryArtist")
         queries.add(cleanTitle)
 
         // 1. Fetch Apple Music Candidates
-        for (q in queries) {
+        for (q in queries.distinct()) {
             try {
                 val encoded = URLEncoder.encode(q, "UTF-8")
                 val urlStr = "https://itunes.apple.com/search?term=$encoded&entity=song&limit=8"
@@ -696,7 +718,7 @@ object OfficialArtworkService {
         }
 
         // 2. Fetch JioSaavn Candidates
-        for (q in queries) {
+        for (q in queries.distinct()) {
             try {
                 val encoded = URLEncoder.encode(q, "UTF-8")
                 val urlStr = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=8&p=1"
@@ -718,7 +740,7 @@ object OfficialArtworkService {
             } catch (_: Exception) {}
         }
 
-        candidates.toList().take(8)
+        candidates.toList().take(12)
     }
 
     private fun toHighResCover(rawUrl: String): String {

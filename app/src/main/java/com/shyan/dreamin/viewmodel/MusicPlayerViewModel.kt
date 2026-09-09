@@ -1310,6 +1310,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 queue.take(5)
             }
             nextSongs.forEach { song ->
+                if (song.id.startsWith("yt_")) return@forEach
                 launch(Dispatchers.IO) {
                     try {
                         val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
@@ -1959,7 +1960,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun updateSongArtworkAcrossApp(songId: String, officialPoster: String) {
-        if (songId.startsWith("yt_")) return
         if (officialPoster.isBlank()) return
 
         _uiState.update { state ->

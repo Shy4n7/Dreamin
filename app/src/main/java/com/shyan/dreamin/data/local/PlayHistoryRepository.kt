@@ -38,7 +38,6 @@ class PlayHistoryRepository(private val dao: PlayHistoryDao) {
     }
 
     suspend fun updateArtwork(songId: String, artworkUrl: String) {
-        if (songId.startsWith("yt_")) return
         dao.updateArtwork(songId, artworkUrl)
     }
 }
@@ -46,11 +45,16 @@ class PlayHistoryRepository(private val dao: PlayHistoryDao) {
 private fun PlayHistoryEntity.toSong(): Song {
     if (songId.startsWith("yt_")) {
         val ytId = songId.removePrefix("yt_")
+        val fallback = Song(id = songId, title = title, artist = artist, artworkUrl = artworkUrl)
+        val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(fallback)
+        val finalArt = cached
+            ?: if (artworkUrl.isNotBlank() && !artworkUrl.contains("hqdefault.jpg")) artworkUrl
+            else "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
         return Song(
             id = songId,
             title = title,
             artist = artist,
-            artworkUrl = "https://i.ytimg.com/vi/$ytId/hqdefault.jpg",
+            artworkUrl = finalArt,
             duration = durationMs
         )
     }
@@ -68,11 +72,16 @@ private fun PlayHistoryEntity.toSong(): Song {
 private fun SongSummary.toSong(): Song {
     if (songId.startsWith("yt_")) {
         val ytId = songId.removePrefix("yt_")
+        val fallback = Song(id = songId, title = title, artist = artist, artworkUrl = artworkUrl)
+        val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(fallback)
+        val finalArt = cached
+            ?: if (artworkUrl.isNotBlank() && !artworkUrl.contains("hqdefault.jpg")) artworkUrl
+            else "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
         return Song(
             id = songId,
             title = title,
             artist = artist,
-            artworkUrl = "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+            artworkUrl = finalArt
         )
     }
     val fallback = Song(id = songId, title = title, artist = artist, artworkUrl = artworkUrl)
