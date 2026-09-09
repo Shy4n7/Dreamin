@@ -20,7 +20,12 @@ class PlayHistoryRepository(private val dao: PlayHistoryDao) {
         dao.getMostPlayed(limit).map { summaries -> summaries.map { it.toSong() } }
 
     suspend fun recordPlay(song: Song) {
-        val poster = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) ?: song.artworkUrl
+        val poster = if (song.id.startsWith("yt_")) {
+            val ytId = song.id.removePrefix("yt_")
+            "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+        } else {
+            com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song) ?: song.artworkUrl
+        }
         dao.insert(
             PlayHistoryEntity(
                 songId = song.id,
@@ -33,11 +38,22 @@ class PlayHistoryRepository(private val dao: PlayHistoryDao) {
     }
 
     suspend fun updateArtwork(songId: String, artworkUrl: String) {
+        if (songId.startsWith("yt_")) return
         dao.updateArtwork(songId, artworkUrl)
     }
 }
 
 private fun PlayHistoryEntity.toSong(): Song {
+    if (songId.startsWith("yt_")) {
+        val ytId = songId.removePrefix("yt_")
+        return Song(
+            id = songId,
+            title = title,
+            artist = artist,
+            artworkUrl = "https://i.ytimg.com/vi/$ytId/hqdefault.jpg",
+            duration = durationMs
+        )
+    }
     val fallback = Song(id = songId, title = title, artist = artist, artworkUrl = artworkUrl)
     val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(fallback)
     return Song(
@@ -50,6 +66,15 @@ private fun PlayHistoryEntity.toSong(): Song {
 }
 
 private fun SongSummary.toSong(): Song {
+    if (songId.startsWith("yt_")) {
+        val ytId = songId.removePrefix("yt_")
+        return Song(
+            id = songId,
+            title = title,
+            artist = artist,
+            artworkUrl = "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+        )
+    }
     val fallback = Song(id = songId, title = title, artist = artist, artworkUrl = artworkUrl)
     val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(fallback)
     return Song(

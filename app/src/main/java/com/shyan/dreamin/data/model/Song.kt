@@ -22,6 +22,7 @@ data class Song(
         artworkUrl.contains("spotify.com")
 
     val displayArtworkUrl: String get() {
+        if (id.startsWith("yt_") && artworkUrl.isNotBlank()) return resolvePoster(title, artworkUrl)
         val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(this)
         if (!cached.isNullOrBlank()) return cached
         return resolvePoster(title, artworkUrl)

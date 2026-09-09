@@ -67,6 +67,10 @@ object NetworkService {
                 builder.header("Referer", "https://www.jiosaavn.com/")
                 builder.header("Origin", "https://www.jiosaavn.com")
                 builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+            } else if (host.contains("googlevideo.com") || host.contains("youtube.com")) {
+                builder.header("Referer", "https://www.youtube.com/")
+                builder.header("Origin", "https://www.youtube.com")
+                builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
             } else if (host.contains("lrclib")) {
                 builder.header("User-Agent", "DreaminApp/1.0 (https://github.com/shyan/dreamin)")
             }

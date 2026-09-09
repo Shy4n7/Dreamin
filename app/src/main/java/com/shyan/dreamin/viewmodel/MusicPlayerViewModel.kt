@@ -1202,13 +1202,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
-                        if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
-                            updateSongArtworkAcrossApp(activeSong.id, official)
-                        }
-                    } catch (_: Exception) {}
+                if (!activeSong.id.startsWith("yt_")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
+                            if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
+                                updateSongArtworkAcrossApp(activeSong.id, official)
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
             }
 
@@ -1957,6 +1959,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun updateSongArtworkAcrossApp(songId: String, officialPoster: String) {
+        if (songId.startsWith("yt_")) return
         if (officialPoster.isBlank()) return
 
         _uiState.update { state ->

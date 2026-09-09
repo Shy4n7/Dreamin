@@ -178,16 +178,93 @@ object YtMusicFallbackResolver {
         } catch (_: Exception) { 0L }
     }
 
+    @Volatile
+    private var cachedVisitorData: String? = null
+
+    private fun getOrFetchVisitorData(): String? {
+        cachedVisitorData?.let { return it }
+        return synchronized(this) {
+            cachedVisitorData ?: run {
+                try {
+                    val clientJson = JSONObject().apply {
+                        put("clientName", "VISIONOS")
+                        put("clientVersion", "1.04")
+                        put("clientId", "101")
+                        put("clientScreen", "WATCH")
+                        put("platform", "MOBILE")
+                        put("hl", "en")
+                        put("gl", "US")
+                    }
+                    val body = JSONObject().apply {
+                        put("context", JSONObject().apply {
+                            put("client", clientJson)
+                        })
+                    }.toString().toRequestBody(JSON_MEDIA_TYPE)
+
+                    val req = Request.Builder()
+                        .url("https://www.youtube.com/youtubei/v1/visitor_id?key=$INNERTUBE_API_KEY&prettyPrint=false")
+                        .post(body)
+                        .header("Content-Type", "application/json")
+                        .header("User-Agent", "com.google.ios.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; en_US)")
+                        .header("X-YouTube-Client-Name", "101")
+                        .header("X-YouTube-Client-Version", "1.04")
+                        .build()
+
+                    val resp = com.shyan.dreamin.data.network.NetworkService.httpClient.newCall(req).execute()
+                    val text = resp.use { it.body?.string().orEmpty() }
+                    val vData = JSONObject(text).optJSONObject("responseContext")?.optString("visitorData", "")
+                    if (!vData.isNullOrBlank()) {
+                        cachedVisitorData = vData
+                        vData
+                    } else null
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to fetch visitorData: ${e.message}")
+                    null
+                }
+            }
+        }
+    }
+
     fun fetchAudioStreamUrl(videoId: String): String? {
-        val body = buildContext(videoId = videoId).toRequestBody(JSON_MEDIA_TYPE)
+        val streamUrl = fetchVisionOsAudioStream(videoId)
+        if (!streamUrl.isNullOrBlank()) return streamUrl
+
+        // Invalidate visitorData and retry once
+        cachedVisitorData = null
+        return fetchVisionOsAudioStream(videoId)
+    }
+
+    private fun fetchVisionOsAudioStream(videoId: String): String? {
+        val visitorData = getOrFetchVisitorData()
+        val clientJson = JSONObject().apply {
+            put("clientName", "VISIONOS")
+            put("clientVersion", "1.04")
+            put("clientId", "101")
+            put("clientScreen", "WATCH")
+            put("platform", "MOBILE")
+            put("hl", "en")
+            put("gl", "US")
+            if (!visitorData.isNullOrBlank()) {
+                put("visitorData", visitorData)
+            }
+        }
+
+        val body = JSONObject().apply {
+            put("context", JSONObject().apply {
+                put("client", clientJson)
+            })
+            put("videoId", videoId)
+            put("contentCheckOk", true)
+            put("racyCheckOk", true)
+        }.toString().toRequestBody(JSON_MEDIA_TYPE)
+
         val req = Request.Builder()
-            .url("$INNERTUBE_API_URL/player?key=$INNERTUBE_API_KEY&prettyPrint=false")
+            .url("https://www.youtube.com/youtubei/v1/player?key=$INNERTUBE_API_KEY&prettyPrint=false")
             .post(body)
             .header("Content-Type", "application/json")
-            .header("X-YouTube-Client-Name", "67")
-            .header("X-YouTube-Client-Version", "1.20250101.01.00")
-            .header("Origin", "https://music.youtube.com")
-            .header("Referer", "https://music.youtube.com/")
+            .header("User-Agent", "com.google.ios.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; en_US)")
+            .header("X-YouTube-Client-Name", "101")
+            .header("X-YouTube-Client-Version", "1.04")
             .build()
 
         val text = com.shyan.dreamin.data.network.NetworkService.httpClient
@@ -198,42 +275,29 @@ object YtMusicFallbackResolver {
             .optJSONObject("streamingData")
             ?.optJSONArray("adaptiveFormats") ?: return null
 
-        data class AudioFmt(val url: String, val bitrate: Int, val quality: String)
+        data class AudioFmt(val url: String, val bitrate: Int, val quality: String, val itag: Int)
         val audioFormats = mutableListOf<AudioFmt>()
 
         for (i in 0 until adaptiveFormats.length()) {
             val fmt = adaptiveFormats.getJSONObject(i)
             val mime = fmt.optString("mimeType", "")
-            var url = fmt.optString("url", "")
-            if (url.isBlank()) {
-                val cipher = fmt.optString("signatureCipher").ifBlank { fmt.optString("cipher") }
-                if (cipher.isNotBlank()) {
-                    val params = cipher.split("&").associate { param ->
-                        val parts = param.split("=", limit = 2)
-                        if (parts.size == 2) java.net.URLDecoder.decode(parts[0], "UTF-8") to java.net.URLDecoder.decode(parts[1], "UTF-8")
-                        else parts[0] to ""
-                    }
-                    val rawUrl = params["url"]
-                    if (!rawUrl.isNullOrBlank()) {
-                        val s = params["s"]
-                        val sp = params["sp"] ?: "sig"
-                        url = if (!s.isNullOrBlank()) "$rawUrl&$sp=$s" else rawUrl
-                    }
-                }
-            }
+            val url = fmt.optString("url", "")
             if (!mime.startsWith("audio/") || url.isBlank()) continue
-            audioFormats.add(AudioFmt(url, fmt.optInt("bitrate", 0), fmt.optString("audioQuality", "")))
+            audioFormats.add(
+                AudioFmt(
+                    url = url,
+                    bitrate = fmt.optInt("bitrate", 0),
+                    quality = fmt.optString("audioQuality", ""),
+                    itag = fmt.optInt("itag", 0)
+                )
+            )
         }
 
         if (audioFormats.isEmpty()) return null
 
-        // Prioritize highest audio bitrate (e.g. 160-175kbps Opus, then 128kbps AAC)
-        val best = audioFormats.filter { it.quality == "AUDIO_QUALITY_MEDIUM" || it.bitrate >= 120000 }
-            .maxByOrNull { it.bitrate }
-            ?: audioFormats.maxByOrNull { it.bitrate }
-            ?: return null
-
-        Log.d(TAG, "YT stream resolved: bitrate=${best.bitrate}, quality=${best.quality}")
+        // Prioritize highest audio bitrate (itag 251 160-175kbps Opus, then itag 140 128kbps AAC)
+        val best = audioFormats.maxByOrNull { it.bitrate } ?: return null
+        Log.d(TAG, "VISIONOS stream resolved for $videoId: itag=${best.itag}, bitrate=${best.bitrate}")
         return best.url
     }
 }

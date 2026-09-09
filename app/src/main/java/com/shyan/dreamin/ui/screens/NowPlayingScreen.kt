@@ -904,52 +904,9 @@ fun NowPlayingScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier
-                                    .weight(1f, fill = false)
                                     .clip(RoundedCornerShape(6.dp))
                                     .clickable { onArtistClick(song.artist) }
                             )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Audio Quality Pill Badge
-                            val fmt = state.currentAudioFormat
-                            val isYt = state.currentSongStreamSource == "youtube" || song.id.startsWith("yt_")
-                            val badgeLabel = fmt?.displayQualityBadge ?: (if (isYt) "160k Opus" else "320k AAC")
-                            val isLossless = fmt?.isLossless == true
-                            val badgeColor = when {
-                                isLossless -> Color(0xFF00E676)
-                                isYt -> Color(0xFFFF5252)
-                                else -> colors.primary
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = badgeColor.copy(alpha = 0.16f),
-                                border = BorderStroke(0.75.dp, badgeColor.copy(alpha = 0.45f)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { showAudioStreamDetailsSheet = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (isLossless) Icons.Outlined.GraphicEq else if (isYt) Icons.Filled.PlayArrow else Icons.Outlined.HighQuality,
-                                        contentDescription = null,
-                                        tint = badgeColor,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.5.dp))
-                                    Text(
-                                        text = badgeLabel,
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = badgeColor,
-                                        letterSpacing = 0.3.sp
-                                    )
-                                }
-                            }
                         }
                     }
 

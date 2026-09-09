@@ -54,6 +54,7 @@ object OfficialArtworkService {
         onResolved: ((songId: String, posterUrl: String) -> Unit)? = null
     ) {
         songs.forEach { song ->
+            if (song.id.startsWith("yt_")) return@forEach
             if (getCachedPoster(song) != null) return@forEach
             scope.launch(Dispatchers.IO) {
                 try {
@@ -75,6 +76,9 @@ object OfficialArtworkService {
     }
 
     fun getCachedPoster(song: Song): String? = synchronized(artworkCache) {
+        if (song.id.startsWith("yt_")) {
+            return song.artworkUrl.ifBlank { null }
+        }
         if (song.id.isNotBlank()) {
             artworkCache[song.id]?.let { return it }
         }
@@ -86,6 +90,7 @@ object OfficialArtworkService {
     }
 
     fun putCachedPoster(song: Song, posterUrl: String): Unit = synchronized(artworkCache) {
+        if (song.id.startsWith("yt_")) return
         if (posterUrl.isBlank()) return
         if (song.id.isNotBlank()) artworkCache[song.id] = posterUrl
         val fullKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
@@ -103,6 +108,9 @@ object OfficialArtworkService {
      * directly from official movie catalogs matching the song's language and DNA.
      */
     suspend fun resolveOfficialMoviePoster(song: Song, targetLanguage: String = ""): String? = withContext(Dispatchers.IO) {
+        if (song.id.startsWith("yt_")) {
+            return@withContext song.artworkUrl.ifBlank { null }
+        }
         getCachedPoster(song)?.let { return@withContext it }
 
         val cacheKey = "${song.displayTitle.lowercase()}___${song.artist.lowercase()}".trim()
