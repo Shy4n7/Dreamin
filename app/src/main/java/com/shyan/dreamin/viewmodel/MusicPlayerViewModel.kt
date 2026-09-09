@@ -240,7 +240,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (isFav) favoritesRepo.removeFavorite(song.id)
             else {
                 favoritesRepo.addFavorite(song)
-                FeedbackEngine.recordTrackEvent(song, 0L, 0L, isFavorite = true)
             }
         }
     }
@@ -2237,7 +2236,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val current = state.currentSong ?: return
         val idx = queue.indexOfFirst { it.id == current.id }
 
-        // Track playback completion / skip in PlaybackAnalyticsTracker & FeedbackEngine
+        // Track playback completion in PlaybackAnalyticsTracker
         val pos = controller?.currentPosition ?: 0L
         val dur = controller?.duration ?: 0L
         viewModelScope.launch(Dispatchers.IO) {
@@ -2965,11 +2964,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
                 val finalRecs = if (ytRecSongs.isNotEmpty()) {
                     OfficialSongFilter.cleanOfficialList(ytRecSongs, rejectHindi = true)
-                        .filter { it.id != songId && !FeedbackEngine.isSuppressed(it) }
+                        .filter { it.id != songId }
                 } else {
                 val fallback = searchOnDevice("$primaryArtist hits", limit = 10, targetLanguage = currentSong.language.ifBlank { "" })
                     OfficialSongFilter.cleanOfficialList(fallback, rejectHindi = true)
-                        .filter { it.id != songId && !FeedbackEngine.isSuppressed(it) }
+                        .filter { it.id != songId }
                 }
 
                 _uiState.update { it.copy(recommendations = finalRecs, recommendationSeedTitle = seedTitle) }

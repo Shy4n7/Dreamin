@@ -31,8 +31,7 @@ object SmartQueueEngine {
             return officialCleaned.filter { s ->
                 val normKey = OfficialSongFilter.normalizeSongKey(s.displayTitle)
                 val isUnique = !seenIds.contains(s.id) && !seenNormKeys.contains(normKey)
-                val notSuppressed = !FeedbackEngine.isSuppressed(s)
-                if (isUnique && notSuppressed) {
+                if (isUnique) {
                     seenIds.add(s.id)
                     seenNormKeys.add(normKey)
                     true
