@@ -96,6 +96,7 @@ private fun MainAppScaffold(
     onOpenNowPlaying: () -> Unit,
     onCloseNowPlaying: () -> Unit
 ) {
+    var isRecognizeMusicOpen by remember { mutableStateOf(false) }
     val colors = LocalDreaminColors.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -127,7 +128,7 @@ private fun MainAppScaffold(
         { vm.resumeLastSession(); onOpenNowPlaying() }
     }
 
-    BackHandler(enabled = !isNowPlayingOpen && state.openPlaylistId == null && state.selectedAlbum == null && (state.isSearchActive || currentScreen != navScreens.first())) {
+    BackHandler(enabled = !isNowPlayingOpen && !isRecognizeMusicOpen && state.openPlaylistId == null && state.selectedAlbum == null && (state.isSearchActive || currentScreen != navScreens.first())) {
         if (state.isSearchActive) {
             vm.clearSearch()
         } else {
@@ -135,8 +136,11 @@ private fun MainAppScaffold(
             if (idx > 0) onScreenChange(navScreens[idx - 1])
         }
     }
-    BackHandler(enabled = state.selectedAlbum != null && !isNowPlayingOpen) {
+    BackHandler(enabled = state.selectedAlbum != null && !isNowPlayingOpen && !isRecognizeMusicOpen) {
         vm.closeAlbum()
+    }
+    BackHandler(enabled = isRecognizeMusicOpen && !isNowPlayingOpen) {
+        isRecognizeMusicOpen = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -161,20 +165,26 @@ private fun MainAppScaffold(
                             hazeState         = hazeState
                         )
                     }
-                    BottomNavBar(
-                        currentScreen  = currentScreen,
-                        hazeState      = hazeState,
-                        onScreenChange = { screen ->
-                            if (state.openPlaylistId != null) {
-                                vm.closePlaylist()
+                    AnimatedVisibility(
+                        visible = !isRecognizeMusicOpen,
+                        enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(160)),
+                        exit = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(140))
+                    ) {
+                        BottomNavBar(
+                            currentScreen  = currentScreen,
+                            hazeState      = hazeState,
+                            onScreenChange = { screen ->
+                                if (state.openPlaylistId != null) {
+                                    vm.closePlaylist()
+                                }
+                                if (screen == Screen.Home && state.isSearchActive) {
+                                    keyboard?.hide()
+                                    vm.clearSearch()
+                                }
+                                onScreenChange(screen)
                             }
-                            if (screen == Screen.Home && state.isSearchActive) {
-                                keyboard?.hide()
-                                vm.clearSearch()
-                            }
-                            onScreenChange(screen)
-                        }
-                    )
+                        )
+                    }
                 }
             }
         ) { padding ->
@@ -277,7 +287,8 @@ private fun MainAppScaffold(
                             detectedYouTubeUrl       = state.detectedYouTubeClipboardUrl,
                             onPlayDetectedYouTubeTrack = vm::playDetectedYouTubeTrack,
                             onDismissDetectedYouTubeLink = vm::dismissDetectedYouTubeLink,
-                            onCheckClipboard         = { vm.checkClipboard(context) }
+                            onCheckClipboard         = { vm.checkClipboard(context) },
+                            onOpenRecognizeMusic     = { isRecognizeMusicOpen = true }
                         )
                     }
                 }
@@ -391,6 +402,35 @@ private fun MainAppScaffold(
                             ambientDominantColor = Color(state.dominantColor)
                         )
                     }
+                }
+
+                // 4. Recognize Music Screen (Slides in smoothly, docked MiniPlayer stays visible below)
+                AnimatedVisibility(
+                    visible = isRecognizeMusicOpen,
+                    enter = slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeIn(tween(200)),
+                    exit = slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeOut(tween(180)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2.5f)
+                ) {
+                    RecognizeMusicScreen(
+                        state = state,
+                        onPlaySong = { song ->
+                            vm.playSong(song)
+                            onOpenNowPlaying()
+                        },
+                        onAddToPlaylist = { song, playlistId ->
+                            vm.addSongToPlaylist(playlistId, song)
+                        },
+                        onOpenNowPlaying = onOpenNowPlaying,
+                        onBack = { isRecognizeMusicOpen = false }
+                    )
                 }
             }
         }

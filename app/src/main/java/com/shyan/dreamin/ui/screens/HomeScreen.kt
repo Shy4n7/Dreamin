@@ -158,7 +158,8 @@ fun HomeScreen(
     detectedYouTubeUrl: String? = null,
     onPlayDetectedYouTubeTrack: () -> Unit = {},
     onDismissDetectedYouTubeLink: () -> Unit = {},
-    onCheckClipboard: () -> Unit = {}
+    onCheckClipboard: () -> Unit = {},
+    onOpenRecognizeMusic: () -> Unit = {}
 ) {
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -274,6 +275,18 @@ fun HomeScreen(
                             letterSpacing = 2.5.sp,
                             modifier = Modifier.weight(1f)
                         )
+
+                        IconButton(
+                            onClick = onOpenRecognizeMusic,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.GraphicEq,
+                                contentDescription = "Recognize Music",
+                                tint = colors.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
                         var showInfoSheet by remember { mutableStateOf(false) }
                         IconButton(

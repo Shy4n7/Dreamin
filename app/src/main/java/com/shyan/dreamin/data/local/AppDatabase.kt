@@ -21,6 +21,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+import com.shyan.dreamin.data.local.dao.RecognizedSongDao
+import com.shyan.dreamin.data.local.entity.RecognizedSongEntity
+
 @Database(
     entities = [
         PlayHistoryEntity::class,
@@ -28,9 +31,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistEntity::class,
         PlaylistSongEntity::class,
         DownloadedSongEntity::class,
-        ImportMatchEntity::class
+        ImportMatchEntity::class,
+        RecognizedSongEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun downloadDao(): DownloadDao
     abstract fun importMatchDao(): ImportMatchDao
+    abstract fun recognizedSongDao(): RecognizedSongDao
 
     companion object {
         @Volatile
