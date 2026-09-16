@@ -235,100 +235,29 @@ fun QueueScreen(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Action Buttons: Heart, Lock, More
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Action Button: Heart
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (state.currentSongIsFavorite) colors.primary.copy(alpha = 0.28f)
+                        else Color.White.copy(alpha = 0.10f)
+                    )
             ) {
-                // Heart Button
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (state.currentSongIsFavorite) colors.primary.copy(alpha = 0.28f)
-                            else Color.White.copy(alpha = 0.10f)
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (state.currentSongIsFavorite) colors.primary else Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Lock Button (Playlist isolation lock)
-                IconButton(
-                    onClick = onToggleQueueLock,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (state.playlistQueueActive) colors.primary.copy(alpha = 0.28f)
-                            else Color.White.copy(alpha = 0.10f)
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (state.playlistQueueActive) Icons.Filled.Lock else Icons.Outlined.Lock,
-                        contentDescription = "Queue Lock",
-                        tint = if (state.playlistQueueActive) colors.primary else Color.White,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-
-                // More Menu Button
-                var showTopMenu by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(
-                        onClick = { showTopMenu = true },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.10f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "Queue Options",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showTopMenu,
-                        onDismissRequest = { showTopMenu = false },
-                        containerColor = colors.surfaceContainer
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Save Queue as Playlist", color = Color.White) },
-                            onClick = {
-                                showTopMenu = false
-                                showSaveDialog = true
-                            },
-                            leadingIcon = {
-                                Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null, tint = colors.primary)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Close Queue", color = Color.White) },
-                            onClick = {
-                                showTopMenu = false
-                                onBack()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Filled.Close, null, tint = colors.onSurfaceVariant)
-                            }
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (state.currentSongIsFavorite) colors.primary else Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // 2. Quick Action Pills Row (Shuffle, Repeat, Radio)
+        // 2. Quick Action Pills Row (Shuffle, Repeat)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -352,15 +281,6 @@ fun QueueScreen(
                 label = "Repeat",
                 isActive = repeatActive,
                 onClick = onToggleRepeat,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Radio Pill
-            QueueActionPill(
-                icon = Icons.Filled.Sensors,
-                label = "Radio",
-                isActive = false,
-                onClick = onStartRadio,
                 modifier = Modifier.weight(1f)
             )
         }
