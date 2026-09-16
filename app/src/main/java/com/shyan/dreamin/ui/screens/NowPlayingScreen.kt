@@ -26,17 +26,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -368,6 +375,28 @@ fun NowPlayingScreen(
     val swipeOffsetY = remember { Animatable(0f) }
     val artworkOffsetX = remember { Animatable(0f) }
     val artworkScope = rememberCoroutineScope()
+    val density = LocalDensity.current.density
+
+    var showHeartBurst by remember { mutableStateOf(false) }
+    val heartScale = remember { Animatable(0f) }
+    LaunchedEffect(showHeartBurst) {
+        if (showHeartBurst) {
+            heartScale.snapTo(0.6f)
+            heartScale.animateTo(1.3f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
+            heartScale.animateTo(0f, tween(180))
+            showHeartBurst = false
+        }
+    }
+
+    val currentSongId = state.currentSong?.id
+    var previousSongId by remember { mutableStateOf(currentSongId) }
+    LaunchedEffect(currentSongId) {
+        if (previousSongId != null && currentSongId != null && previousSongId != currentSongId && artworkOffsetX.value == 0f) {
+            artworkOffsetX.snapTo(280f)
+            artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+        }
+        previousSongId = currentSongId
+    }
 
     val triggerNextAnimated = remember(onNext) {
         {
@@ -506,64 +535,186 @@ fun NowPlayingScreen(
                                 )
                             }
                         } else {
-                            // Large 1:1 Rounded Artwork with Soft Ambient Drop Glow
+                            // 3D Floating Artwork with Perspective Tilt, Dynamic Sheen & Breathing Aura
+                            val infiniteAura = rememberInfiniteTransition(label = "now_playing_aura")
+                            val isPlayingTrack = state.playbackState is PlaybackState.Playing
+                            val auraScale by infiniteAura.animateFloat(
+                                initialValue = 1.0f,
+                                targetValue = if (isPlayingTrack) 1.06f else 1.0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(2600, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "aura_scale"
+                            )
+                            val auraAlpha by infiniteAura.animateFloat(
+                                initialValue = 0.35f,
+                                targetValue = if (isPlayingTrack) 0.65f else 0.30f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(2600, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "aura_alpha"
+                            )
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(0.92f)
-                                    .aspectRatio(1f)
-                                    .graphicsLayer {
-                                        translationX = artworkOffsetX.value
-                                        rotationZ = (artworkOffsetX.value * 0.035f).coerceIn(-8f, 8f)
-                                    }
-                                    .pointerInput(onNext, onPrevious) {
-                                        detectHorizontalDragGestures(
-                                            onDragEnd = {
-                                                if (artworkOffsetX.value < -80f) {
-                                                    triggerNextAnimated()
-                                                } else if (artworkOffsetX.value > 80f) {
-                                                    triggerPreviousAnimated()
-                                                } else {
-                                                    scope.launch {
-                                                        artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f))
-                                                    }
-                                                }
-                                            },
-                                            onHorizontalDrag = { change, dragAmount ->
-                                                change.consume()
-                                                scope.launch {
-                                                    artworkOffsetX.snapTo(artworkOffsetX.value + dragAmount)
-                                                }
-                                            }
-                                        )
-                                    },
+                                    .aspectRatio(1f),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Subtle ambient glow
+                                // 🌟 Breathing Ambient Radial Glow Aura
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize(0.95f)
-                                        .drawBehind {
-                                            drawCircle(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        animatedDominant.copy(alpha = 0.40f),
-                                                        Color.Transparent
-                                                    ),
-                                                    center = center,
-                                                    radius = size.width * 0.70f
-                                                )
-                                            )
+                                        .fillMaxSize(0.96f)
+                                        .graphicsLayer {
+                                            scaleX = auraScale
+                                            scaleY = auraScale
+                                            alpha = auraAlpha
                                         }
+                                        .blur(48.dp)
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(
+                                                    animatedDominant.copy(alpha = 0.75f),
+                                                    animatedSecondary.copy(alpha = 0.45f),
+                                                    Color.Transparent
+                                                )
+                                            ),
+                                            CircleShape
+                                        )
                                 )
 
-                                AsyncImage(
-                                    model = song?.displayArtworkUrl,
-                                    contentDescription = song?.title,
+                                val artworkShape = remember { RoundedCornerShape(26.dp) }
+                                Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .clip(RoundedCornerShape(24.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
+                                        .pointerInput(onNext, onPrevious) {
+                                            detectHorizontalDragGestures(
+                                                onDragEnd = {
+                                                    val currentOffset = artworkOffsetX.value
+                                                    if (currentOffset < -75f) {
+                                                        triggerNextAnimated()
+                                                    } else if (currentOffset > 75f) {
+                                                        triggerPreviousAnimated()
+                                                    } else {
+                                                        artworkScope.launch {
+                                                            artworkOffsetX.animateTo(
+                                                                0f,
+                                                                spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                onDragCancel = {
+                                                    artworkScope.launch {
+                                                        artworkOffsetX.animateTo(
+                                                            0f,
+                                                            spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                                                        )
+                                                    }
+                                                },
+                                                onHorizontalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    artworkScope.launch {
+                                                        val next = (artworkOffsetX.value + dragAmount).coerceIn(-260f, 260f)
+                                                        artworkOffsetX.snapTo(next)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                        .graphicsLayer {
+                                            val dragX = artworkOffsetX.value
+                                            val pullY = swipeOffsetY.value
+                                            translationX = dragX
+                                            rotationZ = (dragX / 20f).coerceIn(-10f, 10f)
+                                            rotationY = (-dragX / 8f).coerceIn(-22f, 22f)
+                                            rotationX = (pullY / 12f).coerceIn(0f, 18f)
+                                            val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1100f) - (pullY / 1600f)).coerceIn(0.88f, 1f)
+                                            scaleX = dynamicScale
+                                            scaleY = dynamicScale
+                                            cameraDistance = 16f * density
+                                            transformOrigin = TransformOrigin.Center
+                                            shape = artworkShape
+                                            clip = true
+                                            shadowElevation = 24f
+                                            compositingStrategy = CompositingStrategy.Auto
+                                        }
+                                        .clip(artworkShape)
+                                        .drawWithContent {
+                                            drawContent()
+                                            val dragX = artworkOffsetX.value
+                                            val sheenOffset = (dragX * 2.2f).coerceIn(-400f, 400f)
+                                            val sheenAlpha = (kotlin.math.abs(dragX) / 100f).coerceIn(0f, 0.45f)
+                                            val borderAlpha = (0.14f + (kotlin.math.abs(dragX) / 350f)).coerceIn(0.14f, 0.48f)
+
+                                            // Draw smooth border in Draw Phase
+                                            drawOutline(
+                                                outline = artworkShape.createOutline(size, layoutDirection, this),
+                                                color = Color.White.copy(alpha = borderAlpha),
+                                                style = Stroke(width = 1.5.dp.toPx())
+                                            )
+
+                                            // 🎚️ Holographic Vinyl Specular Sheen in Draw Phase
+                                            if (sheenAlpha > 0.005f) {
+                                                drawRect(
+                                                    brush = Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color.Transparent,
+                                                            Color(0xFFFF80BF).copy(alpha = sheenAlpha * 0.32f),
+                                                            Color.White.copy(alpha = sheenAlpha * 0.65f),
+                                                            Color(0xFF80D8FF).copy(alpha = sheenAlpha * 0.32f),
+                                                            Color.Transparent
+                                                        ),
+                                                        start = Offset(sheenOffset - 100f, -50f),
+                                                        end = Offset(sheenOffset + 240f, 320f)
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        .combinedClickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = {},
+                                            onLongClick = {
+                                                showPosterPicker = true
+                                            },
+                                            onDoubleClick = {
+                                                onToggleFavorite()
+                                                showHeartBurst = true
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AnimatedContent(
+                                        targetState = "${song?.id}_${song?.displayArtworkUrl}",
+                                        transitionSpec = {
+                                            fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(160))
+                                        },
+                                        label = "artwork_cinematic_transition"
+                                    ) { _ ->
+                                        AsyncImage(
+                                            model = song?.displayArtworkUrl,
+                                            contentDescription = song?.title,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+
+                                    if (heartScale.value > 0f) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Favorite,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = heartScale.value.coerceIn(0f, 1f)),
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .graphicsLayer {
+                                                    scaleX = heartScale.value
+                                                    scaleY = heartScale.value
+                                                }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
