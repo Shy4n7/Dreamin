@@ -216,8 +216,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 _uiState.update { state ->
                     state.copy(
                         favorites = songs,
-                        currentSongIsFavorite = state.currentSong?.id?.let { id ->
-                            songs.any { s -> s.id == id }
+                        currentSongIsFavorite = state.currentSong?.let { curr ->
+                            songs.any { s ->
+                                s.id == curr.id || (s.title.isNotBlank() && s.title.equals(curr.title, ignoreCase = true) && s.artist.equals(curr.artist, ignoreCase = true))
+                            }
                         } ?: false
                     )
                 }
@@ -235,10 +237,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun toggleFavoriteFor(song: Song) {
-        val isFav = _uiState.value.favorites.any { it.id == song.id }
+        val matchingFav = _uiState.value.favorites.find {
+            it.id == song.id || (it.title.isNotBlank() && it.title.equals(song.title, ignoreCase = true) && it.artist.equals(song.artist, ignoreCase = true))
+        }
+        val isFav = matchingFav != null || (_uiState.value.currentSong?.id == song.id && _uiState.value.currentSongIsFavorite)
+
+        // Optimistically update currentSongIsFavorite immediately for instant UI feedback
+        if (_uiState.value.currentSong?.id == song.id) {
+            _uiState.update { it.copy(currentSongIsFavorite = !isFav) }
+        }
+
         viewModelScope.launch {
-            if (isFav) favoritesRepo.removeFavorite(song.id)
-            else {
+            if (isFav) {
+                if (matchingFav != null) {
+                    favoritesRepo.removeFavorite(matchingFav.id)
+                }
+                favoritesRepo.removeFavorite(song.id)
+            } else {
                 favoritesRepo.addFavorite(song)
             }
         }
@@ -1162,7 +1177,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (matching != null) {
                         state.copy(
                             currentSong = matching,
-                            currentSongIsFavorite = state.favorites.any { f -> f.id == matching.id },
+                            currentSongIsFavorite = state.favorites.any { f ->
+                                f.id == matching.id || (f.title.isNotBlank() && f.title.equals(matching.title, ignoreCase = true) && f.artist.equals(matching.artist, ignoreCase = true))
+                            },
                             userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != matching.id }
                         )
                     } else {
@@ -1176,7 +1193,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             )
                             state.copy(
                                 currentSong = newSong,
-                                currentSongIsFavorite = state.favorites.any { f -> f.id == newSong.id },
+                                currentSongIsFavorite = state.favorites.any { f ->
+                                    f.id == newSong.id || (f.title.isNotBlank() && f.title.equals(newSong.title, ignoreCase = true) && f.artist.equals(newSong.artist, ignoreCase = true))
+                                },
                                 userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != newSong.id }
                             )
                         } else state
@@ -1866,7 +1885,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 currentSong = song,
                 queue = newQueue,
                 playbackState = PlaybackState.Loading,
-                currentSongIsFavorite = it.favorites.any { s -> s.id == song.id },
+                currentSongIsFavorite = it.favorites.any { s ->
+                    s.id == song.id || (s.title.isNotBlank() && s.title.equals(song.title, ignoreCase = true) && s.artist.equals(song.artist, ignoreCase = true))
+                },
                 playlistQueueActive = isPlaylistActive,
                 userQueuedSongIds = it.userQueuedSongIds.filter { qId -> qId != song.id },
                 currentSongStreamSource = null

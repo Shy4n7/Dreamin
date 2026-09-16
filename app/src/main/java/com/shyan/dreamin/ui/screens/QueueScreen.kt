@@ -127,6 +127,21 @@ fun QueueScreen(
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val heartButtonScale = remember { Animatable(1f) }
+
+    val triggerFavoriteWithAnim = remember(onToggleFavorite) {
+        {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            coroutineScope.launch {
+                heartButtonScale.animateTo(0.70f, tween(70, easing = FastOutLinearInEasing))
+                heartButtonScale.animateTo(1.28f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
+                heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+            }
+            onToggleFavorite()
+        }
+    }
+
     val listState = rememberLazyListState()
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -334,23 +349,45 @@ fun QueueScreen(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Action Button: Heart
+            // Action Button: Heart with tactile spring animation
+            val isFav = state.currentSongIsFavorite
+            val favBgColor by animateColorAsState(
+                targetValue = if (isFav) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.10f),
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "queue_fav_bg_color"
+            )
+            val favIconColor by animateColorAsState(
+                targetValue = if (isFav) colors.primary else Color.White,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "queue_fav_icon_color"
+            )
+
             IconButton(
-                onClick = onToggleFavorite,
+                onClick = triggerFavoriteWithAnim,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
+                    .graphicsLayer {
+                        scaleX = heartButtonScale.value
+                        scaleY = heartButtonScale.value
+                    }
                     .clip(CircleShape)
-                    .background(
-                        if (state.currentSongIsFavorite) colors.primary.copy(alpha = 0.28f)
-                        else Color.White.copy(alpha = 0.10f)
-                    )
+                    .background(favBgColor)
             ) {
-                Icon(
-                    imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (state.currentSongIsFavorite) colors.primary else Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+                AnimatedContent(
+                    targetState = isFav,
+                    transitionSpec = {
+                        (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                            .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                    },
+                    label = "queue_fav_icon_morph"
+                ) { fav ->
+                    Icon(
+                        imageVector = if (fav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
+                        tint = favIconColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
 

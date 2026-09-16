@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -379,12 +380,27 @@ fun NowPlayingScreen(
 
     var showHeartBurst by remember { mutableStateOf(false) }
     val heartScale = remember { Animatable(0f) }
+    val heartButtonScale = remember { Animatable(1f) }
+    val haptic = LocalHapticFeedback.current
+
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
             heartScale.snapTo(0.6f)
             heartScale.animateTo(1.3f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
             heartScale.animateTo(0f, tween(180))
             showHeartBurst = false
+        }
+    }
+
+    val triggerFavoriteWithAnim = remember(onToggleFavorite) {
+        {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            artworkScope.launch {
+                heartButtonScale.animateTo(0.70f, tween(70, easing = FastOutLinearInEasing))
+                heartButtonScale.animateTo(1.28f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
+                heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+            }
+            onToggleFavorite()
         }
     }
 
@@ -700,7 +716,7 @@ fun NowPlayingScreen(
                                                 showPosterPicker = true
                                             },
                                             onDoubleClick = {
-                                                onToggleFavorite()
+                                                triggerFavoriteWithAnim()
                                                 showHeartBurst = true
                                             }
                                         ),
@@ -824,23 +840,45 @@ fun NowPlayingScreen(
 
                         Spacer(modifier = Modifier.width(10.dp))
 
-                        // Heart Favorite circular frosted button
+                        // Heart Favorite circular frosted button with tactile spring animation
+                        val isFav = state.currentSongIsFavorite
+                        val favBgColor by animateColorAsState(
+                            targetValue = if (isFav) colors.primary.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f),
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            label = "fav_bg_color"
+                        )
+                        val favIconColor by animateColorAsState(
+                            targetValue = if (isFav) colors.primary else Color.White,
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            label = "fav_icon_color"
+                        )
+
                         IconButton(
-                            onClick = onToggleFavorite,
+                            onClick = triggerFavoriteWithAnim,
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(44.dp)
+                                .graphicsLayer {
+                                    scaleX = heartButtonScale.value
+                                    scaleY = heartButtonScale.value
+                                }
                                 .clip(CircleShape)
-                                .background(
-                                    if (state.currentSongIsFavorite) colors.primary.copy(alpha = 0.35f)
-                                    else Color.White.copy(alpha = 0.12f)
-                                )
+                                .background(favBgColor)
                         ) {
-                            Icon(
-                                imageVector = if (state.currentSongIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                contentDescription = "Favorite",
-                                tint = if (state.currentSongIsFavorite) colors.primary else Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
+                            AnimatedContent(
+                                targetState = isFav,
+                                transitionSpec = {
+                                    (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                                        .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                                },
+                                label = "fav_icon_morph"
+                            ) { fav ->
+                                Icon(
+                                    imageVector = if (fav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
+                                    tint = favIconColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
 
@@ -854,7 +892,7 @@ fun NowPlayingScreen(
                         secondaryColor = animatedSecondary
                     )
 
-                    // 6. Playback Controls Row (Skip Previous, Solid Play/Pause, Skip Next)
+                    // 6. Playback Controls Row (Skip Previous, Dynamic Play/Pause, Skip Next)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -875,22 +913,69 @@ fun NowPlayingScreen(
                             )
                         }
 
-                        // Large Solid White Play / Pause Button
+                        // Dynamic Color Play / Pause Button with tactile spring & morph animation
+                        val isLoading = state.playbackState == PlaybackState.Loading
                         val isPlaying = state.playbackState is PlaybackState.Playing
+                        val playInteraction = remember { MutableInteractionSource() }
+                        val isPlayPressed by playInteraction.collectIsPressedAsState()
+                        val playScale by animateFloatAsState(
+                            targetValue = if (isPlayPressed) 0.86f else if (isPlaying) 1.04f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "hero_play_scale"
+                        )
                         Box(
                             modifier = Modifier
                                 .size(72.dp)
+                                .graphicsLayer {
+                                    val s = if (isLoading) 0.95f else playScale
+                                    scaleX = s
+                                    scaleY = s
+                                    shadowElevation = (if (isPlayPressed) 6f else 18f).dp.toPx()
+                                    shape = CircleShape
+                                    clip = false
+                                }
                                 .clip(CircleShape)
-                                .background(Color.White)
-                                .clickable { onPlayPause() },
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(animatedDominant, animatedSecondary)
+                                    )
+                                )
+                                .clickable(
+                                    interactionSource = playInteraction,
+                                    indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.45f), radius = 36.dp),
+                                    enabled = !isLoading
+                                ) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onPlayPause()
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = Color(0xFF1E1E24),
-                                modifier = Modifier.size(38.dp)
-                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.5.dp
+                                )
+                            } else {
+                                AnimatedContent(
+                                    targetState = isPlaying,
+                                    transitionSpec = {
+                                        (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                                            .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                                    },
+                                    label = "play_pause_morph"
+                                ) { playing ->
+                                    Icon(
+                                        imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                        contentDescription = if (playing) "Pause" else "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(38.dp)
+                                    )
+                                }
+                            }
                         }
 
                         // Skip Next (Double Triangle)
