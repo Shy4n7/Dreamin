@@ -23,15 +23,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -150,17 +155,128 @@ fun QueueScreen(
         )
     }
 
+    val swipeOffsetY = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+    val dismissThreshold = with(density) { 110.dp.toPx() }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < 0f && swipeOffsetY.value > 0f) {
+                    val newOffset = (swipeOffsetY.value + delta).coerceAtLeast(0f)
+                    coroutineScope.launch { swipeOffsetY.snapTo(newOffset) }
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta > 0f && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+                    val newOffset = (swipeOffsetY.value + delta * 0.7f).coerceAtLeast(0f)
+                    coroutineScope.launch { swipeOffsetY.snapTo(newOffset) }
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (swipeOffsetY.value > dismissThreshold) {
+                    onBack()
+                    return available
+                } else if (swipeOffsetY.value > 0f) {
+                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                translationY = swipeOffsetY.value.coerceAtLeast(0f)
+            }
+            .nestedScroll(nestedScrollConnection)
             .background(colors.background)
             .statusBarsPadding()
     ) {
+        // Subtle Drag Handle Pill indicating swipe down to Now Playing
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 4.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (swipeOffsetY.value > dismissThreshold) {
+                                onBack()
+                            } else {
+                                coroutineScope.launch {
+                                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            if (dragAmount > 0f || swipeOffsetY.value > 0f) {
+                                change.consume()
+                                coroutineScope.launch {
+                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
+                                }
+                            }
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(38.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.35f))
+            )
+        }
+
         // 1. Top Bar (Mini artwork, Title, Artist, Heart, Lock, More)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (swipeOffsetY.value > dismissThreshold) {
+                                onBack()
+                            } else {
+                                coroutineScope.launch {
+                                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            if (dragAmount > 0f || swipeOffsetY.value > 0f) {
+                                change.consume()
+                                coroutineScope.launch {
+                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
+                                }
+                            }
+                        }
+                    )
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Mini artwork thumbnail

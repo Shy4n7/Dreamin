@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -42,113 +44,264 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.ui.components.AudioStreamDetailsSheet
-import com.shyan.dreamin.ui.components.EqualizerBottomSheet
 import com.shyan.dreamin.ui.components.FluidMeshGradientBackground
 import com.shyan.dreamin.ui.components.PosterPickerBottomSheet
 import com.shyan.dreamin.ui.components.SyncedLyricsView
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
- * 🎚️ Sleek Minimalist Scrubber Slider matching design reference Screenshot 1.
+ * 🎚️ Harmonic Acoustic Waveform Slider with live dancing ripple animation when playing.
  */
 @Composable
-fun SleekScrubberSlider(
+fun NowPlayingProgressSlider(
     progressFlow: StateFlow<PlaybackProgress>,
+    songId: String = "",
+    isPlaying: Boolean = true,
     onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    activeColor: Color = LocalDreaminColors.current.primary,
+    secondaryColor: Color = LocalDreaminColors.current.secondary,
+    audioBadgeText: String = "OPUS • 142 kbps",
+    onAudioBadgeClick: () -> Unit = {}
 ) {
+    val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
+    val currentOnSeek by rememberUpdatedState(onSeek)
     val playbackProgress by progressFlow.collectAsStateWithLifecycle()
     val currentPositionMs = playbackProgress.currentPositionMs
     val durationMs = playbackProgress.durationMs
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-
     var isSeeking by remember { mutableStateOf(false) }
     var seekProgress by remember { mutableFloatStateOf(progress) }
     if (!isSeeking) seekProgress = progress
     val displayProgress = if (isSeeking) seekProgress else progress
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(28.dp)
-            .pointerInput(durationMs) {
-                detectTapGestures { offset ->
-                    val newProgress = (offset.x / size.width).coerceIn(0f, 1f)
-                    seekProgress = newProgress
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onSeek((newProgress * durationMs).toLong())
-                }
-            }
-            .pointerInput(durationMs) {
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        isSeeking = true
-                        seekProgress = (offset.x / size.width).coerceIn(0f, 1f)
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    },
-                    onDragEnd = {
-                        isSeeking = false
-                        onSeek((seekProgress * durationMs).toLong())
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    },
-                    onDragCancel = { isSeeking = false },
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        val delta = dragAmount / size.width
-                        seekProgress = (seekProgress + delta).coerceIn(0f, 1f)
-                    }
-                )
-            },
-        contentAlignment = Alignment.CenterStart
-    ) {
-        // Track line with phase-deferred drawBehind for 120fps smooth performance
+    // Continuous live dancing wave animation when playing
+    val infiniteTransition = rememberInfiniteTransition(label = "waveform_anim")
+    val animPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "anim_phase"
+    )
+    val thumbHaloRadius by infiniteTransition.animateFloat(
+        initialValue = 7.5f,
+        targetValue = 11.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "thumb_halo"
+    )
+
+    // Generate 48 deterministic acoustic amplitude bars tailored to songId
+    val barCount = 48
+    val waveAmplitudes = remember(songId) {
+        val seed = (songId.hashCode() and 0xFFFF).toFloat()
+        FloatArray(barCount) { i ->
+            val norm = i.toFloat() / barCount
+            // Acoustic song envelope: intro buildup, chorus drops at ~35% and ~75%, bridge and outro
+            val envelope = (sin(norm * Math.PI.toFloat())).coerceIn(0.25f, 1f)
+            val wave1 = sin(i * 0.42f + seed * 0.08f) * 0.38f
+            val wave2 = cos(i * 0.88f + seed * 0.19f) * 0.28f
+            val wave3 = sin(i * 1.75f + seed * 0.45f) * 0.16f
+            val raw = 0.52f + wave1 + wave2 + wave3
+            (raw * envelope).coerceIn(0.18f, 1.0f)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .drawBehind {
-                    val w = size.width
-                    val h = size.height
-                    // Inactive track
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.22f),
-                        topLeft = Offset(0f, 0f),
-                        size = Size(w, h),
-                        cornerRadius = CornerRadius(h / 2, h / 2)
-                    )
-                    // Active track
-                    val activeW = w * displayProgress
-                    if (activeW > 0f) {
-                        drawRoundRect(
-                            brush = Brush.horizontalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.85f),
-                                    Color.White
-                                )
-                            ),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(activeW, h),
-                            cornerRadius = CornerRadius(h / 2, h / 2)
-                        )
+                .height(36.dp)
+                .pointerInput(durationMs) {
+                    detectTapGestures { offset ->
+                        val newProgress = (offset.x / size.width).coerceIn(0f, 1f)
+                        seekProgress = newProgress
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        currentOnSeek((newProgress * durationMs).toLong())
                     }
                 }
-        )
+                .pointerInput(durationMs) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            isSeeking = true
+                            seekProgress = (offset.x / size.width).coerceIn(0f, 1f)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        onDragEnd = {
+                            isSeeking = false
+                            currentOnSeek((seekProgress * durationMs).toLong())
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        onDragCancel = {
+                            isSeeking = false
+                        },
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            seekProgress = (change.position.x / size.width).coerceIn(0f, 1f)
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val canvasWidth = size.width
+                val canvasHeight = size.height
+                val totalGapSpace = canvasWidth * 0.30f
+                val spacing = totalGapSpace / (barCount - 1)
+                val barWidth = (canvasWidth - totalGapSpace) / barCount
+                val maxBarHeight = canvasHeight * 0.88f
+                val minBarHeight = 11.dp.toPx()
+                val unplayedHeight = 9.5.dp.toPx()
 
-        // Sleek minimal circular thumb
-        Box(
-            modifier = Modifier
-                .offset(x = (displayProgress * 100).dp.minus(6.dp))
-                .graphicsLayer {
-                    translationX = (displayProgress * (this.size.width - 12.dp.toPx()))
+                val activeX = displayProgress * canvasWidth
+
+                for (i in 0 until barCount) {
+                    val barX = i * (barWidth + spacing)
+                    val baseAmp = waveAmplitudes[i]
+
+                    // Smooth morph factor: 0.0 (unplayed sleek pill) -> 1.0 (played animated wave)
+                    val transitionWidth = (barWidth + spacing) * 1.2f
+                    val waveFactor = ((activeX - (barX - transitionWidth * 0.3f)) / transitionWidth).coerceIn(0f, 1f)
+
+                    // Live harmonic audio dancing ripple (animates only the played portion)
+                    val dynamicAmp = if (isPlaying && waveFactor > 0f) {
+                        val distFromHead = kotlin.math.abs(i - (displayProgress * barCount))
+                        val headBoost = (1f - (distFromHead / 6f).coerceIn(0f, 1f)) * 0.22f
+                        val waveOscillation = (sin(animPhase + i * 0.40f) * 0.16f) + (cos(animPhase * 2f + i * 0.25f) * 0.08f)
+                        (baseAmp + waveOscillation + headBoost).coerceIn(0.15f, 1.0f)
+                    } else {
+                        baseAmp
+                    }
+
+                    // Morph height from unplayed sleek vertical pill to sculpted acoustic wave
+                    val fullWaveHeight = minBarHeight + (maxBarHeight - minBarHeight) * dynamicAmp
+                    val barHeight = unplayedHeight + (fullWaveHeight - unplayedHeight) * waveFactor
+                    val barY = (canvasHeight - barHeight) / 2f
+
+                    val barColor = if (waveFactor >= 0.99f) {
+                        activeColor
+                    } else if (waveFactor <= 0.01f) {
+                        Color.White.copy(alpha = 0.22f)
+                    } else {
+                        androidx.compose.ui.graphics.lerp(
+                            Color.White.copy(alpha = 0.22f),
+                            activeColor,
+                            waveFactor
+                        )
+                    }
+
+                    drawRoundRect(
+                        color = barColor,
+                        topLeft = Offset(barX, barY),
+                        size = Size(barWidth, barHeight),
+                        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                    )
                 }
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(Color.White)
-        )
+
+                // Glowing Neon Scrubber Bead at current position
+                val minThumbX = 5.dp.toPx()
+                val maxThumbX = (canvasWidth - minThumbX).coerceAtLeast(minThumbX)
+                val thumbX = activeX.coerceIn(minThumbX, maxThumbX)
+                val thumbY = canvasHeight / 2f
+
+                // Outer ambient halo glow (pulsing when playing)
+                val haloRadiusPx = if (isPlaying) thumbHaloRadius.dp.toPx() else 8.dp.toPx()
+                drawCircle(
+                    color = activeColor.copy(alpha = 0.38f),
+                    radius = haloRadiusPx,
+                    center = Offset(thumbX, thumbY)
+                )
+                // Inner bright bead
+                drawCircle(
+                    color = Color.White,
+                    radius = 4.5.dp.toPx(),
+                    center = Offset(thumbX, thumbY)
+                )
+            }
+        }
+
+        val displayedPositionMs = if (isSeeking) {
+            (seekProgress * durationMs).toLong()
+        } else {
+            currentPositionMs
+        }
+        val currentSecondMs = (displayedPositionMs.coerceAtLeast(0L) / 1000L) * 1000L
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RollingTimeText(
+                timeMs = currentSecondMs,
+                color = Color.White.copy(alpha = 0.70f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            // Frosted pill chip for Audio Stream Info
+            Surface(
+                onClick = onAudioBadgeClick,
+                shape = RoundedCornerShape(20.dp),
+                color = Color.White.copy(alpha = 0.12f),
+                modifier = Modifier.height(24.dp)
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = audioBadgeText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
+            }
+
+            RollingTimeText(
+                timeMs = durationMs,
+                color = Color.White.copy(alpha = 0.70f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
+}
+
+/**
+ * ⏱️ Formatted time display for current track position and total duration.
+ */
+@Composable
+fun RollingTimeText(
+    timeMs: Long,
+    color: Color,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    fontWeight: FontWeight = FontWeight.Medium,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = formatDuration(timeMs),
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        style = LocalTextStyle.current.copy(
+            fontFeatureSettings = "tnum"
+        ),
+        modifier = modifier
+    )
 }
 
 /**
@@ -195,7 +348,6 @@ fun NowPlayingScreen(
     var showQueueView by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
-    var showEqualizerSheet by remember { mutableStateOf(false) }
     var showPosterPicker by remember { mutableStateOf(false) }
     var showAudioStreamDetailsSheet by remember { mutableStateOf(false) }
 
@@ -524,14 +676,6 @@ fun NowPlayingScreen(
                                     },
                                     leadingIcon = { Icon(Icons.Outlined.Info, null, tint = colors.primary) }
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Equalizer", color = Color.White) },
-                                    onClick = {
-                                        showOptionsMenu = false
-                                        showEqualizerSheet = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.GraphicEq, null, tint = colors.primary) }
-                                )
                                 if (onUpdateSongArtwork != null && song != null) {
                                     DropdownMenuItem(
                                         text = { Text("Change Poster", color = Color.White) },
@@ -548,7 +692,7 @@ fun NowPlayingScreen(
                                         showOptionsMenu = false
                                         showPlaylistPicker = true
                                     },
-                                    leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = "Add to Playlist", tint = colors.primary) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add to Playlist", tint = colors.primary) }
                                 )
                             }
                         }
@@ -575,19 +719,7 @@ fun NowPlayingScreen(
                         }
                     }
 
-                    // 4. Scrubber Slider
-                    SleekScrubberSlider(
-                        progressFlow = progressFlow,
-                        onSeek = onSeek
-                    )
-
-                    // 5. Time & Audio Badge Row ("0:00", "OPUS • 142 kbps", total duration)
-                    val playbackProgress by progressFlow.collectAsStateWithLifecycle()
-                    val currentPos = playbackProgress.currentPositionMs / 1000
-                    val durPos = playbackProgress.durationMs / 1000
-                    val currentStr = String.format("%d:%02d", currentPos / 60, currentPos % 60)
-                    val durStr = String.format("%d:%02d", durPos / 60, durPos % 60)
-
+                    // 4. Harmonic Acoustic Waveform Slider with live dancing ripple animation
                     val audioBadgeText = remember(state.currentAudioFormat) {
                         val fmt = state.currentAudioFormat
                         if (fmt != null) {
@@ -597,47 +729,16 @@ fun NowPlayingScreen(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = currentStr,
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.70f),
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        // Frosted pill chip for Audio Stream Info
-                        Surface(
-                            onClick = { showAudioStreamDetailsSheet = true },
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color.White.copy(alpha = 0.12f),
-                            modifier = Modifier.height(24.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = audioBadgeText,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = durStr,
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.70f),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                    NowPlayingProgressSlider(
+                        progressFlow = progressFlow,
+                        songId = state.currentSong?.id.orEmpty(),
+                        isPlaying = state.playbackState is PlaybackState.Playing,
+                        onSeek = onSeek,
+                        activeColor = animatedDominant,
+                        secondaryColor = animatedSecondary,
+                        audioBadgeText = audioBadgeText,
+                        onAudioBadgeClick = { showAudioStreamDetailsSheet = true }
+                    )
 
                     // 6. Playback Controls Row (Skip Previous, Solid Play/Pause, Skip Next)
                     Row(
@@ -706,51 +807,48 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(44.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.FormatListBulleted,
+                                imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
                                 contentDescription = "Queue",
                                 tint = Color.White.copy(alpha = 0.85f),
                                 modifier = Modifier.size(24.dp)
                             )
                         }
 
-                        // Center Pill: Speaker/Equalizer + Sleep Timer
+                        // Center Pill: Sleep Timer
                         val isTimerActive = state.sleepTimerEndMs != null
+                        val timerText = remember(state.sleepTimerEndMs) {
+                            state.sleepTimerEndMs?.let { endMs ->
+                                val remainingMins = ((endMs - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+                                "${remainingMins}m"
+                            }
+                        }
                         Surface(
+                            onClick = {
+                                if (isTimerActive) onCancelSleepTimer()
+                                else showSleepTimerDialog = true
+                            },
                             shape = RoundedCornerShape(22.dp),
-                            color = Color.White.copy(alpha = 0.12f),
+                            color = if (isTimerActive) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.12f),
+                            border = if (isTimerActive) BorderStroke(1.dp, colors.primary) else null,
                             modifier = Modifier.height(42.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                // Equalizer / Speaker button
-                                IconButton(
-                                    onClick = { showEqualizerSheet = true },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.VolumeUp,
-                                        contentDescription = "Equalizer",
-                                        tint = Color.White.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                // Sleep Timer button
-                                IconButton(
-                                    onClick = {
-                                        if (isTimerActive) onCancelSleepTimer()
-                                        else showSleepTimerDialog = true
-                                    },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Timer,
-                                        contentDescription = "Sleep Timer",
-                                        tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(20.dp)
+                                Icon(
+                                    imageVector = Icons.Outlined.Timer,
+                                    contentDescription = "Sleep Timer",
+                                    tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                if (timerText != null) {
+                                    Text(
+                                        text = timerText,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.primary
                                     )
                                 }
                             }
@@ -780,12 +878,6 @@ fun NowPlayingScreen(
             state = state,
             song = song,
             onDismiss = { showAudioStreamDetailsSheet = false }
-        )
-    }
-
-    if (showEqualizerSheet) {
-        EqualizerBottomSheet(
-            onDismiss = { showEqualizerSheet = false }
         )
     }
 
