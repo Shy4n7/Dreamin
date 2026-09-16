@@ -430,9 +430,9 @@ fun NowPlayingScreen(
     ) {
         // 🌌 Full-screen Animated Liquid Mesh Gradient Background spanning both pages
         FluidMeshGradientBackground(
-            dominantColor = animatedDominant,
-            secondaryColor = animatedSecondary,
-            accentColor = animatedAccent,
+            dominantColor = Color(state.dominantColor),
+            secondaryColor = Color(state.secondaryColor),
+            accentColor = Color(state.accentColor),
             backgroundColor = colors.background,
             isPlaying = state.playbackState is PlaybackState.Playing,
             isHeaderMode = false
