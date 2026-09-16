@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.shyan.dreamin.data.model.*
 import kotlinx.coroutines.launch
@@ -133,6 +134,74 @@ fun QueueScreen(
 
     var showSaveDialog by remember { mutableStateOf(false) }
 
+    var pullDownAccumulated by remember { mutableFloatStateOf(0f) }
+    var pullDownTriggered by remember { mutableStateOf(false) }
+    val pullDownThresholdPx = with(density) { 36.dp.toPx() }
+
+    val queueNestedScrollConnection = remember(listState, onBack) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // If user drags downward and the list cannot scroll backward (at the top)
+                if (available.y > 0 && !listState.canScrollBackward) {
+                    if (!pullDownTriggered) {
+                        pullDownAccumulated += available.y
+                        if (pullDownAccumulated > pullDownThresholdPx) {
+                            pullDownTriggered = true
+                            pullDownAccumulated = 0f
+                            onBack()
+                        }
+                    }
+                    return Offset(0f, available.y)
+                } else if (available.y < 0) {
+                    pullDownAccumulated = 0f
+                    pullDownTriggered = false
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (available.y > 80f && !listState.canScrollBackward && !pullDownTriggered) {
+                    pullDownTriggered = true
+                    pullDownAccumulated = 0f
+                    onBack()
+                    return available
+                }
+                pullDownAccumulated = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            pullDownAccumulated = 0f
+            pullDownTriggered = false
+        }
+    }
+
+    LaunchedEffect(backHandlerEnabled) {
+        if (backHandlerEnabled) {
+            pullDownAccumulated = 0f
+            pullDownTriggered = false
+        }
+    }
+
+    val queueItemKeys = remember(state.queue) {
+        val countMap = HashMap<String, Int>(state.queue.size)
+        state.queue.map { song ->
+            val count = countMap[song.id] ?: 0
+            countMap[song.id] = count + 1
+            if (count == 0) song.id else "${song.id}#$count"
+        }
+    }
+
+    LaunchedEffect(state.queue.size) {
+        if (draggingIndex != null && draggingIndex !in state.queue.indices) {
+            draggingIndex = null
+            dragOffsetY = 0f
+        }
+    }
+
     BackHandler(enabled = backHandlerEnabled) { onBack() }
 
     // Calculate total formatted duration of upcoming tracks
@@ -164,24 +233,54 @@ fun QueueScreen(
             .background(backgroundColor)
             .statusBarsPadding()
     ) {
-        // Subtle Drag Handle Pill indicating scroll up to Now Playing
+        // Top Header: Collapse Arrow on Top Left + Drag Handle Pill (tap or drag down to return to Now Playing)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 4.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onBack() },
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(44.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Back to Now Playing",
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
             Box(
                 modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.40f))
-            )
+                    .align(Alignment.Center)
+                    .pointerInput(onBack) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { change, dragAmount ->
+                                if (dragAmount > 8f) {
+                                    change.consume()
+                                    onBack()
+                                }
+                            }
+                        )
+                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onBack() }
+                    .padding(horizontal = 32.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.40f))
+                )
+            }
         }
 
         // 1. Top Bar (Mini artwork, Title, Artist, Heart, Lock, More)
@@ -291,6 +390,16 @@ fun QueueScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .pointerInput(onBack) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { change, dragAmount ->
+                            if (dragAmount > 8f) {
+                                change.consume()
+                                onBack()
+                            }
+                        }
+                    )
+                }
                 .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -351,12 +460,14 @@ fun QueueScreen(
         } else {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(queueNestedScrollConnection),
                 contentPadding = PaddingValues(bottom = 40.dp)
             ) {
                 itemsIndexed(
                     items = state.queue,
-                    key = { index, song -> "${song.id}_$index" },
+                    key = { index, _ -> queueItemKeys.getOrElse(index) { "${state.queue[index].id}_$index" } },
                     contentType = { _, _ -> "queue_row" }
                 ) { index, song ->
                     val isCurrent = song.id == state.currentSong?.id
@@ -484,6 +595,10 @@ private fun QueueSongItemRow(
     var showMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
 
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+
     val formattedDuration = remember(song.duration) {
         if (song.duration > 0) {
             val mins = song.duration / 60
@@ -495,12 +610,13 @@ private fun QueueSongItemRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .zIndex(if (isDragging) 1f else 0f)
             .graphicsLayer {
                 translationY = dragOffsetY
                 shadowElevation = if (isDragging) 16f else 0f
             }
             .background(if (isDragging) colors.surfaceHighest.copy(alpha = 0.5f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .clickable(enabled = !isDragging, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp)
     ) {
         Row(
@@ -531,21 +647,25 @@ private fun QueueSongItemRow(
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = "Playing",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
-            // Title & Artist • Duration
-            Column(modifier = Modifier.weight(1f)) {
+            // Track details (Title, Artist, Duration)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
                 Text(
                     text = song.title,
                     fontSize = 15.sp,
-                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isCurrent) colors.primary else Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -565,7 +685,7 @@ private fun QueueSongItemRow(
             Box {
                 IconButton(
                     onClick = { showMenu = true },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
@@ -612,17 +732,21 @@ private fun QueueSongItemRow(
             // Drag handle (`=`)
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragStart = { onDragStart() },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                onDrag(dragAmount)
-                            },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() }
-                        )
+                    .size(44.dp)
+                    .pointerInput(song.id) {
+                        try {
+                            detectVerticalDragGestures(
+                                onDragStart = { currentOnDragStart() },
+                                onVerticalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    currentOnDrag(dragAmount)
+                                },
+                                onDragEnd = { currentOnDragEnd() },
+                                onDragCancel = { currentOnDragEnd() }
+                            )
+                        } finally {
+                            currentOnDragEnd()
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
