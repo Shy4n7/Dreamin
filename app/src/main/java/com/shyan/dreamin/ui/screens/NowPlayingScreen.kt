@@ -454,62 +454,82 @@ fun NowPlayingScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // 1. Centered Header: Drag handle to minimize + "Now Playing" and Song Title
-                    Column(
+                    // 1. Header with Collapse Arrow on Top Left + Centered Drag handle & Title
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp)
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures(
-                                    onDragEnd = {
-                                        if (swipeOffsetY.value > 120f) {
-                                            onBack()
-                                        } else {
+                            .padding(top = 4.dp, bottom = 4.dp)
+                    ) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .size(44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Collapse Now Playing",
+                                tint = Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(horizontal = 48.dp)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = {
+                                            if (swipeOffsetY.value > 120f) {
+                                                onBack()
+                                            } else {
+                                                scope.launch {
+                                                    swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                                }
+                                            }
+                                        },
+                                        onDragCancel = {
                                             scope.launch {
                                                 swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
                                             }
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        scope.launch {
-                                            swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
-                                        }
-                                    },
-                                    onVerticalDrag = { change, dragAmount ->
-                                        if (dragAmount > 0f || swipeOffsetY.value > 0f) {
-                                            change.consume()
-                                            scope.launch {
-                                                swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
+                                        },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            if (dragAmount > 0f || swipeOffsetY.value > 0f) {
+                                                change.consume()
+                                                scope.launch {
+                                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
+                                                }
                                             }
                                         }
-                                    }
-                                )
-                            },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(36.dp)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.35f))
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Now Playing",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.70f)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = song?.title ?: "Dreamin",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                                    )
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(36.dp)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color.White.copy(alpha = 0.35f))
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Now Playing",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.70f)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = song?.title ?: "Dreamin",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     // 2. Center View: 1:1 Large Rounded Artwork (or Synced Lyrics overlay)
