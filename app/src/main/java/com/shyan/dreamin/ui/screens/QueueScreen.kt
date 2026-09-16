@@ -118,7 +118,10 @@ fun QueueScreen(
     onAddToPlaylist: ((Song, Long) -> Unit)? = null,
     onPlayNext: ((Song) -> Unit)? = null,
     onSaveQueueAsPlaylist: (String) -> Unit = {},
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    backHandlerEnabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color.Transparent
 ) {
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
@@ -130,7 +133,7 @@ fun QueueScreen(
 
     var showSaveDialog by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = true) { onBack() }
+    BackHandler(enabled = backHandlerEnabled) { onBack() }
 
     // Calculate total formatted duration of upcoming tracks
     val totalDurationFormatted = remember(state.queue) {
@@ -155,94 +158,29 @@ fun QueueScreen(
         )
     }
 
-    val swipeOffsetY = remember { Animatable(0f) }
-    val coroutineScope = rememberCoroutineScope()
-    val dismissThreshold = with(density) { 110.dp.toPx() }
-
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                if (delta < 0f && swipeOffsetY.value > 0f) {
-                    val newOffset = (swipeOffsetY.value + delta).coerceAtLeast(0f)
-                    coroutineScope.launch { swipeOffsetY.snapTo(newOffset) }
-                    return Offset(0f, delta)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                if (delta > 0f && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                    val newOffset = (swipeOffsetY.value + delta * 0.7f).coerceAtLeast(0f)
-                    coroutineScope.launch { swipeOffsetY.snapTo(newOffset) }
-                    return Offset(0f, delta)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (swipeOffsetY.value > dismissThreshold) {
-                    onBack()
-                    return available
-                } else if (swipeOffsetY.value > 0f) {
-                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
-                    return available
-                }
-                return Velocity.Zero
-            }
-        }
-    }
-
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .graphicsLayer {
-                translationY = swipeOffsetY.value.coerceAtLeast(0f)
-            }
-            .nestedScroll(nestedScrollConnection)
-            .background(colors.background)
+            .background(backgroundColor)
             .statusBarsPadding()
     ) {
-        // Subtle Drag Handle Pill indicating swipe down to Now Playing
+        // Subtle Drag Handle Pill indicating scroll up to Now Playing
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp, bottom = 4.dp)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (swipeOffsetY.value > dismissThreshold) {
-                                onBack()
-                            } else {
-                                coroutineScope.launch {
-                                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
-                                }
-                            }
-                        },
-                        onDragCancel = {
-                            coroutineScope.launch {
-                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
-                            }
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            if (dragAmount > 0f || swipeOffsetY.value > 0f) {
-                                change.consume()
-                                coroutineScope.launch {
-                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
-                                }
-                            }
-                        }
-                    )
-                },
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onBack() },
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .width(38.dp)
+                    .width(40.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.35f))
+                    .background(Color.White.copy(alpha = 0.40f))
             )
         }
 
@@ -250,33 +188,7 @@ fun QueueScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (swipeOffsetY.value > dismissThreshold) {
-                                onBack()
-                            } else {
-                                coroutineScope.launch {
-                                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
-                                }
-                            }
-                        },
-                        onDragCancel = {
-                            coroutineScope.launch {
-                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
-                            }
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            if (dragAmount > 0f || swipeOffsetY.value > 0f) {
-                                change.consume()
-                                coroutineScope.launch {
-                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
-                                }
-                            }
-                        }
-                    )
-                },
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Mini artwork thumbnail

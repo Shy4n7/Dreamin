@@ -9,8 +9,11 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,9 +65,7 @@ fun NowPlayingProgressSlider(
     isPlaying: Boolean = true,
     onSeek: (Long) -> Unit,
     activeColor: Color = LocalDreaminColors.current.primary,
-    secondaryColor: Color = LocalDreaminColors.current.secondary,
-    audioBadgeText: String = "OPUS • 142 kbps",
-    onAudioBadgeClick: () -> Unit = {}
+    secondaryColor: Color = LocalDreaminColors.current.secondary
 ) {
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
@@ -251,26 +252,6 @@ fun NowPlayingProgressSlider(
                 fontWeight = FontWeight.Medium
             )
 
-            // Frosted pill chip for Audio Stream Info
-            Surface(
-                onClick = onAudioBadgeClick,
-                shape = RoundedCornerShape(20.dp),
-                color = Color.White.copy(alpha = 0.12f),
-                modifier = Modifier.height(24.dp)
-            ) {
-                Box(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = audioBadgeText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                }
-            }
-
             RollingTimeText(
                 timeMs = durationMs,
                 color = Color.White.copy(alpha = 0.70f),
@@ -345,7 +326,8 @@ fun NowPlayingScreen(
     onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
     onBack: () -> Unit = {}
 ) {
-    var showQueueView by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val scope = rememberCoroutineScope()
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showPosterPicker by remember { mutableStateOf(false) }
@@ -355,8 +337,13 @@ fun NowPlayingScreen(
     val colors = LocalDreaminColors.current
 
     BackHandler(enabled = true) {
-        if (showQueueView) {
-            showQueueView = false
+        if (pagerState.currentPage > 0) {
+            scope.launch {
+                pagerState.animateScrollToPage(
+                    page = 0,
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                )
+            }
         } else {
             onBack()
         }
@@ -381,7 +368,6 @@ fun NowPlayingScreen(
     val swipeOffsetY = remember { Animatable(0f) }
     val artworkOffsetX = remember { Animatable(0f) }
     val artworkScope = rememberCoroutineScope()
-    val scope = rememberCoroutineScope()
 
     val triggerNextAnimated = remember(onNext) {
         {
@@ -405,113 +391,81 @@ fun NowPlayingScreen(
         }
     }
 
-    // 🌊 Seamless Slide/Fade Animation between Now Playing Screen and Queue Screen
-    AnimatedContent(
-        targetState = showQueueView,
-        transitionSpec = {
-            if (targetState) {
-                // Now Playing -> Queue Screen (Slide up from bottom with spring)
-                slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                ) + fadeIn(tween(200)) togetherWith
-                slideOutVertically(
-                    targetOffsetY = { -it / 4 },
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                ) + fadeOut(tween(180))
-            } else {
-                // Queue Screen -> Now Playing (Slide down smoothly)
-                slideInVertically(
-                    initialOffsetY = { -it / 4 },
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                ) + fadeIn(tween(200)) togetherWith
-                slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                ) + fadeOut(tween(180))
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                translationY = swipeOffsetY.value.coerceAtLeast(0f)
             }
-        },
-        label = "now_playing_queue_switch"
-    ) { isQueueOpen ->
-        if (isQueueOpen) {
-            QueueScreen(
-                state = state,
-                onSongClick = { s -> onSongSelect(s) },
-                onRemoveFromQueue = onRemoveFromQueue,
-                onRestoreToQueue = onRestoreToQueue,
-                onReorderQueue = onReorderQueue,
-                onToggleShuffle = onToggleShuffle,
-                onToggleRepeat = onToggleRepeat,
-                onToggleFavorite = onToggleFavorite,
-                onToggleQueueLock = { /* Handled via playlistQueueActive */ },
-                onStartRadio = { /* Starts radio from seed */ },
-                onAddToPlaylist = { s, pid -> onAddToPlaylist(pid) },
-                onPlayNext = { /* Handled via ViewModel */ },
-                onSaveQueueAsPlaylist = onSaveQueueAsPlaylist,
-                onBack = { showQueueView = false }
-            )
-        } else {
-            // Main Now Playing View
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationY = swipeOffsetY.value.coerceAtLeast(0f)
-                    }
-                    .background(colors.background)
-            ) {
-                // 🌌 Full-screen Animated Liquid Mesh Gradient Background
-                FluidMeshGradientBackground(
-                    dominantColor = animatedDominant,
-                    secondaryColor = animatedSecondary,
-                    accentColor = animatedAccent,
-                    backgroundColor = colors.background,
-                    isPlaying = state.playbackState is PlaybackState.Playing,
-                    isHeaderMode = false
-                )
+            .background(colors.background)
+    ) {
+        // 🌌 Full-screen Animated Liquid Mesh Gradient Background spanning both pages
+        FluidMeshGradientBackground(
+            dominantColor = animatedDominant,
+            secondaryColor = animatedSecondary,
+            accentColor = animatedAccent,
+            backgroundColor = colors.background,
+            isPlaying = state.playbackState is PlaybackState.Playing,
+            isHeaderMode = false
+        )
 
+        VerticalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            key = { page -> if (page == 0) "now_playing" else "queue" }
+        ) { page ->
+            if (page == 0) {
+                // Main Now Playing View
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
                         .navigationBarsPadding()
-                        .padding(horizontal = 24.dp)
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragEnd = {
-                                    if (swipeOffsetY.value > 120f) {
-                                        onBack()
-                                    } else {
-                                        scope.launch {
-                                            swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    scope.launch {
-                                        swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
-                                    }
-                                },
-                                onDrag = { change, dragAmount ->
-                                    if (dragAmount.y > 0f || swipeOffsetY.value > 0f) {
-                                        change.consume()
-                                        scope.launch {
-                                            swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount.y).coerceAtLeast(0f))
-                                        }
-                                    }
-                                }
-                            )
-                        },
+                        .padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // 1. Centered Header: "Now Playing" and Song Title
+                    // 1. Centered Header: Drag handle to minimize + "Now Playing" and Song Title
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 4.dp),
+                            .padding(top = 8.dp, bottom = 4.dp)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (swipeOffsetY.value > 120f) {
+                                            onBack()
+                                        } else {
+                                            scope.launch {
+                                                swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        scope.launch {
+                                            swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                        }
+                                    },
+                                    onVerticalDrag = { change, dragAmount ->
+                                        if (dragAmount > 0f || swipeOffsetY.value > 0f) {
+                                            change.consume()
+                                            scope.launch {
+                                                swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount).coerceAtLeast(0f))
+                                            }
+                                        }
+                                    }
+                                )
+                            },
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.35f))
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Now Playing",
                             fontSize = 13.sp,
@@ -720,24 +674,13 @@ fun NowPlayingScreen(
                     }
 
                     // 4. Harmonic Acoustic Waveform Slider with live dancing ripple animation
-                    val audioBadgeText = remember(state.currentAudioFormat) {
-                        val fmt = state.currentAudioFormat
-                        if (fmt != null) {
-                            "${fmt.codec.uppercase()} • ${fmt.bitrateKbps} kbps"
-                        } else {
-                            "OPUS • 142 kbps"
-                        }
-                    }
-
                     NowPlayingProgressSlider(
                         progressFlow = progressFlow,
                         songId = state.currentSong?.id.orEmpty(),
                         isPlaying = state.playbackState is PlaybackState.Playing,
                         onSeek = onSeek,
                         activeColor = animatedDominant,
-                        secondaryColor = animatedSecondary,
-                        audioBadgeText = audioBadgeText,
-                        onAudioBadgeClick = { showAudioStreamDetailsSheet = true }
+                        secondaryColor = animatedSecondary
                     )
 
                     // 6. Playback Controls Row (Skip Previous, Solid Play/Pause, Skip Next)
@@ -801,9 +744,16 @@ fun NowPlayingScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Queue Button (Opens Queue Screen)
+                        // Queue Button (Scrolls down to Queue Screen below)
                         IconButton(
-                            onClick = { showQueueView = true },
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        page = 1,
+                                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                                    )
+                                }
+                            },
                             modifier = Modifier.size(44.dp)
                         ) {
                             Icon(
@@ -868,6 +818,34 @@ fun NowPlayingScreen(
                         }
                     }
                 }
+            } else {
+                // Queue Screen (Page 1 - visible directly below Now Playing upon scrolling)
+                QueueScreen(
+                    state = state,
+                    onSongClick = { s -> onSongSelect(s) },
+                    onRemoveFromQueue = onRemoveFromQueue,
+                    onRestoreToQueue = onRestoreToQueue,
+                    onReorderQueue = onReorderQueue,
+                    onToggleShuffle = onToggleShuffle,
+                    onToggleRepeat = onToggleRepeat,
+                    onToggleFavorite = onToggleFavorite,
+                    onToggleQueueLock = { /* Handled via playlistQueueActive */ },
+                    onStartRadio = { /* Starts radio from seed */ },
+                    onAddToPlaylist = { s, pid -> onAddToPlaylist(pid) },
+                    onPlayNext = { /* Handled via ViewModel */ },
+                    onSaveQueueAsPlaylist = onSaveQueueAsPlaylist,
+                    onBack = {
+                        scope.launch {
+                            pagerState.animateScrollToPage(
+                                page = 0,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                            )
+                        }
+                    },
+                    backHandlerEnabled = pagerState.currentPage == 1,
+                    modifier = Modifier.fillMaxSize(),
+                    backgroundColor = Color.Transparent
+                )
             }
         }
     }
