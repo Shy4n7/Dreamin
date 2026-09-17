@@ -59,59 +59,34 @@ fun FluidMeshGradientBackground(
         label = "mesh_accent"
     )
 
-    // 🪐 Continuous Closed-Loop Harmonic Orbital Drifts (Exact integer harmonics ensure zero cut/jump on loop reset)
-    val infiniteTransition = rememberInfiniteTransition(label = "mesh_orbit")
-    
-    val orbitPhase1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 28000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit_1"
+    // 🪐 Smooth Speed-Multiplied Monotonic Animation Clock
+    // Seamlessly decelerates on pause and sleeps when idle to eliminate background CPU/GPU drain
+    val speedMultiplier by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+        label = "mesh_speed"
     )
 
-    val orbitPhase2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 36000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit_2"
-    )
-
-    val orbitPhase3 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 32000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit_3"
-    )
-
-    // ✨ Calm, Organic Luminous Breathing Pulses (Gentle 4-6% drift)
-    val pulseTransition = rememberInfiniteTransition(label = "mesh_pulse")
-    val pulse1 by pulseTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 10000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_1"
-    )
-    val pulse2 by pulseTransition.animateFloat(
-        initialValue = 1.04f,
-        targetValue = 0.96f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 13000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_2"
-    )
+    var animationTime by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        var lastFrameNanos = 0L
+        while (true) {
+            if (!isPlaying && speedMultiplier <= 0.001f) {
+                // Sleep and yield when playback is paused and deceleration is finished
+                kotlinx.coroutines.delay(200)
+                lastFrameNanos = 0L
+                continue
+            }
+            withFrameNanos { frameNanos ->
+                if (lastFrameNanos != 0L) {
+                    val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
+                    val clampedDt = dt.coerceIn(0.001f, 0.05f)
+                    animationTime += clampedDt * speedMultiplier
+                }
+                lastFrameNanos = frameNanos
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -148,10 +123,38 @@ fun FluidMeshGradientBackground(
                     )
                 }
 
+                // Hoist gradient color lists into cache scope to guarantee zero heap allocations per frame
+                val baseOrb1Colors = listOf(
+                    animDominant.copy(alpha = 0.78f),
+                    animDominant.copy(alpha = 0.42f),
+                    animDominant.copy(alpha = 0.14f),
+                    Color.Transparent
+                )
+                val baseOrb2Colors = listOf(
+                    animSecondary.copy(alpha = 0.68f),
+                    animSecondary.copy(alpha = 0.36f),
+                    animSecondary.copy(alpha = 0.12f),
+                    Color.Transparent
+                )
+                val baseOrb3Colors = listOf(
+                    animAccent.copy(alpha = 0.58f),
+                    animAccent.copy(alpha = 0.28f),
+                    animAccent.copy(alpha = 0.08f),
+                    Color.Transparent
+                )
+                val baseCoreColors = listOf(
+                    animDominant.copy(alpha = 0.50f),
+                    animSecondary.copy(alpha = 0.30f),
+                    Color.Transparent
+                )
+
                 onDrawBehind {
-                    val t1 = orbitPhase1.toDouble()
-                    val t2 = orbitPhase2.toDouble()
-                    val t3 = orbitPhase3.toDouble()
+                    val time = animationTime.toDouble()
+                    val t1 = time * (2.0 * Math.PI / 28.0)
+                    val t2 = time * (2.0 * Math.PI / 36.0)
+                    val t3 = time * (2.0 * Math.PI / 32.0)
+                    val pulse1 = (1.0 + 0.04 * sin(time * (2.0 * Math.PI / 10.0))).toFloat()
+                    val pulse2 = (1.0 - 0.04 * sin(time * (2.0 * Math.PI / 13.0))).toFloat()
 
                     // Phase-deferred scroll parallax reading
                     val scrollY = scrollOffsetProvider?.invoke() ?: 0f
@@ -169,6 +172,31 @@ fun FluidMeshGradientBackground(
                     val yAnchor3 = if (isHeaderMode) 0.30 else 0.46
                     val coreYAnchor = if (isHeaderMode) 0.20f else 0.32f
 
+                    // Reuse pre-cached color lists whenever scrollAlpha == 1f (100% of NowPlaying frames)
+                    val orb1Colors = if (scrollAlpha >= 0.999f) baseOrb1Colors else listOf(
+                        animDominant.copy(alpha = 0.78f * scrollAlpha),
+                        animDominant.copy(alpha = 0.42f * scrollAlpha),
+                        animDominant.copy(alpha = 0.14f * scrollAlpha),
+                        Color.Transparent
+                    )
+                    val orb2Colors = if (scrollAlpha >= 0.999f) baseOrb2Colors else listOf(
+                        animSecondary.copy(alpha = 0.68f * scrollAlpha),
+                        animSecondary.copy(alpha = 0.36f * scrollAlpha),
+                        animSecondary.copy(alpha = 0.12f * scrollAlpha),
+                        Color.Transparent
+                    )
+                    val orb3Colors = if (scrollAlpha >= 0.999f) baseOrb3Colors else listOf(
+                        animAccent.copy(alpha = 0.58f * scrollAlpha),
+                        animAccent.copy(alpha = 0.28f * scrollAlpha),
+                        animAccent.copy(alpha = 0.08f * scrollAlpha),
+                        Color.Transparent
+                    )
+                    val coreColors = if (scrollAlpha >= 0.999f) baseCoreColors else listOf(
+                        animDominant.copy(alpha = 0.50f * scrollAlpha),
+                        animSecondary.copy(alpha = 0.30f * scrollAlpha),
+                        Color.Transparent
+                    )
+
                     // 1. Orb 1 (Dominant Color Aura - Closed Harmonic Lissajous Wave)
                     val orb1X = (0.48 + 0.22 * sin(t1) + 0.08 * cos(2.0 * t1)).toFloat() * width
                     val orb1Y = ((yAnchor1 + 0.12 * cos(t1) + 0.05 * sin(2.0 * t1)).toFloat() * height) + parallaxY
@@ -179,12 +207,7 @@ fun FluidMeshGradientBackground(
                     scale(scaleX = orb1ScaleX, scaleY = orb1ScaleY, pivot = Offset(orb1X, orb1Y)) {
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animDominant.copy(alpha = 0.78f * scrollAlpha),
-                                    animDominant.copy(alpha = 0.42f * scrollAlpha),
-                                    animDominant.copy(alpha = 0.14f * scrollAlpha),
-                                    Color.Transparent
-                                ),
+                                colors = orb1Colors,
                                 center = Offset(orb1X, orb1Y),
                                 radius = orb1Radius
                             ),
@@ -203,12 +226,7 @@ fun FluidMeshGradientBackground(
                     scale(scaleX = orb2ScaleX, scaleY = orb2ScaleY, pivot = Offset(orb2X, orb2Y)) {
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animSecondary.copy(alpha = 0.68f * scrollAlpha),
-                                    animSecondary.copy(alpha = 0.36f * scrollAlpha),
-                                    animSecondary.copy(alpha = 0.12f * scrollAlpha),
-                                    Color.Transparent
-                                ),
+                                colors = orb2Colors,
                                 center = Offset(orb2X, orb2Y),
                                 radius = orb2Radius
                             ),
@@ -227,12 +245,7 @@ fun FluidMeshGradientBackground(
                     scale(scaleX = orb3ScaleX, scaleY = orb3ScaleY, pivot = Offset(orb3X, orb3Y)) {
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(
-                                    animAccent.copy(alpha = 0.58f * scrollAlpha),
-                                    animAccent.copy(alpha = 0.28f * scrollAlpha),
-                                    animAccent.copy(alpha = 0.08f * scrollAlpha),
-                                    Color.Transparent
-                                ),
+                                colors = orb3Colors,
                                 center = Offset(orb3X, orb3Y),
                                 radius = orb3Radius
                             ),
@@ -247,11 +260,7 @@ fun FluidMeshGradientBackground(
                     val coreRadius = width * (if (isHeaderMode) 1.05f else 1.15f)
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(
-                                animDominant.copy(alpha = 0.50f * scrollAlpha),
-                                animSecondary.copy(alpha = 0.30f * scrollAlpha),
-                                Color.Transparent
-                            ),
+                            colors = coreColors,
                             center = Offset(coreX, coreY),
                             radius = coreRadius
                         ),

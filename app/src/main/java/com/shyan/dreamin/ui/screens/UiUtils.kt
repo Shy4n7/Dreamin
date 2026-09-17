@@ -179,23 +179,23 @@ fun blendDominantTint(base: Color, tint: Color, alpha: Float): Color = Color(
 
 
 
-// Unified Motion System for fluid 120 FPS animations & transitions
+// Unified Motion System for subtle, silky 120 FPS animations & transitions
 object DreaminMotion {
     val FluidGlide: SpringSpec<Float> = spring(
-        dampingRatio = 0.85f,
+        dampingRatio = 0.88f,
         stiffness = 320f
     )
     val FluidSlide: SpringSpec<IntOffset> = spring(
-        dampingRatio = 0.85f,
+        dampingRatio = 0.88f,
         stiffness = 320f
     )
     val TactileBouncy: SpringSpec<Float> = spring(
-        dampingRatio = 0.62f,
-        stiffness = 420f
+        dampingRatio = 0.88f,
+        stiffness = 380f
     )
     val SnappySnap: SpringSpec<Float> = spring(
-        dampingRatio = 0.75f,
-        stiffness = 600f
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = 450f
     )
     val SmoothTween: TweenSpec<Float> = tween(
         durationMillis = 280,

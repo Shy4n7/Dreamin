@@ -134,8 +134,8 @@ fun QueueScreen(
         {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             coroutineScope.launch {
-                heartButtonScale.animateTo(0.70f, tween(70, easing = FastOutLinearInEasing))
-                heartButtonScale.animateTo(1.28f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
+                heartButtonScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
+                heartButtonScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
                 heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
             }
             onToggleFavorite()
@@ -376,7 +376,7 @@ fun QueueScreen(
                 AnimatedContent(
                     targetState = isFav,
                     transitionSpec = {
-                        (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                        (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
                             .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
                     },
                     label = "queue_fav_icon_morph"

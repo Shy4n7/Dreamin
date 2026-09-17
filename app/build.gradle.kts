@@ -66,13 +66,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
-    implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("com.google.guava:guava:33.0.0-android")
@@ -87,8 +85,6 @@ dependencies {
     // High-Performance Glassmorphism & Fast Rendering
     implementation("dev.chrisbanes.haze:haze:1.3.1")
     implementation("dev.chrisbanes.haze:haze-materials:1.3.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.8")
-    implementation("androidx.collection:collection:1.4.5")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

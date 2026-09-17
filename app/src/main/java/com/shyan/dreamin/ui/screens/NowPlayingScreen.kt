@@ -20,14 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -94,18 +92,18 @@ fun NowPlayingProgressSlider(
     val infiniteTransition = rememberInfiniteTransition(label = "waveform_anim")
     val animPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = (2 * Math.PI).toFloat(),
+        targetValue = if (isPlaying) (2 * Math.PI).toFloat() else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
+            animation = tween(3200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "anim_phase"
     )
     val thumbHaloRadius by infiniteTransition.animateFloat(
         initialValue = 7.5f,
-        targetValue = 11.5f,
+        targetValue = if (isPlaying) 10.5f else 7.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
+            animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "thumb_halo"
@@ -389,7 +387,7 @@ fun NowPlayingScreen(
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
             heartScale.snapTo(0.6f)
-            heartScale.animateTo(1.3f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
+            heartScale.animateTo(1.12f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
             heartScale.animateTo(0f, tween(180))
             showHeartBurst = false
         }
@@ -399,8 +397,8 @@ fun NowPlayingScreen(
         {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             artworkScope.launch {
-                heartButtonScale.animateTo(0.70f, tween(70, easing = FastOutLinearInEasing))
-                heartButtonScale.animateTo(1.28f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
+                heartButtonScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
+                heartButtonScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
                 heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
             }
             onToggleFavorite()
@@ -412,7 +410,7 @@ fun NowPlayingScreen(
     LaunchedEffect(currentSongId) {
         if (previousSongId != null && currentSongId != null && previousSongId != currentSongId && artworkOffsetX.value == 0f) {
             artworkOffsetX.snapTo(280f)
-            artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+            artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
         }
         previousSongId = currentSongId
     }
@@ -423,7 +421,7 @@ fun NowPlayingScreen(
                 artworkOffsetX.animateTo(-360f, tween(130, easing = FastOutLinearInEasing))
                 onNext()
                 artworkOffsetX.snapTo(320f)
-                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
             }
         }
     }
@@ -434,7 +432,7 @@ fun NowPlayingScreen(
                 artworkOffsetX.animateTo(360f, tween(130, easing = FastOutLinearInEasing))
                 onPrevious()
                 artworkOffsetX.snapTo(-320f)
-                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow))
+                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
             }
         }
     }
@@ -653,22 +651,22 @@ fun NowPlayingScreen(
                                     .aspectRatio(1f),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // 🌟 Breathing Ambient Radial Glow Aura
+                                // 🌟 Breathing Ambient Radial Glow Aura (Zero-GPU-Blur Diffused Radial Gradient)
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize(0.96f)
+                                        .fillMaxSize(1.08f)
                                         .graphicsLayer {
                                             scaleX = auraScale
                                             scaleY = auraScale
                                             alpha = auraAlpha
                                         }
-                                        .blur(48.dp)
                                         .background(
                                             Brush.radialGradient(
-                                                colors = listOf(
-                                                    animatedDominant.copy(alpha = 0.75f),
-                                                    animatedSecondary.copy(alpha = 0.45f),
-                                                    Color.Transparent
+                                                colorStops = arrayOf(
+                                                    0.00f to animatedDominant.copy(alpha = 0.65f),
+                                                    0.35f to animatedDominant.copy(alpha = 0.38f),
+                                                    0.65f to animatedSecondary.copy(alpha = 0.16f),
+                                                    1.00f to Color.Transparent
                                                 )
                                             ),
                                             CircleShape
@@ -691,7 +689,7 @@ fun NowPlayingScreen(
                                                         artworkScope.launch {
                                                             artworkOffsetX.animateTo(
                                                                 0f,
-                                                                spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                                                                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                                                             )
                                                         }
                                                     }
@@ -700,7 +698,7 @@ fun NowPlayingScreen(
                                                     artworkScope.launch {
                                                         artworkOffsetX.animateTo(
                                                             0f,
-                                                            spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                                                            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                                                         )
                                                     }
                                                 },
@@ -717,9 +715,9 @@ fun NowPlayingScreen(
                                             val dragX = artworkOffsetX.value
                                             val pullY = swipeOffsetY.value
                                             translationX = dragX
-                                            rotationZ = (dragX / 20f).coerceIn(-10f, 10f)
-                                            rotationY = (-dragX / 8f).coerceIn(-22f, 22f)
-                                            rotationX = (pullY / 12f).coerceIn(0f, 18f)
+                                            rotationZ = (dragX / 35f).coerceIn(-4f, 4f)
+                                            rotationY = (-dragX / 16f).coerceIn(-10f, 10f)
+                                            rotationX = (pullY / 22f).coerceIn(0f, 8f)
                                             val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1100f) - (pullY / 1600f)).coerceIn(0.88f, 1f)
                                             scaleX = dynamicScale
                                             scaleY = dynamicScale
@@ -922,7 +920,7 @@ fun NowPlayingScreen(
                             AnimatedContent(
                                 targetState = isFav,
                                 transitionSpec = {
-                                    (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                                    (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
                                         .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
                                 },
                                 label = "fav_icon_morph"
@@ -974,9 +972,9 @@ fun NowPlayingScreen(
                         val playInteraction = remember { MutableInteractionSource() }
                         val isPlayPressed by playInteraction.collectIsPressedAsState()
                         val playScale by animateFloatAsState(
-                            targetValue = if (isPlayPressed) 0.86f else if (isPlaying) 1.04f else 1.0f,
+                            targetValue = if (isPlayPressed) 0.94f else if (isPlaying) 1.02f else 1.0f,
                             animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                dampingRatio = Spring.DampingRatioNoBouncy,
                                 stiffness = Spring.StiffnessMediumLow
                             ),
                             label = "hero_play_scale"
@@ -1001,16 +999,14 @@ fun NowPlayingScreen(
                                 .clickable(
                                     interactionSource = playInteraction,
                                     indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.45f), radius = 36.dp),
-                                    enabled = !isLoading
-                                ) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onPlayPause()
-                                },
+                                    enabled = !isLoading,
+                                    onClick = onPlayPause
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(28.dp),
+                                    modifier = Modifier.size(32.dp),
                                     color = Color.White,
                                     strokeWidth = 2.5.dp
                                 )
@@ -1018,7 +1014,7 @@ fun NowPlayingScreen(
                                 AnimatedContent(
                                     targetState = isPlaying,
                                     transitionSpec = {
-                                        (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                                        (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
                                             .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
                                     },
                                     label = "play_pause_morph"

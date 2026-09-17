@@ -23,7 +23,7 @@ class DreaminApplication : Application(), ImageLoaderFactory {
             .okHttpClient(com.shyan.dreamin.data.network.NetworkService.httpClient)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.35)
+                    .maxSizePercent(0.20)
                     .strongReferencesEnabled(true)
                     .build()
             }

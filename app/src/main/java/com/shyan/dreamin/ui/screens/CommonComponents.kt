@@ -361,6 +361,12 @@ fun MiniPlayer(
     LaunchedEffect(Unit) {
         var lastFrameNanos = 0L
         while (true) {
+            if (!isPlaying && speedMultiplier <= 0.001f) {
+                // Yield frame loop when paused and speed has decelerated to zero
+                delay(200)
+                lastFrameNanos = 0L
+                continue
+            }
             withFrameNanos { frameNanos ->
                 if (lastFrameNanos != 0L) {
                     val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
@@ -374,10 +380,10 @@ fun MiniPlayer(
 
     val infiniteTransition = rememberInfiniteTransition(label = "mini_glow")
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.22f,
-        targetValue = if (isPlaying) 0.45f else 0.18f,
+        initialValue = 0.16f,
+        targetValue = if (isPlaying) 0.34f else 0.16f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = FastOutSlowInEasing),
+            animation = tween(2800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "mini_glow_alpha"
@@ -407,20 +413,20 @@ fun MiniPlayer(
                 compositingStrategy = CompositingStrategy.Offscreen
             }
     ) {
-        // 🌌 Ambient Diffused Artwork Glow Aura behind the Floating Island
+        // 🌌 Ambient Diffused Artwork Glow Aura behind the Floating Island (Zero-GPU-Blur)
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .padding(horizontal = 4.dp)
-                .blur(26.dp)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            animatedAura.copy(alpha = glowAlpha),
-                            animatedAura.copy(alpha = glowAlpha * 0.45f),
+                            animatedAura.copy(alpha = glowAlpha * 0.38f),
+                            animatedAura.copy(alpha = glowAlpha * 0.18f),
+                            animatedAura.copy(alpha = glowAlpha * 0.04f),
                             Color.Transparent
                         ),
-                        radius = 480f
+                        radius = 520f
                     ),
                     cardShape
                 )
