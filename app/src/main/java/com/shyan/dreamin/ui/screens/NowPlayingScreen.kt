@@ -548,13 +548,6 @@ fun NowPlayingScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Now Playing",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.70f)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
                                 text = song?.title ?: "Dreamin",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
