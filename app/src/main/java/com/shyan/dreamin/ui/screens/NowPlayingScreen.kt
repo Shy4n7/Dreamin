@@ -560,6 +560,50 @@ fun NowPlayingScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+
+                        // ⏱️ Sleep Timer in Top Right (clean icon, no pill background)
+                        val isTimerActive = state.sleepTimerEndMs != null
+                        val timerText = remember(state.sleepTimerEndMs) {
+                            state.sleepTimerEndMs?.let { endMs ->
+                                val remainingMins = ((endMs - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+                                "${remainingMins}m"
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.35f), radius = 22.dp)
+                                ) {
+                                    if (isTimerActive) onCancelSleepTimer()
+                                    else showSleepTimerDialog = true
+                                }
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Timer,
+                                    contentDescription = "Sleep Timer",
+                                    tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                if (timerText != null) {
+                                    Text(
+                                        text = timerText,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.primary
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     // 2. Center View: 1:1 Large Rounded Artwork (or Synced Lyrics overlay)
@@ -1033,46 +1077,6 @@ fun NowPlayingScreen(
                                 tint = Color.White.copy(alpha = 0.85f),
                                 modifier = Modifier.size(24.dp)
                             )
-                        }
-
-                        // Center Pill: Sleep Timer
-                        val isTimerActive = state.sleepTimerEndMs != null
-                        val timerText = remember(state.sleepTimerEndMs) {
-                            state.sleepTimerEndMs?.let { endMs ->
-                                val remainingMins = ((endMs - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-                                "${remainingMins}m"
-                            }
-                        }
-                        Surface(
-                            onClick = {
-                                if (isTimerActive) onCancelSleepTimer()
-                                else showSleepTimerDialog = true
-                            },
-                            shape = RoundedCornerShape(22.dp),
-                            color = if (isTimerActive) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.12f),
-                            border = if (isTimerActive) BorderStroke(1.dp, colors.primary) else null,
-                            modifier = Modifier.height(42.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Timer,
-                                    contentDescription = "Sleep Timer",
-                                    tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                if (timerText != null) {
-                                    Text(
-                                        text = timerText,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = colors.primary
-                                    )
-                                }
-                            }
                         }
 
                         // Lyrics Button
