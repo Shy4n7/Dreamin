@@ -119,6 +119,9 @@ fun HomeScreen(
     topSongs: List<Song>,
     currentSong: Song?,
     isPlaying: Boolean = false,
+    dominantColor: Color = Color(0xFF6C5CE7),
+    secondaryColor: Color = Color(0xFF8E44AD),
+    accentColor: Color = Color(0xFF4A235A),
     isSearchActive: Boolean,
     searchQuery: String,
     searchResults: List<Song>,
@@ -223,6 +226,20 @@ fun HomeScreen(
 
     CompositionLocalProvider(LocalPlaylists provides playlists) {
     Box(modifier = Modifier.fillMaxSize()) {
+        // 🌌 Song-Driven Ambient Liquid Mesh Background — updates with every track change
+        FluidMeshGradientBackground(
+            dominantColor = dominantColor,
+            secondaryColor = secondaryColor,
+            accentColor = accentColor,
+            backgroundColor = colors.background,
+            isPlaying = isPlaying,
+            isHeaderMode = true,
+            scrollOffsetProvider = {
+                if (isSearchActive) 400f
+                else scrollOffset
+            }
+        )
+
         // High-Performance Ambient Violet Soundwave Header (Zero-GC, Parallax & Playback Resonance)
         AmbientSoundwaveHeader(
             height = 280.dp,
@@ -231,8 +248,9 @@ fun HomeScreen(
                 else scrollOffset
             },
             isPlaying = isPlaying,
-            primaryGlow = colors.primary,
-            midPurple = colors.secondary,
+            dynamicColor = dominantColor,
+            primaryGlow = dominantColor,
+            midPurple = secondaryColor,
             deepIndigo = Color(0xFF2E1065)
         )
 
