@@ -2408,10 +2408,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun addToQueue(song: Song) {
         _uiState.update { state ->
             val queue = state.queue.toMutableList()
-            if (state.currentSong != null && queue.none { it.id == state.currentSong.id }) {
-                queue.add(0, state.currentSong)
+            val current = state.currentSong
+            if (current != null && queue.none { it.id == current.id }) {
+                queue.add(0, current)
             }
-            val currentIdx = queue.indexOfFirst { it.id == state.currentSong?.id }.coerceAtLeast(0)
+            queue.removeAll { it.id == song.id }
+            val currentIdx = queue.indexOfFirst { it.id == current?.id }.coerceAtLeast(0)
 
             // Count consecutive user-queued songs directly following the currently playing track
             var userQueueCount = 0
@@ -2422,13 +2424,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     break
                 }
             }
-
-            // Adjust count if song was already within the user queue section
-            val priorIdx = queue.indexOfFirst { it.id == song.id }
-            if (priorIdx in (currentIdx + 1)..(currentIdx + userQueueCount)) {
-                userQueueCount--
-            }
-            queue.removeAll { it.id == song.id }
 
             val insertAt = (currentIdx + 1 + userQueueCount).coerceIn(0, queue.size)
             queue.add(insertAt, song)
@@ -2445,12 +2440,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun playNext(song: Song) {
         _uiState.update { state ->
             val queue = state.queue.toMutableList()
-            if (state.currentSong != null && queue.none { it.id == state.currentSong.id }) {
-                queue.add(0, state.currentSong)
+            val current = state.currentSong
+            if (current != null && queue.none { it.id == current.id }) {
+                queue.add(0, current)
             }
-            val currentIdx = queue.indexOfFirst { it.id == state.currentSong?.id }.coerceAtLeast(0)
-            val insertAt = (currentIdx + 1).coerceIn(0, queue.size)
             queue.removeAll { it.id == song.id }
+            val currentIdx = queue.indexOfFirst { it.id == current?.id }
+            val insertAt = if (currentIdx >= 0) (currentIdx + 1).coerceIn(0, queue.size) else 0
             queue.add(insertAt, song)
 
             val updatedUserQueued = listOf(song.id) + state.userQueuedSongIds.filter { it != song.id }
@@ -2501,6 +2497,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
         _uiState.update { state ->
             val queue = state.queue
             if (fromIndex !in queue.indices || toIndex !in queue.indices) return@update state

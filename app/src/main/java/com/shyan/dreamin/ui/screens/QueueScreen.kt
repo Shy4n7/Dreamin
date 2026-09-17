@@ -145,7 +145,7 @@ fun QueueScreen(
     val listState = rememberLazyListState()
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    val rowHeightPx = with(density) { 68.dp.toPx() }
+    val rowHeightPx = with(density) { 64.dp.toPx() }
 
     var showSaveDialog by remember { mutableStateOf(false) }
 
@@ -504,17 +504,31 @@ fun QueueScreen(
             ) {
                 itemsIndexed(
                     items = state.queue,
-                    key = { index, _ -> queueItemKeys.getOrElse(index) { "${state.queue[index].id}_$index" } },
+                    key = { index, _ -> queueItemKeys.getOrElse(index) { "${state.queue.getOrNull(index)?.id ?: index}_$index" } },
                     contentType = { _, _ -> "queue_row" }
                 ) { index, song ->
                     val isCurrent = song.id == state.currentSong?.id
                     val isDragging = draggingIndex == index
+
+                    val rowModifier = if (isDragging) {
+                        Modifier
+                    } else {
+                        Modifier.animateItem(
+                            fadeInSpec = tween(220, easing = LinearOutSlowInEasing),
+                            fadeOutSpec = tween(180, easing = FastOutLinearInEasing),
+                            placementSpec = spring(
+                                dampingRatio = 0.82f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
+                    }
 
                     QueueSongItemRow(
                         song = song,
                         isCurrent = isCurrent,
                         isDragging = isDragging,
                         dragOffsetY = if (isDragging) dragOffsetY else 0f,
+                        modifier = rowModifier,
                         onClick = { onSongClick(song) },
                         onRemove = { onRemoveFromQueue(song) },
                         onPlayNext = { onPlayNext?.invoke(song) },
@@ -528,7 +542,7 @@ fun QueueScreen(
                         onDrag = { deltaY ->
                             dragOffsetY += deltaY
                             val currIdx = draggingIndex ?: return@QueueSongItemRow
-                            val threshold = rowHeightPx * 0.75f
+                            val threshold = rowHeightPx * 0.72f
 
                             if (dragOffsetY > threshold && currIdx < state.queue.lastIndex) {
                                 onReorderQueue(currIdx, currIdx + 1)
@@ -626,7 +640,8 @@ private fun QueueSongItemRow(
     playlists: List<com.shyan.dreamin.data.local.Playlist>,
     onDragStart: () -> Unit,
     onDrag: (Float) -> Unit,
-    onDragEnd: () -> Unit
+    onDragEnd: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = LocalDreaminColors.current
     var showMenu by remember { mutableStateOf(false) }
@@ -635,6 +650,27 @@ private fun QueueSongItemRow(
     val currentOnDragStart by rememberUpdatedState(onDragStart)
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+
+    val dragScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.025f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "drag_scale"
+    )
+
+    val dragElevation by animateFloatAsState(
+        targetValue = if (isDragging) 14f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "drag_elevation"
+    )
+
+    val rowBgColor by animateColorAsState(
+        targetValue = if (isDragging) colors.surfaceHighest.copy(alpha = 0.55f) else Color.Transparent,
+        animationSpec = tween(160),
+        label = "drag_bg"
+    )
 
     val formattedDuration = remember(song.duration) {
         if (song.duration > 0) {
@@ -645,16 +681,20 @@ private fun QueueSongItemRow(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .zIndex(if (isDragging) 1f else 0f)
+            .height(64.dp)
+            .zIndex(if (isDragging) 2f else 0f)
             .graphicsLayer {
                 translationY = dragOffsetY
-                shadowElevation = if (isDragging) 16f else 0f
+                scaleX = dragScale
+                scaleY = dragScale
+                shadowElevation = dragElevation
             }
-            .background(if (isDragging) colors.surfaceHighest.copy(alpha = 0.5f) else Color.Transparent)
+            .clip(RoundedCornerShape(12.dp))
+            .background(rowBgColor)
             .clickable(enabled = !isDragging, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 7.dp)
+            .padding(horizontal = 16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -787,11 +827,24 @@ private fun QueueSongItemRow(
                     },
                 contentAlignment = Alignment.Center
             ) {
+                val dragHandleScale by animateFloatAsState(
+                    targetValue = if (isDragging) 1.15f else 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "drag_handle_scale"
+                )
                 Icon(
                     imageVector = Icons.Default.DragHandle,
                     contentDescription = "Reorder",
                     tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.65f),
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer {
+                            scaleX = dragHandleScale
+                            scaleY = dragHandleScale
+                        }
                 )
             }
         }
