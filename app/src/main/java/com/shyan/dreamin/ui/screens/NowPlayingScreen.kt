@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +63,7 @@ import com.shyan.dreamin.ui.components.SyncedLyricsView
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -1146,8 +1149,11 @@ fun NowPlayingScreen(
     }
 
     if (showSleepTimerDialog) {
+        val currentPlayback = progressFlow.value
+        val remainingMs = (currentPlayback.durationMs - currentPlayback.currentPositionMs).coerceAtLeast(0L)
         SleepTimerDialog(
             currentEndMs = state.sleepTimerEndMs,
+            remainingSongMs = remainingMs,
             onSetMinutes = { mins ->
                 onSetSleepTimer(mins)
                 showSleepTimerDialog = false
@@ -1193,57 +1199,289 @@ fun NowPlayingScreen(
 }
 
 /**
- * ⏱️ Sleep Timer Selection Dialog.
+ * 🎚️ Custom Point/Dot Slider for Sleep Timer with 5-minute interval points.
+ * Matches design reference with inactive track, active track, contrasting dots, and vertical thumb bar.
+ */
+@Composable
+private fun SleepTimerPointSlider(
+    selectedMinutes: Int,
+    onMinutesChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    pointCount: Int = 20, // 5 min interval per point: 5m, 10m, ..., 100m
+    isEndOfSong: Boolean = false
+) {
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    var trackWidthPx by remember { mutableFloatStateOf(0f) }
+
+    val startPaddingDp = 14.dp
+    val endPaddingDp = 14.dp
+    val startPaddingPx = with(density) { startPaddingDp.toPx() }
+    val endPaddingPx = with(density) { endPaddingDp.toPx() }
+
+    fun updateFromOffset(x: Float) {
+        val usableWidth = (trackWidthPx - startPaddingPx - endPaddingPx).coerceAtLeast(1f)
+        val fraction = ((x - startPaddingPx) / usableWidth).coerceIn(0f, 1f)
+        val index = (fraction * (pointCount - 1)).roundToInt().coerceIn(0, pointCount - 1)
+        val mins = (index + 1) * 5
+        if (mins != selectedMinutes) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onMinutesChanged(mins)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .onGloballyPositioned { coordinates ->
+                trackWidthPx = coordinates.size.width.toFloat()
+            }
+            .pointerInput(pointCount) {
+                detectTapGestures { offset ->
+                    updateFromOffset(offset.x)
+                }
+            }
+            .pointerInput(pointCount) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        updateFromOffset(change.position.x)
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+        ) {
+            val width = size.width
+            val height = size.height
+            val trackHeight = 20.dp.toPx()
+            val trackTop = (height - trackHeight) / 2f
+            val cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f)
+
+            val usableWidth = (width - startPaddingPx - endPaddingPx).coerceAtLeast(1f)
+            val stepX = usableWidth / (pointCount - 1)
+            val selectedIndex = (selectedMinutes / 5 - 1).coerceIn(0, pointCount - 1)
+            val thumbX = startPaddingPx + selectedIndex * stepX
+            val centerY = height / 2f
+
+            // 1. Inactive dark background track
+            drawRoundRect(
+                color = Color(0xFF262C36),
+                topLeft = Offset(0f, trackTop),
+                size = Size(width, trackHeight),
+                cornerRadius = cornerRadius
+            )
+
+            // 2. Inactive dots along the entire track
+            for (i in 0 until pointCount) {
+                val dotX = startPaddingPx + i * stepX
+                drawCircle(
+                    color = Color(0xFFA8C7FA).copy(alpha = 0.65f),
+                    radius = 2.dp.toPx(),
+                    center = Offset(dotX, centerY)
+                )
+            }
+
+            // 3. Active light blue track & dark dots inside it
+            if (!isEndOfSong) {
+                val activeWidth = (thumbX + 6.dp.toPx()).coerceAtMost(width)
+                drawRoundRect(
+                    color = Color(0xFFA8C7FA),
+                    topLeft = Offset(0f, trackTop),
+                    size = Size(activeWidth, trackHeight),
+                    cornerRadius = cornerRadius
+                )
+
+                // Active dark dots inside the active track
+                for (i in 0..selectedIndex) {
+                    val dotX = startPaddingPx + i * stepX
+                    drawCircle(
+                        color = Color(0xFF131B26),
+                        radius = 2.dp.toPx(),
+                        center = Offset(dotX, centerY)
+                    )
+                }
+
+                // 4. Vertical thumb bar indicator
+                val thumbWidth = 4.dp.toPx()
+                val thumbHeight = 32.dp.toPx()
+                val thumbTop = (height - thumbHeight) / 2f
+                drawRoundRect(
+                    color = Color(0xFFD3E3FD),
+                    topLeft = Offset(thumbX - thumbWidth / 2f, thumbTop),
+                    size = Size(thumbWidth, thumbHeight),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+                )
+            }
+        }
+    }
+}
+
+/**
+ * ⏱️ Redesigned Sleep Timer Dialog matching the point-slider design reference:
+ * - Centered title & dynamic duration subtitle.
+ * - 5-minute interval discrete point/dot slider with contrasting active/inactive dots.
+ * - Outlined "End of song" button.
+ * - "Reset", "Cancel", and "OK" actions.
  */
 @Composable
 private fun SleepTimerDialog(
     currentEndMs: Long?,
+    remainingSongMs: Long,
     onSetMinutes: (Int) -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val colors = LocalDreaminColors.current
-    val options = listOf(15, 30, 45, 60, 90)
+    val haptic = LocalHapticFeedback.current
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Sleep Timer", color = Color.White, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                if (currentEndMs != null) {
-                    val remainingMins = ((currentEndMs - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-                    Text(
-                        text = "Timer active: stops in $remainingMins min",
-                        color = colors.primary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+    val initialMins = remember(currentEndMs) {
+        if (currentEndMs != null) {
+            val remainingMins = ((currentEndMs - System.currentTimeMillis()) / 60000).toInt().coerceAtLeast(1)
+            (((remainingMins + 2) / 5) * 5).coerceIn(5, 100)
+        } else {
+            50
+        }
+    }
+
+    var selectedMinutes by remember { mutableIntStateOf(initialMins) }
+    var isEndOfSong by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF1E222A),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Title
+                Text(
+                    text = "Sleep timer",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Subtitle / Current duration
+                Text(
+                    text = if (isEndOfSong) "End of song" else "$selectedMinutes minutes",
+                    color = Color.White.copy(alpha = 0.88f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 5-Minute Interval Point Slider
+                SleepTimerPointSlider(
+                    selectedMinutes = selectedMinutes,
+                    onMinutesChanged = { mins ->
+                        selectedMinutes = mins
+                        isEndOfSong = false
+                    },
+                    pointCount = 20, // 5 min interval: 5m to 100m
+                    isEndOfSong = isEndOfSong,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // "End of song" outlined chip button
+                Surface(
+                    onClick = {
+                        isEndOfSong = !isEndOfSong
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isEndOfSong) Color(0xFFA8C7FA).copy(alpha = 0.22f) else Color.Transparent,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (isEndOfSong) Color(0xFFA8C7FA) else Color.White.copy(alpha = 0.25f)
+                    ),
+                    modifier = Modifier.height(42.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "End of song",
+                            fontSize = 14.sp,
+                            fontWeight = if (isEndOfSong) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isEndOfSong) Color(0xFFA8C7FA) else Color.White.copy(alpha = 0.90f)
+                        )
+                    }
                 }
-                options.forEach { mins ->
-                    Text(
-                        text = "$mins minutes",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSetMinutes(mins) }
-                            .padding(vertical = 12.dp)
-                    )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Action Buttons: Reset on left, Cancel & OK on right
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(
+                        onClick = {
+                            onCancel()
+                            onDismiss()
+                        }
+                    ) {
+                        Text(
+                            text = "Reset",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = onDismiss) {
+                            Text(
+                                text = "Cancel",
+                                color = Color.White.copy(alpha = 0.75f),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                if (isEndOfSong) {
+                                    val endMins = ((remainingSongMs + 59999L) / 60000L).coerceAtLeast(1L).toInt()
+                                    onSetMinutes(endMins)
+                                } else {
+                                    onSetMinutes(selectedMinutes)
+                                }
+                                onDismiss()
+                            }
+                        ) {
+                            Text(
+                                text = "OK",
+                                color = Color(0xFFA8C7FA),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
-        },
-        confirmButton = {
-            if (currentEndMs != null) {
-                TextButton(onClick = onCancel) {
-                    Text("Turn Off Timer", color = Color(0xFFFF6B6B))
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.onSurfaceVariant)
-            }
-        },
-        containerColor = colors.surfaceContainer
-    )
+        }
+    }
 }
