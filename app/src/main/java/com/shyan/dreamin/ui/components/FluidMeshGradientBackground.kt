@@ -139,9 +139,9 @@ fun FluidMeshGradientBackground(
                         colorStops = arrayOf(
                             0.00f to backgroundColor.copy(alpha = 0.12f),
                             0.30f to Color.Transparent,
-                            0.60f to backgroundColor.copy(alpha = 0.32f),
-                            0.85f to backgroundColor.copy(alpha = 0.65f),
-                            1.00f to backgroundColor.copy(alpha = 0.85f)
+                            0.60f to backgroundColor.copy(alpha = 0.20f),
+                            0.85f to backgroundColor.copy(alpha = 0.36f),
+                            1.00f to backgroundColor.copy(alpha = 0.48f)
                         ),
                         startY = 0f,
                         endY = height
@@ -248,8 +248,8 @@ fun FluidMeshGradientBackground(
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                animDominant.copy(alpha = 0.35f * scrollAlpha),
-                                animSecondary.copy(alpha = 0.20f * scrollAlpha),
+                                animDominant.copy(alpha = 0.50f * scrollAlpha),
+                                animSecondary.copy(alpha = 0.30f * scrollAlpha),
                                 Color.Transparent
                             ),
                             center = Offset(coreX, coreY),
