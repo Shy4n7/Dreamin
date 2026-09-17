@@ -454,6 +454,20 @@ fun NowPlayingScreen(
             isHeaderMode = false
         )
 
+        // 🌑 Smooth Non-Aggressive Queue Dimming Scrim Layer
+        // Gently dims the background brightness as the user navigates towards the Queue screen.
+        // Reading pager progress inside graphicsLayer executes entirely in the Draw phase,
+        // ensuring zero recompositions and 120 FPS fluid gestures without any harsh visual cuts.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val progress = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
+                    alpha = progress * 0.40f
+                }
+                .background(Color.Black)
+        )
+
         VerticalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
