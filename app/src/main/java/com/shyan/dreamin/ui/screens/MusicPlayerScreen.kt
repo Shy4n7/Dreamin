@@ -16,12 +16,15 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -39,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -147,7 +151,25 @@ private fun MainAppScaffold(
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
-                Column {
+                val footerAura by animateColorAsState(
+                    targetValue = Color(state.dominantColor),
+                    animationSpec = tween(900, easing = FastOutSlowInEasing),
+                    label = "footer_aura_color"
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    footerAura.copy(alpha = 0.08f),
+                                    footerAura.copy(alpha = 0.20f)
+                                )
+                            )
+                        )
+                ) {
                     AnimatedVisibility(
                         visible = !isNowPlayingOpen && state.currentSong != null,
                         enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(180)),
@@ -172,6 +194,7 @@ private fun MainAppScaffold(
                     ) {
                         BottomNavBar(
                             currentScreen  = currentScreen,
+                            dominantColor  = Color(state.dominantColor),
                             hazeState      = hazeState,
                             onScreenChange = { screen ->
                                 if (state.openPlaylistId != null) {

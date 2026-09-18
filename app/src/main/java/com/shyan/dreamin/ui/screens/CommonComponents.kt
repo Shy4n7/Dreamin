@@ -158,11 +158,19 @@ fun GlassmorphismCard(
 fun BottomNavBar(
     currentScreen: Screen,
     onScreenChange: (Screen) -> Unit,
+    dominantColor: Color? = null,
     hazeState: HazeState? = null
 ) {
     val colors = LocalDreaminColors.current
     val screens = Screen.entries
     val selectedIndex = screens.indexOf(currentScreen).coerceAtLeast(0)
+
+    val dynamicDominant = dominantColor ?: colors.primary
+    val animatedDominant by animateColorAsState(
+        targetValue = dynamicDominant,
+        animationSpec = tween(900, easing = FastOutSlowInEasing),
+        label = "nav_dominant_color"
+    )
 
     val hazeModifier = if (hazeState != null) {
         Modifier.hazeEffect(
@@ -173,20 +181,29 @@ fun BottomNavBar(
 
     val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     Surface(
-        color = if (hazeState != null) colors.surfaceContainer.copy(alpha = 0.58f) else colors.surfaceContainer,
+        color = if (hazeState != null) colors.surfaceContainer.copy(alpha = 0.55f) else colors.surfaceContainer,
         tonalElevation = 0.dp,
         shape = navShape,
         modifier = hazeModifier
             .clip(navShape)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        animatedDominant.copy(alpha = 0.08f),
+                        animatedDominant.copy(alpha = 0.22f),
+                        animatedDominant.copy(alpha = 0.35f)
+                    )
+                )
+            )
             .drawBehind {
-                // Top-edge 1dp specular rim highlight
+                // Top-edge 1dp specular rim highlight with dominant tint
                 val strokeWidth = 1.dp.toPx()
                 drawLine(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.05f),
-                            Color.White.copy(alpha = 0.28f),
-                            Color.White.copy(alpha = 0.05f)
+                            animatedDominant.copy(alpha = 0.12f),
+                            Color.White.copy(alpha = 0.30f),
+                            animatedDominant.copy(alpha = 0.12f)
                         )
                     ),
                     start = Offset(0f, strokeWidth / 2),
@@ -225,8 +242,8 @@ fun BottomNavBar(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                colors.primary.copy(alpha = 0.24f),
-                                colors.primary.copy(alpha = 0.12f)
+                                animatedDominant.copy(alpha = 0.28f),
+                                animatedDominant.copy(alpha = 0.14f)
                             )
                         )
                     )
@@ -234,8 +251,8 @@ fun BottomNavBar(
                         width = 1.dp,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.20f),
-                                colors.primary.copy(alpha = 0.08f)
+                                Color.White.copy(alpha = 0.22f),
+                                animatedDominant.copy(alpha = 0.12f)
                             )
                         ),
                         shape = RoundedCornerShape(21.dp)
@@ -250,7 +267,7 @@ fun BottomNavBar(
                 screens.forEach { screen ->
                     val isSelected = screen == currentScreen
                     val tint by animateColorAsState(
-                        targetValue   = if (isSelected) colors.primary else colors.onSurfaceVariant,
+                        targetValue   = if (isSelected) animatedDominant else colors.onSurfaceVariant,
                         animationSpec = tween(200),
                         label         = "nav_tint_${screen.name}"
                     )
@@ -439,6 +456,15 @@ fun MiniPlayer(
             shape = cardShape,
             modifier = (if (hazeState != null) Modifier.hazeEffect(state = hazeState, style = HazeMaterials.ultraThin()) else Modifier)
                 .clip(cardShape)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            animatedAura.copy(alpha = 0.20f),
+                            animatedAura.copy(alpha = 0.08f),
+                            Color.Transparent
+                        )
+                    )
+                )
                 .drawWithCache {
                     val outline = cardShape.createOutline(size, layoutDirection, this)
                     val strokeWidth = 1.dp.toPx()
