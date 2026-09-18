@@ -434,7 +434,7 @@ fun PlaylistDetailScreen(
                                     onValueChange = { searchQuery = it },
                                     placeholder = { Text("Filter tracks in playlist...", color = colors.onSurfaceVariant, fontSize = 13.5.sp) },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = RoundedCornerShape(14.dp),
                                     trailingIcon = {
                                         if (searchQuery.isNotEmpty()) {
                                             IconButton(onClick = { searchQuery = "" }) {
@@ -688,7 +688,7 @@ fun PlaylistDetailScreen(
                                                 containerColor = animatedDominant,
                                                 contentColor = playAllContentColor
                                             ),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(22.dp),
                                             modifier = Modifier.weight(1f).height(46.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
@@ -703,7 +703,7 @@ fun PlaylistDetailScreen(
                                                 containerColor = colors.surfaceHigh.copy(alpha = 0.85f),
                                                 contentColor = colors.onSurface
                                             ),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(22.dp),
                                             modifier = Modifier.weight(1f).height(46.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
@@ -721,7 +721,7 @@ fun PlaylistDetailScreen(
                                             onClick = { showAddSongsSheet = true },
                                             modifier = Modifier
                                                 .size(46.dp)
-                                                .clip(RoundedCornerShape(16.dp))
+                                                .clip(RoundedCornerShape(22.dp))
                                                 .background(colors.surfaceHigh.copy(alpha = 0.85f))
                                         ) {
                                             Icon(
@@ -746,7 +746,7 @@ fun PlaylistDetailScreen(
                                             },
                                             modifier = Modifier
                                                 .size(46.dp)
-                                                .clip(RoundedCornerShape(16.dp))
+                                                .clip(RoundedCornerShape(22.dp))
                                                 .background(
                                                     if (allDownloaded) colors.secondary.copy(alpha = 0.2f)
                                                     else colors.surfaceHigh.copy(alpha = 0.85f)
@@ -773,7 +773,7 @@ fun PlaylistDetailScreen(
                                                 containerColor = animatedDominant,
                                                 contentColor = Color.White
                                             ),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(22.dp),
                                             modifier = Modifier.weight(1.2f).height(48.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
@@ -790,7 +790,7 @@ fun PlaylistDetailScreen(
                                                     )
                                                 )
                                             },
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(22.dp),
                                             border = BorderStroke(1.dp, colors.onSurfaceVariant.copy(alpha = 0.35f)),
                                             modifier = Modifier.weight(1f).height(48.dp),
                                             contentPadding = PaddingValues(horizontal = 10.dp)
@@ -857,8 +857,8 @@ fun PlaylistDetailScreen(
                                         expanded = showSortDropdown,
                                         onDismissRequest = { showSortDropdown = false },
                                         modifier = Modifier
-                                            .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
-                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                            .background(colors.surfaceHighest, RoundedCornerShape(14.dp))
+                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
                                             .width(180.dp)
                                     ) {
                                         PlaylistSortOrder.values().forEach { order ->
@@ -945,7 +945,7 @@ fun PlaylistDetailScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
+                                            .clip(RoundedCornerShape(14.dp))
                                             .background(colors.surfaceHighest.copy(alpha = 0.45f))
                                             .padding(horizontal = 14.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -985,7 +985,7 @@ fun PlaylistDetailScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
+                                    .clip(RoundedCornerShape(14.dp))
                                     .background(colors.surfaceHighest.copy(alpha = 0.55f))
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1231,7 +1231,7 @@ fun PlaylistDetailScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(top = 12.dp, bottom = 6.dp)
-                                            .clip(RoundedCornerShape(20.dp))
+                                            .clip(RoundedCornerShape(14.dp))
                                             .background(colors.surfaceHighest.copy(alpha = 0.45f))
                                             .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1544,7 +1544,7 @@ fun PlaylistDetailScreen(
                                 )
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(22.dp),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             modifier = Modifier.height(38.dp)
                         ) {
@@ -1557,7 +1557,7 @@ fun PlaylistDetailScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             OutlinedButton(
                                 onClick = { onUpdateCover(null) },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(22.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 modifier = Modifier.height(38.dp)
                             ) {
@@ -1592,7 +1592,7 @@ fun PlaylistDetailScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(22.dp)
                 ) {
                     Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
                 }

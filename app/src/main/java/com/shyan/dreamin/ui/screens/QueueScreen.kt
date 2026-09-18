@@ -691,7 +691,7 @@ private fun QueueSongItemRow(
                 scaleY = dragScale
                 shadowElevation = dragElevation
             }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(rowBgColor)
             .clickable(enabled = !isDragging, onClick = onClick)
             .padding(horizontal = 16.dp)
@@ -796,12 +796,12 @@ private fun QueueSongItemRow(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("Remove from Queue", color = Color(0xFFFF6B6B)) },
+                        text = { Text("Remove from Queue", color = colors.error) },
                         onClick = {
                             showMenu = false
                             onRemove()
                         },
-                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = Color(0xFFFF6B6B)) }
+                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = colors.error) }
                     )
                 }
             }

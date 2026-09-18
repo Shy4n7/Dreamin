@@ -128,7 +128,7 @@ fun RecognizeMusicScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF0F1117),
+        containerColor = colors.background,
         topBar = {
             Row(
                 modifier = Modifier
@@ -235,7 +235,7 @@ fun RecognizeMusicScreen(
                                             val currentAlpha = (1f - phase) * 0.45f
 
                                             drawCircle(
-                                                color = Color(0xFF4A69BD).copy(alpha = currentAlpha),
+                                                color = colors.primary.copy(alpha = currentAlpha),
                                                 radius = currentRadius,
                                                 center = center,
                                                 style = Stroke(width = 2.5.dp.toPx())
@@ -254,8 +254,8 @@ fun RecognizeMusicScreen(
                                     .background(
                                         Brush.radialGradient(
                                             listOf(
-                                                Color(0xFF4A6FA5),
-                                                Color(0xFF385380)
+                                                colors.primary,
+                                                colors.primaryDim
                                             )
                                         )
                                     )
@@ -315,7 +315,7 @@ fun RecognizeMusicScreen(
                             Button(
                                 onClick = { startListening() },
                                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                                shape = RoundedCornerShape(20.dp)
+                                shape = RoundedCornerShape(22.dp)
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -361,7 +361,7 @@ fun RecognizeMusicScreen(
                                 }
                             }
                         ) {
-                            Text("Clear All", color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                            Text("Clear All", color = colors.error, fontSize = 13.sp)
                         }
                     }
                 }
