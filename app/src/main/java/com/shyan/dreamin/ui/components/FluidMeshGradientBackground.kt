@@ -123,28 +123,40 @@ fun FluidMeshGradientBackground(
                     )
                 }
 
+                // In header mode: use only dominantColor (same hue as the waves) at low alpha
+                // so the background tint matches the wave colour rather than mixing secondary/accent
+                // into a muddy soup. Full-screen NowPlaying mode keeps the rich multi-colour orbs.
+                val baseOrb1Alpha = if (isHeaderMode) 0.22f else 0.78f
+                val baseOrb2Alpha = if (isHeaderMode) 0.14f else 0.68f
+                val baseOrb3Alpha = if (isHeaderMode) 0.10f else 0.58f
+                val baseCoreAlpha = if (isHeaderMode) 0.16f else 0.50f
+
+                val orb2Source = if (isHeaderMode) animDominant else animSecondary
+                val orb3Source = if (isHeaderMode) animDominant else animAccent
+                val coreSource2 = if (isHeaderMode) animDominant else animSecondary
+
                 // Hoist gradient color lists into cache scope to guarantee zero heap allocations per frame
                 val baseOrb1Colors = listOf(
-                    animDominant.copy(alpha = 0.78f),
-                    animDominant.copy(alpha = 0.42f),
-                    animDominant.copy(alpha = 0.14f),
+                    animDominant.copy(alpha = baseOrb1Alpha),
+                    animDominant.copy(alpha = baseOrb1Alpha * 0.54f),
+                    animDominant.copy(alpha = baseOrb1Alpha * 0.18f),
                     Color.Transparent
                 )
                 val baseOrb2Colors = listOf(
-                    animSecondary.copy(alpha = 0.68f),
-                    animSecondary.copy(alpha = 0.36f),
-                    animSecondary.copy(alpha = 0.12f),
+                    orb2Source.copy(alpha = baseOrb2Alpha),
+                    orb2Source.copy(alpha = baseOrb2Alpha * 0.53f),
+                    orb2Source.copy(alpha = baseOrb2Alpha * 0.18f),
                     Color.Transparent
                 )
                 val baseOrb3Colors = listOf(
-                    animAccent.copy(alpha = 0.58f),
-                    animAccent.copy(alpha = 0.28f),
-                    animAccent.copy(alpha = 0.08f),
+                    orb3Source.copy(alpha = baseOrb3Alpha),
+                    orb3Source.copy(alpha = baseOrb3Alpha * 0.48f),
+                    orb3Source.copy(alpha = baseOrb3Alpha * 0.14f),
                     Color.Transparent
                 )
                 val baseCoreColors = listOf(
-                    animDominant.copy(alpha = 0.50f),
-                    animSecondary.copy(alpha = 0.30f),
+                    animDominant.copy(alpha = baseCoreAlpha),
+                    coreSource2.copy(alpha = baseCoreAlpha * 0.60f),
                     Color.Transparent
                 )
 
@@ -174,26 +186,26 @@ fun FluidMeshGradientBackground(
 
                     // Reuse pre-cached color lists whenever scrollAlpha == 1f (100% of NowPlaying frames)
                     val orb1Colors = if (scrollAlpha >= 0.999f) baseOrb1Colors else listOf(
-                        animDominant.copy(alpha = 0.78f * scrollAlpha),
-                        animDominant.copy(alpha = 0.42f * scrollAlpha),
-                        animDominant.copy(alpha = 0.14f * scrollAlpha),
+                        animDominant.copy(alpha = baseOrb1Alpha * scrollAlpha),
+                        animDominant.copy(alpha = baseOrb1Alpha * 0.54f * scrollAlpha),
+                        animDominant.copy(alpha = baseOrb1Alpha * 0.18f * scrollAlpha),
                         Color.Transparent
                     )
                     val orb2Colors = if (scrollAlpha >= 0.999f) baseOrb2Colors else listOf(
-                        animSecondary.copy(alpha = 0.68f * scrollAlpha),
-                        animSecondary.copy(alpha = 0.36f * scrollAlpha),
-                        animSecondary.copy(alpha = 0.12f * scrollAlpha),
+                        orb2Source.copy(alpha = baseOrb2Alpha * scrollAlpha),
+                        orb2Source.copy(alpha = baseOrb2Alpha * 0.53f * scrollAlpha),
+                        orb2Source.copy(alpha = baseOrb2Alpha * 0.18f * scrollAlpha),
                         Color.Transparent
                     )
                     val orb3Colors = if (scrollAlpha >= 0.999f) baseOrb3Colors else listOf(
-                        animAccent.copy(alpha = 0.58f * scrollAlpha),
-                        animAccent.copy(alpha = 0.28f * scrollAlpha),
-                        animAccent.copy(alpha = 0.08f * scrollAlpha),
+                        orb3Source.copy(alpha = baseOrb3Alpha * scrollAlpha),
+                        orb3Source.copy(alpha = baseOrb3Alpha * 0.48f * scrollAlpha),
+                        orb3Source.copy(alpha = baseOrb3Alpha * 0.14f * scrollAlpha),
                         Color.Transparent
                     )
                     val coreColors = if (scrollAlpha >= 0.999f) baseCoreColors else listOf(
-                        animDominant.copy(alpha = 0.50f * scrollAlpha),
-                        animSecondary.copy(alpha = 0.30f * scrollAlpha),
+                        animDominant.copy(alpha = baseCoreAlpha * scrollAlpha),
+                        coreSource2.copy(alpha = baseCoreAlpha * 0.60f * scrollAlpha),
                         Color.Transparent
                     )
 
