@@ -101,10 +101,10 @@ fun FluidMeshGradientBackground(
                         colorStops = arrayOf(
                             0.00f to backgroundColor.copy(alpha = 0.05f),
                             0.20f to Color.Transparent,
-                            0.42f to backgroundColor.copy(alpha = 0.40f),
-                            0.65f to backgroundColor.copy(alpha = 0.85f),
-                            0.88f to backgroundColor,
-                            1.00f to backgroundColor
+                            0.42f to backgroundColor.copy(alpha = 0.28f),
+                            0.65f to backgroundColor.copy(alpha = 0.62f),
+                            0.85f to backgroundColor.copy(alpha = 0.82f),
+                            1.00f to backgroundColor.copy(alpha = 0.92f)
                         ),
                         startY = 0f,
                         endY = height

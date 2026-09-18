@@ -182,13 +182,13 @@ fun AmbientSoundwaveHeader(
                 path = backRidge,
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        deepIndigo.copy(alpha = 0.2f * scrollAlpha),
-                        animatedMid.copy(alpha = 0.65f * scrollAlpha),
-                        animatedPrimary.copy(alpha = 0.50f * scrollAlpha),
-                        deepIndigo.copy(alpha = 0.2f * scrollAlpha)
+                        animatedMid.copy(alpha = 0.35f * scrollAlpha),
+                        animatedMid.copy(alpha = 0.82f * scrollAlpha),
+                        animatedPrimary.copy(alpha = 0.72f * scrollAlpha),
+                        animatedMid.copy(alpha = 0.35f * scrollAlpha)
                     )
                 ),
-                style = Stroke(width = 1.6.dp.toPx())
+                style = Stroke(width = 2.2.dp.toPx())
             )
 
             // --- Layer 2: Mid Wave Ribbon ---
@@ -231,12 +231,12 @@ fun AmbientSoundwaveHeader(
                 path = midRidge,
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        animatedMid.copy(alpha = 0.3f * scrollAlpha),
-                        animatedPrimary.copy(alpha = 0.90f * scrollAlpha),
-                        animatedMid.copy(alpha = 0.4f * scrollAlpha)
+                        animatedMid.copy(alpha = 0.55f * scrollAlpha),
+                        animatedPrimary.copy(alpha = 1.0f * scrollAlpha),
+                        animatedMid.copy(alpha = 0.60f * scrollAlpha)
                     )
                 ),
-                style = Stroke(width = 2.0.dp.toPx())
+                style = Stroke(width = 2.8.dp.toPx())
             )
 
             // --- Layer 3: Front Wave Ribbon with Specular Shimmer ---

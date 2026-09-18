@@ -1950,6 +1950,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 activeController?.apply {
+                    // Clear any stale preloaded items (index 1+) before loading a new song.
+                    // Without this, jumping to a distant queue item leaves the old preloaded
+                    // track in ExoPlayer's internal playlist, causing it to buffer indefinitely
+                    // instead of playing the newly requested song.
+                    if (mediaItemCount > 1) {
+                        removeMediaItems(1, mediaItemCount)
+                    }
                     playWhenReady = true
                     setMediaItem(mediaItem)
                     prepare()
