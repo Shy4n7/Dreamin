@@ -40,9 +40,13 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -437,6 +441,47 @@ fun NowPlayingScreen(
         }
     }
 
+    val nowPlayingNestedScrollConnection = remember(onBack) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // If user drags upward while already pulled down, consume to restore swipeOffsetY back to 0
+                if (available.y < 0f && swipeOffsetY.value > 0f) {
+                    val newOffset = (swipeOffsetY.value + available.y).coerceAtLeast(0f)
+                    val consumedY = newOffset - swipeOffsetY.value
+                    scope.launch { swipeOffsetY.snapTo(newOffset) }
+                    return Offset(0f, consumedY)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                // When on page 0 and user pulls downward (cannot scroll up further in pager)
+                if (available.y > 0f && pagerState.currentPage == 0) {
+                    scope.launch {
+                        swipeOffsetY.snapTo((swipeOffsetY.value + available.y).coerceAtLeast(0f))
+                    }
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pagerState.currentPage == 0 && (swipeOffsetY.value > 120f || (available.y > 600f && swipeOffsetY.value > 30f))) {
+                    onBack()
+                    return available
+                } else if (swipeOffsetY.value > 0f) {
+                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -471,7 +516,9 @@ fun NowPlayingScreen(
 
         VerticalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(nowPlayingNestedScrollConnection),
             key = { page -> if (page == 0) "now_playing" else "queue" }
         ) { page ->
             if (page == 0) {
@@ -656,9 +703,11 @@ fun NowPlayingScreen(
                                     modifier = Modifier
                                         .fillMaxSize(1.08f)
                                         .graphicsLayer {
-                                            scaleX = auraScale
-                                            scaleY = auraScale
-                                            alpha = auraAlpha
+                                            val pullY = swipeOffsetY.value
+                                            val auraPullScale = (1f - (pullY / 1400f)).coerceIn(0.7f, 1f)
+                                            scaleX = auraScale * auraPullScale
+                                            scaleY = auraScale * auraPullScale
+                                            alpha = (auraAlpha * (1f - (pullY / 450f))).coerceIn(0f, 1f)
                                         }
                                         .background(
                                             Brush.radialGradient(
@@ -677,36 +726,94 @@ fun NowPlayingScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .pointerInput(onNext, onPrevious) {
-                                            detectHorizontalDragGestures(
+                                        .pointerInput(onNext, onPrevious, onBack) {
+                                            var dragMode: Int = 0 // 0: detecting, 1: horizontal, 2: vertical down, 3: vertical up
+                                            var accumulatedX = 0f
+                                            var accumulatedY = 0f
+                                            val slop = 16f
+
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    dragMode = 0
+                                                    accumulatedX = 0f
+                                                    accumulatedY = 0f
+                                                },
                                                 onDragEnd = {
-                                                    val currentOffset = artworkOffsetX.value
-                                                    if (currentOffset < -75f) {
-                                                        triggerNextAnimated()
-                                                    } else if (currentOffset > 75f) {
-                                                        triggerPreviousAnimated()
-                                                    } else {
-                                                        artworkScope.launch {
-                                                            artworkOffsetX.animateTo(
-                                                                0f,
-                                                                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                                    if (dragMode == 1) {
+                                                        val currentOffset = artworkOffsetX.value
+                                                        if (currentOffset < -75f) {
+                                                            triggerNextAnimated()
+                                                        } else if (currentOffset > 75f) {
+                                                            triggerPreviousAnimated()
+                                                        } else {
+                                                            artworkScope.launch {
+                                                                artworkOffsetX.animateTo(
+                                                                    0f,
+                                                                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                                                )
+                                                            }
+                                                        }
+                                                    } else if (dragMode == 2) {
+                                                        if (swipeOffsetY.value > 120f) {
+                                                            onBack()
+                                                        } else {
+                                                            scope.launch {
+                                                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                                                            }
+                                                        }
+                                                    } else if (dragMode == 3 && accumulatedY < -60f) {
+                                                        scope.launch {
+                                                            pagerState.animateScrollToPage(
+                                                                page = 1,
+                                                                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
                                                             )
                                                         }
                                                     }
+                                                    dragMode = 0
                                                 },
                                                 onDragCancel = {
                                                     artworkScope.launch {
-                                                        artworkOffsetX.animateTo(
-                                                            0f,
-                                                            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
-                                                        )
+                                                        artworkOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
                                                     }
+                                                    scope.launch {
+                                                        swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                                                    }
+                                                    dragMode = 0
                                                 },
-                                                onHorizontalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    artworkScope.launch {
-                                                        val next = (artworkOffsetX.value + dragAmount).coerceIn(-260f, 260f)
-                                                        artworkOffsetX.snapTo(next)
+                                                onDrag = { change, dragAmount ->
+                                                    if (dragMode == 0) {
+                                                        accumulatedX += dragAmount.x
+                                                        accumulatedY += dragAmount.y
+                                                        if (kotlin.math.abs(accumulatedX) > slop || kotlin.math.abs(accumulatedY) > slop) {
+                                                            if (kotlin.math.abs(accumulatedX) > kotlin.math.abs(accumulatedY)) {
+                                                                dragMode = 1
+                                                            } else if (accumulatedY > 0f) {
+                                                                dragMode = 2
+                                                            } else {
+                                                                dragMode = 3
+                                                            }
+                                                        }
+                                                    }
+
+                                                    when (dragMode) {
+                                                        1 -> {
+                                                            change.consume()
+                                                            artworkScope.launch {
+                                                                val next = (artworkOffsetX.value + dragAmount.x).coerceIn(-260f, 260f)
+                                                                artworkOffsetX.snapTo(next)
+                                                            }
+                                                        }
+                                                        2 -> {
+                                                            if (dragAmount.y > 0f || swipeOffsetY.value > 0f) {
+                                                                change.consume()
+                                                                scope.launch {
+                                                                    swipeOffsetY.snapTo((swipeOffsetY.value + dragAmount.y).coerceAtLeast(0f))
+                                                                }
+                                                            }
+                                                        }
+                                                        3 -> {
+                                                            change.consume()
+                                                        }
                                                     }
                                                 }
                                             )
@@ -715,10 +822,10 @@ fun NowPlayingScreen(
                                             val dragX = artworkOffsetX.value
                                             val pullY = swipeOffsetY.value
                                             translationX = dragX
-                                            rotationZ = (dragX / 35f).coerceIn(-4f, 4f)
-                                            rotationY = (-dragX / 16f).coerceIn(-10f, 10f)
-                                            rotationX = (pullY / 22f).coerceIn(0f, 8f)
-                                            val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1100f) - (pullY / 1600f)).coerceIn(0.88f, 1f)
+                                            rotationZ = (dragX / 20f).coerceIn(-10f, 10f)
+                                            rotationY = (-dragX / 8f).coerceIn(-22f, 22f)
+                                            rotationX = (pullY / 12f).coerceIn(0f, 18f)
+                                            val dynamicScale = (1f - (kotlin.math.abs(dragX) / 1100f) - (pullY / 1200f)).coerceIn(0.84f, 1f)
                                             scaleX = dynamicScale
                                             scaleY = dynamicScale
                                             cameraDistance = 16f * density
@@ -732,9 +839,10 @@ fun NowPlayingScreen(
                                         .drawWithContent {
                                             drawContent()
                                             val dragX = artworkOffsetX.value
-                                            val sheenOffset = (dragX * 2.2f).coerceIn(-400f, 400f)
-                                            val sheenAlpha = (kotlin.math.abs(dragX) / 100f).coerceIn(0f, 0.45f)
-                                            val borderAlpha = (0.14f + (kotlin.math.abs(dragX) / 350f)).coerceIn(0.14f, 0.48f)
+                                            val pullY = swipeOffsetY.value
+                                            val sheenOffset = (dragX * 2.2f + pullY * 1.5f).coerceIn(-400f, 400f)
+                                            val sheenAlpha = (kotlin.math.abs(dragX) / 100f + (pullY / 300f)).coerceIn(0f, 0.48f)
+                                            val borderAlpha = (0.14f + (kotlin.math.abs(dragX) / 350f) + (pullY / 800f)).coerceIn(0.14f, 0.52f)
 
                                             // Draw smooth border in Draw Phase
                                             drawOutline(
