@@ -98,25 +98,80 @@ object PaletteMemoryCache {
             if (result is coil.request.SuccessResult) {
                 val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                 if (bmp != null) {
-                    val scaledBmp = if (bmp.width > 32 || bmp.height > 32) {
-                        android.graphics.Bitmap.createScaledBitmap(bmp, 24, 24, true)
+                    val scaledBmp = if (bmp.width > 48 || bmp.height > 48) {
+                        android.graphics.Bitmap.createScaledBitmap(bmp, 48, 48, true)
                     } else bmp
 
                     val triad = withContext(Dispatchers.Default) {
                         val palette = Palette.from(scaledBmp).generate()
-                        val rawDominant = palette.getVibrantColor(
-                            palette.getDominantColor(
-                                palette.getMutedColor(0xFF6C5CE7.toInt())
-                            )
-                        )
-                        val rawSecondary = palette.getDarkVibrantColor(
-                            palette.getMutedColor(
-                                palette.getDarkMutedColor(0xFF8E44AD.toInt())
-                            )
-                        )
-                        val rawAccent = palette.getLightVibrantColor(
-                            palette.getLightMutedColor(0xFF00CEC9.toInt())
-                        )
+                        val swatches = palette.swatches
+                        if (swatches.isEmpty()) return@withContext DEFAULT_TRIAD
+
+                        val totalPopulation = swatches.sumOf { it.population }.coerceAtLeast(1)
+
+                        // 🎯 Population-Weighted Swatch Scoring:
+                        // Heavily penalizes tiny corner logos/badges (< 4% population) while rewarding
+                        // authentic saturated artwork hues over dull black/grey backgrounds.
+                        val scoredSwatches = swatches.map { swatch ->
+                            val popRatio = swatch.population.toFloat() / totalPopulation
+                            val sat = swatch.hsl[1]
+                            val lightness = swatch.hsl[2]
+
+                            // Tiny corner badges (< 4% of image area) receive 95% penalty
+                            val popFactor = if (popRatio < 0.04f) popRatio * 0.05f else popRatio
+
+                            // Colorfulness bonus: vibrant hues beat dull greys and black letterboxing
+                            val colorFactor = when {
+                                sat >= 0.25f -> 1.0f + (sat * 1.6f)
+                                sat >= 0.12f -> 0.7f + sat
+                                else -> 0.20f
+                            }
+
+                            // Lightness suitability: prefer comfortable mid-range tones over pure black/white
+                            val lightnessFactor = when {
+                                lightness in 0.15f..0.82f -> 1.0f
+                                lightness in 0.07f..0.92f -> 0.65f
+                                else -> 0.25f
+                            }
+
+                            swatch to (popFactor * colorFactor * lightnessFactor)
+                        }.sortedByDescending { it.second }
+
+                        val bestDominantSwatch = scoredSwatches.firstOrNull()?.first
+                        val rawDominant = bestDominantSwatch?.rgb
+                            ?: palette.getDominantColor(0xFF6C5CE7.toInt())
+
+                        // Secondary: distinct hue/tone with meaningful population (>= 2.5%)
+                        val domHsl = bestDominantSwatch?.hsl
+                        val rawSecondary = if (domHsl != null) {
+                            scoredSwatches.map { it.first }.firstOrNull { s ->
+                                s != bestDominantSwatch &&
+                                (s.population.toFloat() / totalPopulation) >= 0.025f &&
+                                (kotlin.math.abs(s.hsl[0] - domHsl[0]) > 22f || kotlin.math.abs(s.hsl[2] - domHsl[2]) > 0.18f)
+                            }?.rgb
+                                ?: palette.getDarkVibrantColor(
+                                    palette.getMutedColor(
+                                        palette.getDarkMutedColor(0xFF8E44AD.toInt())
+                                    )
+                                )
+                        } else {
+                            palette.getDarkVibrantColor(0xFF8E44AD.toInt())
+                        }
+
+                        // Accent: high-vibrancy or light swatch with meaningful population (>= 2%)
+                        val rawAccent = if (domHsl != null) {
+                            scoredSwatches.map { it.first }.firstOrNull { s ->
+                                s != bestDominantSwatch &&
+                                (s.population.toFloat() / totalPopulation) >= 0.02f &&
+                                s.hsl[1] >= 0.25f &&
+                                kotlin.math.abs(s.hsl[0] - domHsl[0]) > 18f
+                            }?.rgb
+                                ?: palette.getLightVibrantColor(
+                                    palette.getLightMutedColor(0xFF00CEC9.toInt())
+                                )
+                        } else {
+                            palette.getLightVibrantColor(0xFF00CEC9.toInt())
+                        }
 
                         val dominant = boostColorVibrancy(rawDominant, minLightness = 0.32f, maxLightness = 0.68f, minSaturation = 0.50f)
                         val secondary = boostColorVibrancy(rawSecondary, minLightness = 0.28f, maxLightness = 0.58f, minSaturation = 0.45f)
