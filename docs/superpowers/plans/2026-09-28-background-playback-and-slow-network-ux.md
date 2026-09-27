@@ -39,7 +39,7 @@
 - Consumes: `MediaController`, `Song`, `PlaybackState.Loading`
 - Produces: `currentPlayJob: Job?`, immediate audio pause on switch, cancellation of in-flight stream resolvers
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `app/src/test/java/com/shyan/dreamin/viewmodel/PlaybackSwitchingTest.kt`:
 ```kotlin
@@ -73,12 +73,12 @@ class PlaybackSwitchingTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes baseline**
+- [x] **Step 2: Run test to verify it passes baseline**
 
 Run: `.\gradlew.bat testDebugUnitTest --tests com.shyan.dreamin.viewmodel.PlaybackSwitchingTest`
 Expected: PASS
 
-- [ ] **Step 3: Implement immediate audio cutoff & job cancellation in MusicPlayerViewModel**
+- [x] **Step 3: Implement immediate audio cutoff & job cancellation in MusicPlayerViewModel**
 
 In `app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt`:
 1. Add property:
@@ -107,12 +107,12 @@ In `app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt`:
             ...
 ```
 
-- [ ] **Step 4: Run unit tests to verify implementation compiles and passes**
+- [x] **Step 4: Run unit tests to verify implementation compiles and passes**
 
 Run: `.\gradlew.bat testDebugUnitTest`
 Expected: PASS
 
-- [ ] **Step 5: Local Git Commit**
+- [x] **Step 5: Local Git Commit**
 
 ```bash
 git add app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt app/src/test/java/com/shyan/dreamin/viewmodel/PlaybackSwitchingTest.kt
@@ -132,7 +132,7 @@ git commit -m "fix(player): immediately pause audio and cancel pending job on so
 - Consumes: `MediaController`, `MediaSession`, `Lifecycle.Event.ON_START`
 - Produces: `ensureConnected()`, `onAppForegrounded()`, `MediaController.Listener` disconnection handling
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `app/src/test/java/com/shyan/dreamin/viewmodel/MediaControllerLifecycleTest.kt`:
 ```kotlin
@@ -156,12 +156,12 @@ class MediaControllerLifecycleTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes baseline**
+- [x] **Step 2: Run test to verify it passes baseline**
 
 Run: `.\gradlew.bat testDebugUnitTest --tests com.shyan.dreamin.viewmodel.MediaControllerLifecycleTest`
 Expected: PASS
 
-- [ ] **Step 3: Implement controller disconnection detection and foreground re-binding**
+- [x] **Step 3: Implement controller disconnection detection and foreground re-binding**
 
 In `app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt`:
 1. Add `MediaController.Listener` support:
@@ -192,12 +192,12 @@ In `app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt`:
 ```
 5. In `HomeScreen.kt`, trigger `onAppForegrounded()` from `LifecycleEventEffect(Lifecycle.Event.ON_START)`.
 
-- [ ] **Step 4: Run unit tests to verify implementation compiles and passes**
+- [x] **Step 4: Run unit tests to verify implementation compiles and passes**
 
 Run: `.\gradlew.bat testDebugUnitTest`
 Expected: PASS
 
-- [ ] **Step 5: Local Git Commit**
+- [x] **Step 5: Local Git Commit**
 
 ```bash
 git add app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt app/src/main/java/com/shyan/dreamin/ui/screens/HomeScreen.kt app/src/main/java/com/shyan/dreamin/ui/screens/MusicPlayerScreen.kt app/src/test/java/com/shyan/dreamin/viewmodel/MediaControllerLifecycleTest.kt
@@ -218,7 +218,7 @@ git commit -m "fix(lifecycle): reconnect disconnected MediaController and evict 
 - Consumes: `query: String`, `NetworkService.httpClient`, `SearchResults`
 - Produces: `NetworkService.evictStaleConnections()`, `vm.retrySearch()`, Search LRU Cache, Retry UI button in `SearchResults`
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `app/src/test/java/com/shyan/dreamin/data/SearchLruCacheTest.kt`:
 ```kotlin
@@ -249,12 +249,12 @@ class SearchLruCacheTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes baseline**
+- [x] **Step 2: Run test to verify it passes baseline**
 
 Run: `.\gradlew.bat testDebugUnitTest --tests com.shyan.dreamin.data.SearchLruCacheTest`
 Expected: PASS
 
-- [ ] **Step 3: Implement OkHttp socket eviction, Search LRU cache, and Retry in ViewModel & UI**
+- [x] **Step 3: Implement OkHttp socket eviction, Search LRU cache, and Retry in ViewModel & UI**
 
 1. In `app/src/main/java/com/shyan/dreamin/data/network/NetworkService.kt`:
 ```kotlin
@@ -272,12 +272,12 @@ Expected: PASS
 3. In `app/src/main/java/com/shyan/dreamin/ui/screens/HomeScreen.kt`:
    - Update `SearchResults` to include an interactive "Retry" pill with `Icons.Filled.Refresh` when errors occur.
 
-- [ ] **Step 4: Run unit tests to verify implementation compiles and passes**
+- [x] **Step 4: Run unit tests to verify implementation compiles and passes**
 
 Run: `.\gradlew.bat testDebugUnitTest`
 Expected: PASS
 
-- [ ] **Step 5: Local Git Commit**
+- [x] **Step 5: Local Git Commit**
 
 ```bash
 git add app/src/main/java/com/shyan/dreamin/data/network/NetworkService.kt app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt app/src/main/java/com/shyan/dreamin/ui/screens/HomeScreen.kt app/src/main/java/com/shyan/dreamin/ui/screens/MusicPlayerScreen.kt app/src/test/java/com/shyan/dreamin/data/SearchLruCacheTest.kt
@@ -298,7 +298,7 @@ git commit -m "feat(search): add LRU search cache, socket eviction, and retry co
 - Consumes: `PlaybackState.Error`, `PlaybackState.Loading`, `currentSong`
 - Produces: `vm.retryCurrentSong()`, buffering status indicators, retry-on-play button click
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `app/src/test/java/com/shyan/dreamin/viewmodel/PlayerErrorRecoveryTest.kt`:
 ```kotlin
@@ -332,12 +332,12 @@ class PlayerErrorRecoveryTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes baseline**
+- [x] **Step 2: Run test to verify it passes baseline**
 
 Run: `.\gradlew.bat testDebugUnitTest --tests com.shyan.dreamin.viewmodel.PlayerErrorRecoveryTest`
 Expected: PASS
 
-- [ ] **Step 3: Implement retry logic and UX buffering/error states**
+- [x] **Step 3: Implement retry logic and UX buffering/error states**
 
 1. In `app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt`:
    - Add `retryCurrentSong()`.
@@ -348,12 +348,12 @@ Expected: PASS
 3. In `app/src/main/java/com/shyan/dreamin/ui/screens/CommonComponents.kt` (`MiniPlayer`):
    - Clicking play button in `PlaybackState.Error` retries playback.
 
-- [ ] **Step 4: Run unit tests to verify implementation compiles and passes**
+- [x] **Step 4: Run unit tests to verify implementation compiles and passes**
 
 Run: `.\gradlew.bat testDebugUnitTest`
 Expected: PASS
 
-- [ ] **Step 5: Local Git Commit**
+- [x] **Step 5: Local Git Commit**
 
 ```bash
 git add app/src/main/java/com/shyan/dreamin/viewmodel/MusicPlayerViewModel.kt app/src/main/java/com/shyan/dreamin/ui/screens/NowPlayingScreen.kt app/src/main/java/com/shyan/dreamin/ui/screens/CommonComponents.kt app/src/test/java/com/shyan/dreamin/viewmodel/PlayerErrorRecoveryTest.kt
@@ -374,7 +374,7 @@ git commit -m "feat(player): add slow-network buffering indicators, error recove
 - Consumes: `isNowPlayingOpen`, `swipeOffsetY`, `NestedScrollConnection`, `DreaminMotion.FluidSlide`
 - Produces: Clean 0f offset on open, user-input-only nested scroll guarding, elevated z-index, tuned spring stiffness without stalls
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 Create `app/src/test/java/com/shyan/dreamin/ui/NowPlayingTransitionTest.kt`:
 ```kotlin
@@ -404,12 +404,12 @@ class NowPlayingTransitionTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes baseline**
+- [x] **Step 2: Run test to verify it passes baseline**
 
 Run: `.\gradlew.bat testDebugUnitTest --tests com.shyan.dreamin.ui.NowPlayingTransitionTest`
 Expected: PASS
 
-- [ ] **Step 3: Implement NowPlaying transition fix, offset reset, and gesture gating**
+- [x] **Step 3: Implement NowPlaying transition fix, offset reset, and gesture gating**
 
 1. In `app/src/main/java/com/shyan/dreamin/ui/screens/NowPlayingScreen.kt`:
    - Reset `swipeOffsetY` and `pagerState` on entry:
@@ -453,12 +453,12 @@ Expected: PASS
     )
 ```
 
-- [ ] **Step 4: Run unit tests to verify implementation compiles and passes**
+- [x] **Step 4: Run unit tests to verify implementation compiles and passes**
 
 Run: `.\gradlew.bat testDebugUnitTest`
 Expected: PASS
 
-- [ ] **Step 5: Local Git Commit**
+- [x] **Step 5: Local Git Commit**
 
 ```bash
 git add app/src/main/java/com/shyan/dreamin/ui/screens/NowPlayingScreen.kt app/src/main/java/com/shyan/dreamin/ui/screens/MusicPlayerScreen.kt app/src/main/java/com/shyan/dreamin/ui/screens/UiUtils.kt app/src/test/java/com/shyan/dreamin/ui/NowPlayingTransitionTest.kt
@@ -472,12 +472,12 @@ git commit -m "fix(ui): eliminate mid-flight stall and touch collision when expa
 **Files:**
 - Entire workspace
 
-- [ ] **Step 1: Execute full compilation and test suite**
+- [x] **Step 1: Execute full compilation and test suite**
 
 Run: `.\gradlew.bat compileDebugKotlin testDebugUnitTest`
 Expected: `BUILD SUCCESSFUL` with all unit tests passing.
 
-- [ ] **Step 2: Verify git status is clean**
+- [x] **Step 2: Verify git status is clean**
 
 Run: `git status`
 Expected: Working tree clean (all tasks committed).
