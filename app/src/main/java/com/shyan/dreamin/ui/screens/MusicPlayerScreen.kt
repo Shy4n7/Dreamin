@@ -572,7 +572,7 @@ private fun MainAppScaffold(
             visible  = isNowPlayingOpen,
             enter    = slideInVertically(DreaminMotion.FluidSlide) { it },
             exit     = slideOutVertically(DreaminMotion.FluidSlide) { it },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().zIndex(4f)
         ) {
             NowPlayingScreen(
                 state              = state,

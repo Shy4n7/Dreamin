@@ -348,6 +348,21 @@ fun NowPlayingScreen(
 
     val song = state.currentSong
     val colors = LocalDreaminColors.current
+    val swipeOffsetY = remember { Animatable(0f) }
+
+    val handleDismiss = remember(onBack) {
+        {
+            scope.launch { swipeOffsetY.snapTo(0f) }
+            onBack()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        swipeOffsetY.snapTo(0f)
+        if (pagerState.currentPage != 0) {
+            pagerState.scrollToPage(0)
+        }
+    }
 
     BackHandler(enabled = true) {
         if (pagerState.currentPage > 0) {
@@ -358,7 +373,7 @@ fun NowPlayingScreen(
                 )
             }
         } else {
-            onBack()
+            handleDismiss()
         }
     }
 
@@ -378,7 +393,6 @@ fun NowPlayingScreen(
         label = "mesh_accent"
     )
 
-    val swipeOffsetY = remember { Animatable(0f) }
     val artworkOffsetX = remember { Animatable(0f) }
     val artworkScope = rememberCoroutineScope()
     val density = LocalDensity.current.density
@@ -460,9 +474,9 @@ fun NowPlayingScreen(
                 source: NestedScrollSource
             ): Offset {
                 // When on page 0 and user pulls downward (cannot scroll up further in pager)
-                if (available.y > 0f && pagerState.currentPage == 0) {
+                if (source == NestedScrollSource.UserInput && available.y > 0f && pagerState.currentPage == 0) {
                     scope.launch {
-                        swipeOffsetY.snapTo((swipeOffsetY.value + available.y).coerceAtLeast(0f))
+                        swipeOffsetY.snapTo((swipeOffsetY.value + available.y * 0.75f).coerceAtLeast(0f))
                     }
                     return Offset(0f, available.y)
                 }
@@ -471,7 +485,7 @@ fun NowPlayingScreen(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 if (pagerState.currentPage == 0 && (swipeOffsetY.value > 120f || (available.y > 600f && swipeOffsetY.value > 30f))) {
-                    onBack()
+                    handleDismiss()
                     return available
                 } else if (swipeOffsetY.value > 0f) {
                     swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
@@ -539,7 +553,7 @@ fun NowPlayingScreen(
                             .padding(top = 4.dp, bottom = 4.dp)
                     ) {
                         IconButton(
-                            onClick = onBack,
+                            onClick = handleDismiss,
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .size(44.dp)
@@ -560,7 +574,7 @@ fun NowPlayingScreen(
                                     detectVerticalDragGestures(
                                         onDragEnd = {
                                             if (swipeOffsetY.value > 120f) {
-                                                onBack()
+                                                handleDismiss()
                                             } else {
                                                 scope.launch {
                                                     swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
@@ -755,7 +769,7 @@ fun NowPlayingScreen(
                                                         }
                                                     } else if (dragMode == 2) {
                                                         if (swipeOffsetY.value > 120f) {
-                                                            onBack()
+                                                            handleDismiss()
                                                         } else {
                                                             scope.launch {
                                                                 swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))

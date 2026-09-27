@@ -187,7 +187,7 @@ object DreaminMotion {
     )
     val FluidSlide: SpringSpec<IntOffset> = spring(
         dampingRatio = 0.88f,
-        stiffness = 320f
+        stiffness = Spring.StiffnessMediumLow
     )
     val TactileBouncy: SpringSpec<Float> = spring(
         dampingRatio = 0.88f,
