@@ -1033,14 +1033,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
-    private val controllerListener = object : MediaController.Listener {
-        override fun onDisconnected(controller: MediaController) {
-            android.util.Log.w("MusicVM", "MediaController disconnected from MusicService")
-            this@MusicPlayerViewModel.controller = null
-            isListenerAttached = false
-        }
-    }
-
     private fun connectToService() {
         if (controller?.isConnected == true) return
         controllerFuture?.let { MediaController.releaseFuture(it) }
@@ -1049,7 +1041,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val context = getApplication<Application>()
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
         val future = MediaController.Builder(context, sessionToken)
-            .setListener(controllerListener)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    android.util.Log.w("MusicVM", "MediaController disconnected from MusicService")
+                    this@MusicPlayerViewModel.controller = null
+                    isListenerAttached = false
+                }
+            })
             .buildAsync()
         controllerFuture = future
         // Use main-thread executor so listener body safely touches UI state and starts coroutines
