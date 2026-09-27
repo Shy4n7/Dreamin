@@ -31,12 +31,14 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.shyan.dreamin.MainActivity
+import com.shyan.dreamin.data.local.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -85,6 +87,8 @@ class MusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var sleepTimerJob: Job? = null
+    private var favoriteJob: Job? = null
+    private var isCurrentFavorite: Boolean = false
 
     companion object {
         const val ACTION_PLAY_NEXT = "com.shyan.dreamin.ACTION_PLAY_NEXT"
@@ -175,6 +179,14 @@ class MusicService : MediaSessionService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateWifiLock(isPlaying)
             }
+
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                observeSongFavorite(
+                    mediaItem?.mediaId,
+                    mediaItem?.mediaMetadata?.title?.toString(),
+                    mediaItem?.mediaMetadata?.artist?.toString()
+                )
+            }
         })
         AudioFxManager.attachAudioSession(player.audioSessionId)
 
@@ -227,18 +239,6 @@ class MusicService : MediaSessionService() {
             }
         }
 
-        val customFavoriteButton = CommandButton.Builder()
-            .setDisplayName("Favorite")
-            .setIconResId(com.shyan.dreamin.R.drawable.ic_heart)
-            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
-            .build()
-
-        val customShuffleButton = CommandButton.Builder()
-            .setDisplayName("Shuffle")
-            .setIconResId(android.R.drawable.ic_menu_rotate)
-            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
-            .build()
-
         val sessionCallback = object : MediaSession.Callback {
             override fun onConnect(
                 session: MediaSession,
@@ -261,7 +261,7 @@ class MusicService : MediaSessionService() {
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                     .setAvailableSessionCommands(sessionCommands)
                     .setAvailablePlayerCommands(availablePlayerCommands)
-                    .setCustomLayout(listOf(customFavoriteButton, customShuffleButton))
+                    .setCustomLayout(listOf(buildFavoriteButton(isCurrentFavorite), buildShuffleButton()))
                     .build()
             }
 
@@ -296,6 +296,14 @@ class MusicService : MediaSessionService() {
             .setBitmapLoader(CoilBitmapLoader(this))
             .setSessionActivity(sessionActivity)
             .build()
+
+        player.currentMediaItem?.let { item ->
+            observeSongFavorite(
+                item.mediaId,
+                item.mediaMetadata.title?.toString(),
+                item.mediaMetadata.artist?.toString()
+            )
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
@@ -374,7 +382,62 @@ class MusicService : MediaSessionService() {
         mediaSession?.player?.volume = 1.0f
     }
 
+    private fun buildFavoriteButton(isFavorite: Boolean): CommandButton {
+        return CommandButton.Builder()
+            .setDisplayName(if (isFavorite) "Favorited" else "Favorite")
+            .setIconResId(
+                if (isFavorite) com.shyan.dreamin.R.drawable.ic_heart
+                else com.shyan.dreamin.R.drawable.ic_heart_outline
+            )
+            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
+            .build()
+    }
+
+    private fun buildShuffleButton(): CommandButton {
+        return CommandButton.Builder()
+            .setDisplayName("Shuffle")
+            .setIconResId(android.R.drawable.ic_menu_rotate)
+            .setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
+            .build()
+    }
+
+    private fun updateCustomLayout(isFavorite: Boolean) {
+        isCurrentFavorite = isFavorite
+        val session = mediaSession ?: return
+        val layout = listOf(buildFavoriteButton(isFavorite), buildShuffleButton())
+        for (controller in session.connectedControllers) {
+            session.setCustomLayout(controller, layout)
+        }
+    }
+
+    private fun observeSongFavorite(songId: String?, title: String?, artist: String?) {
+        favoriteJob?.cancel()
+        val sId = songId.orEmpty()
+        val sTitle = title.orEmpty()
+        val sArtist = artist.orEmpty()
+
+        if (sId.isBlank() && sTitle.isBlank()) {
+            updateCustomLayout(false)
+            return
+        }
+
+        favoriteJob = serviceScope.launch {
+            try {
+                val dao = AppDatabase.getInstance(applicationContext).favoriteDao()
+                dao.isFavorite(sId, sTitle, sArtist)
+                    .flowOn(Dispatchers.IO)
+                    .collect { isFav ->
+                        updateCustomLayout(isFav)
+                    }
+            } catch (e: Exception) {
+                android.util.Log.w("MusicService", "Error observing favorite status: ${e.message}")
+            }
+        }
+    }
+
     override fun onDestroy() {
+        favoriteJob?.cancel()
+        favoriteJob = null
         serviceScope.cancel()
         try {
             if (wifiLock?.isHeld == true) {
