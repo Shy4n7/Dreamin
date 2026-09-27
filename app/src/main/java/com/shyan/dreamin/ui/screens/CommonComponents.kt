@@ -626,6 +626,10 @@ fun SectionTitle(title: String) {
     )
 }
 
+/**
+ * Renders an individual song item with album art, title, artist, playback indicator,
+ * queue action, and an overflow menu (Add to playlist, Add to queue, Go to album, Download).
+ */
 @Composable
 fun SongRow(
     song: Song,
@@ -634,7 +638,12 @@ fun SongRow(
     onAddToQueue: () -> Unit,
     onPlayNext: () -> Unit = {},
     rank: Int? = null,
-    onAddToPlaylist: (Long) -> Unit = {}
+    onAddToPlaylist: (Long) -> Unit = {},
+    onGoToAlbum: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    showMoreOptions: Boolean = true
 ) {
     val colors = LocalDreaminColors.current
     val playlists = LocalPlaylists.current
@@ -858,13 +867,153 @@ fun SongRow(
                 )
             }
 
-            IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.PlaylistAdd,
-                    contentDescription = "Add to queue",
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                IconButton(onClick = onAddToQueue, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.PlaylistAdd,
+                        contentDescription = "Add to queue",
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (showMoreOptions) {
+                    var showOverflowMenu by remember { mutableStateOf(false) }
+
+                    Box {
+                        IconButton(
+                            onClick = { showOverflowMenu = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More options",
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false },
+                            modifier = Modifier
+                                .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
+                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                .width(210.dp)
+                        ) {
+                            // 1. Add to playlist
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Add to playlist",
+                                        color = colors.onSurface,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                                        contentDescription = null,
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showPlaylistPicker = true
+                                }
+                            )
+
+                            // 2. Add to queue
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Add to queue",
+                                        color = colors.onSurface,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.QueueMusic,
+                                        contentDescription = null,
+                                        tint = colors.onSurface,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    onAddToQueue()
+                                }
+                            )
+
+                            // 3. Go to album
+                            if (onGoToAlbum != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Go to album",
+                                            color = colors.onSurface,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Album,
+                                            contentDescription = null,
+                                            tint = colors.onSurface,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        onGoToAlbum()
+                                    }
+                                )
+                            }
+
+                            // 4. Download song
+                            if (onDownload != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (isDownloaded) "Delete download" else if (isDownloading) "Downloading..." else "Download",
+                                            color = if (isDownloaded) colors.error else colors.onSurface,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        if (isDownloading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = colors.secondary,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download,
+                                                contentDescription = null,
+                                                tint = if (isDownloaded) colors.error else colors.onSurface,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        onDownload()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -2271,6 +2271,44 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(selectedAlbum = null) }
     }
 
+    /**
+     * Resolves the album for a given song and loads the AlbumDetailScreen.
+     * Checks in-memory searchAlbumResults first; falls back to querying JioSaavn.
+     */
+    fun openAlbumForSong(song: Song) {
+        val movieFromTitle = song.title.substringAfter("(From \"", "").substringBefore("\")").trim()
+        val targetName = when {
+            song.album.isNotBlank() -> song.album.trim()
+            movieFromTitle.isNotBlank() -> movieFromTitle
+            else -> song.title.trim()
+        }
+
+        val inMemory = _uiState.value.searchAlbumResults.firstOrNull {
+            it.title.equals(targetName, ignoreCase = true) ||
+            it.title.contains(targetName, ignoreCase = true) ||
+            targetName.contains(it.title, ignoreCase = true)
+        }
+
+        if (inMemory != null) {
+            openAlbum(inMemory)
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val searchResults = searchAlbumsOnDevice(targetName, limit = 4)
+            val bestMatch = searchResults.firstOrNull {
+                it.title.contains(targetName, ignoreCase = true) ||
+                targetName.contains(it.title, ignoreCase = true)
+            } ?: searchResults.firstOrNull()
+
+            if (bestMatch != null) {
+                withContext(Dispatchers.Main) {
+                    openAlbum(bestMatch)
+                }
+            }
+        }
+    }
+
     fun playAlbum(album: AlbumDetail, startSong: Song? = null) {
         if (album.songs.isNotEmpty()) {
             val songToPlay = startSong ?: album.songs.first()

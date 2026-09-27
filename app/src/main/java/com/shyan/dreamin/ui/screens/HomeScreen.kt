@@ -160,7 +160,11 @@ fun HomeScreen(
     onPlayDetectedYouTubeTrack: () -> Unit = {},
     onDismissDetectedYouTubeLink: () -> Unit = {},
     onCheckClipboard: () -> Unit = {},
-    onOpenRecognizeMusic: () -> Unit = {}
+    onOpenRecognizeMusic: () -> Unit = {},
+    onGoToAlbum: (Song) -> Unit = {},
+    onDownloadSong: (Song) -> Unit = {},
+    downloadedSongIds: Set<String> = emptySet(),
+    downloadingSongIds: Set<String> = emptySet()
 ) {
     val colors = LocalDreaminColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -440,6 +444,10 @@ fun HomeScreen(
                             isLoadingMore = isLoadingMoreSearch,
                             onLoadMore = onLoadMoreSearch,
                             onAddToPlaylist = onAddToPlaylist,
+                            onGoToAlbum = onGoToAlbum,
+                            onDownloadSong = onDownloadSong,
+                            downloadedSongIds = downloadedSongIds,
+                            downloadingSongIds = downloadingSongIds,
                             errorMessage = searchError,
                             onRetry = onRetrySearch,
                             didYouMeanQuery = didYouMeanQuery,
@@ -778,6 +786,10 @@ fun SearchResults(
     isLoadingMore: Boolean = false,
     onLoadMore: () -> Unit = {},
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
+    onGoToAlbum: (Song) -> Unit = {},
+    onDownloadSong: (Song) -> Unit = {},
+    downloadedSongIds: Set<String> = emptySet(),
+    downloadingSongIds: Set<String> = emptySet(),
     errorMessage: String? = null,
     onRetry: () -> Unit = {},
     didYouMeanQuery: String? = null,
@@ -991,7 +1003,11 @@ fun SearchResults(
                     isPlaying = currentSong?.id == song.id,
                     onClick = { onSongClick(song) },
                     onAddToQueue = { onAddToQueue(song) },
-                    onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
+                    onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) },
+                    onGoToAlbum = { onGoToAlbum(song) },
+                    onDownload = { onDownloadSong(song) },
+                    isDownloaded = downloadedSongIds.contains(song.id),
+                    isDownloading = downloadingSongIds.contains(song.id)
                 )
             }
         }
