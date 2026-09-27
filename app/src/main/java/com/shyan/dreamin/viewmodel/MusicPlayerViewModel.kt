@@ -2276,10 +2276,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
      * Checks in-memory searchAlbumResults first; falls back to querying JioSaavn.
      */
     fun openAlbumForSong(song: Song) {
+        // Extract movie name from "(From "MovieName")" in either the album field or title.
+        // song.album on JioSaavn singles is often "SongName (From "Movie")" — we want "Movie".
+        val movieFromAlbum = song.album.substringAfter("(From \"", "").substringBefore("\")").trim()
         val movieFromTitle = song.title.substringAfter("(From \"", "").substringBefore("\")").trim()
         val targetName = when {
-            song.album.isNotBlank() -> song.album.trim()
-            movieFromTitle.isNotBlank() -> movieFromTitle
+            movieFromAlbum.isNotBlank() -> movieFromAlbum             // "Magale (From "Baththa")" → "Baththa"
+            song.album.isNotBlank() -> song.album.trim()              // plain album field
+            movieFromTitle.isNotBlank() -> movieFromTitle             // title has "(From "X")"
             else -> song.title.trim()
         }
 

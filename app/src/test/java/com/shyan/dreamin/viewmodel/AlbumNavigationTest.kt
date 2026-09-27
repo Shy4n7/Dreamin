@@ -7,9 +7,14 @@ import org.junit.Test
 
 class AlbumNavigationTest {
 
+    /**
+     * Mirrors the resolution logic in [MusicPlayerViewModel.openAlbumForSong].
+     */
     private fun resolveTargetAlbumName(song: Song): String {
+        val movieFromAlbum = song.album.substringAfter("(From \"", "").substringBefore("\")").trim()
         val movieFromTitle = song.title.substringAfter("(From \"", "").substringBefore("\")").trim()
         return when {
+            movieFromAlbum.isNotBlank() -> movieFromAlbum
             song.album.isNotBlank() -> song.album.trim()
             movieFromTitle.isNotBlank() -> movieFromTitle
             else -> song.title.trim()
@@ -22,6 +27,22 @@ class AlbumNavigationTest {
             it.title.contains(targetName, ignoreCase = true) ||
             targetName.contains(it.title, ignoreCase = true)
         }
+    }
+
+    /** song.album = "Magale (From "Baththa")" should resolve to "Baththa", not the raw album string. */
+    @Test
+    fun testAlbumFieldWithFromPatternExtractsMovieName() {
+        val song = Song(id = "s0", title = "Magale", artist = "Sai Abhyankkar", album = "Magale (From \"Baththa\")")
+        val albums = listOf(
+            AlbumItem(id = "a0", title = "Baththa"),
+            AlbumItem(id = "a1", title = "Magale (From \"Baththa\")")
+        )
+
+        val target = resolveTargetAlbumName(song)
+        val matched = findMatchingAlbum(target, albums)
+
+        assertEquals("Baththa", target)
+        assertEquals("a0", matched?.id)
     }
 
     @Test
