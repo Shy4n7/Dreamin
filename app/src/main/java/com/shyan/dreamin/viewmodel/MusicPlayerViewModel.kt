@@ -82,6 +82,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var albumJob: Job? = null
     private val dismissedSyncAlertPlaylists = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val unmatchableTrackSignatures = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    data class SearchCacheEntry(
+        val songs: List<Song>,
+        val albums: List<AlbumItem>,
+        val hasMore: Boolean
+    )
+    private val searchCache = android.util.LruCache<String, SearchCacheEntry>(30)
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -2594,6 +2600,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         searchJob?.cancel()
         if (trimmed.isNotEmpty()) {
+            val cacheKey = trimmed.lowercase()
+            val cached = searchCache.get(cacheKey)
+            if (cached != null) {
+                _uiState.update {
+                    it.copy(
+                        searchResults = cached.songs,
+                        searchAlbumResults = cached.albums,
+                        hasMoreSearchResults = cached.hasMore,
+                        isSearching = false
+                    )
+                }
+                return
+            }
+
             // Direct YouTube Link or Video ID instant resolution
             if (com.shyan.dreamin.data.service.YouTubeTrackResolver.isYouTubeQuery(trimmed)) {
                 val videoId = com.shyan.dreamin.data.service.YouTubeTrackResolver.extractVideoId(trimmed)
@@ -2671,11 +2691,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(trimmed, rawSongs)
                     }
                     if (trimmed.length >= 2) userPrefs.addRecentSearch(trimmed)
+                    val hasMore = rankedSongs.size >= 15
+                    if (rankedSongs.isNotEmpty() || albums.isNotEmpty()) {
+                        searchCache.put(trimmed.lowercase(), SearchCacheEntry(rankedSongs, albums, hasMore))
+                    }
                     _uiState.update {
                         it.copy(
                             searchResults = rankedSongs,
                             searchAlbumResults = albums,
-                            hasMoreSearchResults = rankedSongs.size >= 15,
+                            hasMoreSearchResults = hasMore,
                             isSearching = false
                         )
                     }
@@ -2702,6 +2726,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     didYouMeanQuery = null
                 )
             }
+        }
+    }
+
+    fun retrySearch() {
+        val q = _uiState.value.searchQuery
+        if (q.isNotBlank()) {
+            searchCache.remove(q.trim().lowercase())
+            setSearchQuery(q)
         }
     }
 

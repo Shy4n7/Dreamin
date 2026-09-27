@@ -152,6 +152,7 @@ fun HomeScreen(
     onClearRecentSearches: () -> Unit = {},
     onResumeLastSession: () -> Unit = {},
     searchError: String? = null,
+    onRetrySearch: () -> Unit = {},
     didYouMeanQuery: String? = null,
     onApplyDidYouMean: (String) -> Unit = onSearchChange,
     detectedYouTubeTrack: Song? = null,
@@ -440,6 +441,7 @@ fun HomeScreen(
                             onLoadMore = onLoadMoreSearch,
                             onAddToPlaylist = onAddToPlaylist,
                             errorMessage = searchError,
+                            onRetry = onRetrySearch,
                             didYouMeanQuery = didYouMeanQuery,
                             onApplyDidYouMean = onApplyDidYouMean
                         )
@@ -777,6 +779,7 @@ fun SearchResults(
     onLoadMore: () -> Unit = {},
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
     errorMessage: String? = null,
+    onRetry: () -> Unit = {},
     didYouMeanQuery: String? = null,
     onApplyDidYouMean: (String) -> Unit = {}
 ) {
@@ -792,6 +795,36 @@ fun SearchResults(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(errorMessage ?: "No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = colors.primary.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                            .clickable { onRetry() }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Retry search",
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Retry",
+                                color = colors.primary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
                 if (!didYouMeanQuery.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(

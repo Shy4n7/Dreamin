@@ -311,6 +311,7 @@ private fun MainAppScaffold(
                             onClearRecentSearches    = vm::clearRecentSearches,
                             onResumeLastSession      = onResumeSession,
                             searchError              = state.searchError,
+                            onRetrySearch            = vm::retrySearch,
                             didYouMeanQuery          = state.didYouMeanQuery,
                             onApplyDidYouMean        = vm::setSearchQuery,
                             detectedYouTubeTrack     = state.detectedYouTubeTrack,
