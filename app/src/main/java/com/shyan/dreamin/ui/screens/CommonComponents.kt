@@ -557,7 +557,6 @@ fun MiniPlayer(
                         Text(
                             when {
                                 playbackState is PlaybackState.Error -> "Network error • Tap to retry"
-                                playbackState == PlaybackState.Loading -> "Buffering stream..."
                                 else -> s.artist
                             },
                             color = if (playbackState is PlaybackState.Error) colors.error else colors.onSurfaceVariant,

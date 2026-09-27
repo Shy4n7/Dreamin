@@ -1071,52 +1071,6 @@ fun NowPlayingScreen(
                     val isPlaying = state.playbackState is PlaybackState.Playing
                     val isError = state.playbackState is PlaybackState.Error
 
-                    AnimatedVisibility(
-                        visible = isLoading || isError,
-                        enter = fadeIn(tween(160)) + expandVertically(tween(160)),
-                        exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
-                    ) {
-                        val pillBgColor: Color = if (isError) colors.error.copy(alpha = 0.2f) else colors.surfaceContainer.copy(alpha = 0.5f)
-                        val pillBorderColor: Color = if (isError) colors.error.copy(alpha = 0.5f) else colors.outlineVariant
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = pillBgColor,
-                            border = BorderStroke(1.dp, pillBorderColor),
-                            modifier = Modifier
-                                .padding(vertical = 4.dp)
-                                .clickable(enabled = isError, onClick = onPlayPause)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                if (isError) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Refresh,
-                                        contentDescription = "Retry",
-                                        tint = colors.error,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = (state.playbackState as? PlaybackState.Error)?.message ?: "Network error • Tap to retry",
-                                        color = colors.onSurface,
-                                        fontSize = 12.sp,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                                    )
-                                } else {
-                                    Text(
-                                        text = "Buffering stream...",
-                                        color = colors.onSurfaceVariant,
-                                        fontSize = 12.sp,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     // 6. Playback Controls Row (Skip Previous, Dynamic Play/Pause, Skip Next)
                     Row(
                         modifier = Modifier
