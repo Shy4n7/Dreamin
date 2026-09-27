@@ -17,6 +17,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -571,7 +572,7 @@ private fun MainAppScaffold(
         AnimatedVisibility(
             visible  = isNowPlayingOpen,
             enter    = slideInVertically(DreaminMotion.FluidSlide) { it },
-            exit     = slideOutVertically(DreaminMotion.FluidSlide) { it },
+            exit     = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(180, easing = FastOutLinearInEasing)),
             modifier = Modifier.fillMaxSize().zIndex(4f)
         ) {
             NowPlayingScreen(
