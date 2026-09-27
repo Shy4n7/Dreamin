@@ -103,6 +103,13 @@ object NetworkService {
 
     private val networkScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
+    fun evictStaleConnections() {
+        try {
+            httpClient.connectionPool.evictAll()
+            mediaHttpClient.connectionPool.evictAll()
+        } catch (_: Exception) {}
+    }
+
     fun prewarmSockets() {
         networkScope.launch {
             val prewarmHosts = listOf(

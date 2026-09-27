@@ -1027,13 +1027,28 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    private val controllerListener = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            android.util.Log.w("MusicVM", "MediaController disconnected from MusicService")
+            this@MusicPlayerViewModel.controller = null
+            isListenerAttached = false
+        }
+    }
+
     private fun connectToService() {
+        if (controller?.isConnected == true) return
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controllerFuture = null
+
         val context = getApplication<Application>()
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
-        controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        val future = MediaController.Builder(context, sessionToken)
+            .setListener(controllerListener)
+            .buildAsync()
+        controllerFuture = future
         // Use main-thread executor so listener body safely touches UI state and starts coroutines
-        controllerFuture?.addListener({
-            val c = runCatching { controllerFuture?.get() }.getOrNull() ?: return@addListener
+        future.addListener({
+            val c = runCatching { future.get() }.getOrNull() ?: return@addListener
             controller = c
             if (!isListenerAttached) {
                 c.addListener(playerListener)
@@ -1042,6 +1057,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             syncStateFromController(c)
             startPositionPoller()
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    fun onAppForegrounded() {
+        if (controller == null || controller?.isConnected == false) {
+            connectToService()
+        } else {
+            controller?.let { syncStateFromController(it) }
+        }
+        NetworkService.evictStaleConnections()
+        if (_uiState.value.trendingCharts.isEmpty() && !_uiState.value.isLoadingChart) {
+            loadChart()
+        }
     }
 
     private fun syncStateFromController(c: MediaController) {
@@ -1939,11 +1966,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     .build()
 
                 var activeController = controller
-                if (activeController == null) {
+                if (activeController == null || !activeController.isConnected) {
+                    connectToService()
                     kotlinx.coroutines.withTimeoutOrNull(3000L) {
-                        while (isActive && controller == null) {
+                        while (isActive && (controller == null || controller?.isConnected == false)) {
                             val futureVal = runCatching { controllerFuture?.get() }.getOrNull()
-                            if (futureVal != null) {
+                            if (futureVal != null && futureVal.isConnected) {
                                 controller = futureVal
                                 if (!isListenerAttached) {
                                     futureVal.addListener(playerListener)

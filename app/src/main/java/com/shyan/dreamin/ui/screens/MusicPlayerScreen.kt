@@ -103,6 +103,10 @@ private fun MainAppScaffold(
     var isRecognizeMusicOpen by remember { mutableStateOf(false) }
     val colors = LocalDreaminColors.current
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) {
+        vm.onAppForegrounded()
+    }
     val keyboard = LocalSoftwareKeyboardController.current
     val hazeState = remember { HazeState() }
     val navScreens = Screen.entries
