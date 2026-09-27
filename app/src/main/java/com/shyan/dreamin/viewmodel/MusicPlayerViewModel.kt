@@ -71,6 +71,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val analyticsTracker = com.shyan.dreamin.data.local.PlaybackAnalyticsTracker(historyRepo, statsRepo)
 
     private var isListenerAttached = false
+    private var currentPlayJob: Job? = null
     private var searchJob: Job? = null
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
@@ -1858,6 +1859,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playSong(song: Song, fromPlaylist: Boolean = false, preserveQueue: Boolean = false) {
+        currentPlayJob?.cancel()
+        controller?.let { c ->
+            if (c.isPlaying || c.playWhenReady) {
+                c.playWhenReady = false
+                c.pause()
+            }
+        }
         val isPlaylistActive = fromPlaylist || (preserveQueue && _uiState.value.playlistQueueActive)
         val isAlreadyInQueue = _uiState.value.queue.any { it.id == song.id }
 
@@ -1908,7 +1916,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             } catch (_: Exception) {}
         }
 
-        viewModelScope.launch {
+        currentPlayJob = viewModelScope.launch {
             try {
                 val streamUrl = resolveStreamUrl(song)
 
@@ -3065,6 +3073,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         isListenerAttached = false
         openPlaylistJob?.cancel()
         colorExtractJob?.cancel()
+        currentPlayJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         runCatching {
             getApplication<Application>().unregisterReceiver(mediaActionReceiver)
