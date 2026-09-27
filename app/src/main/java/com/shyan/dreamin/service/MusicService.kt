@@ -229,7 +229,7 @@ class MusicService : MediaSessionService() {
 
         val customFavoriteButton = CommandButton.Builder()
             .setDisplayName("Favorite")
-            .setIconResId(android.R.drawable.star_on)
+            .setIconResId(com.shyan.dreamin.R.drawable.ic_heart)
             .setSessionCommand(SessionCommand(CUSTOM_COMMAND_FAVORITE, Bundle.EMPTY))
             .build()
 
