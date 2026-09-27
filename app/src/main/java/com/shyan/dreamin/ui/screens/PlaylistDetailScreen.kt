@@ -116,7 +116,10 @@ import androidx.compose.ui.graphics.toArgb
 
 
 private fun formatTotalPlaylistDuration(songs: List<Song>): String {
-    val totalSecs = songs.sumOf { it.duration.toLong() }
+    val totalSecs = songs.sumOf {
+        val d = it.duration.toLong()
+        if (d > 10_000L) d / 1000L else d
+    }
     if (totalSecs <= 0) return ""
     val hours = totalSecs / 3600
     val minutes = (totalSecs % 3600) / 60

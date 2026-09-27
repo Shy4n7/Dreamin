@@ -221,7 +221,9 @@ fun QueueScreen(
 
     // Calculate total formatted duration of upcoming tracks
     val totalDurationFormatted = remember(state.queue) {
-        val totalSecs = state.queue.sumOf { song: Song -> song.duration }
+        val totalSecs = state.queue.sumOf { song: Song ->
+            if (song.duration > 10_000L) song.duration / 1000L else song.duration
+        }
         val hours = totalSecs / 3600
         val minutes = (totalSecs % 3600) / 60
         val seconds = totalSecs % 60
@@ -673,9 +675,10 @@ private fun QueueSongItemRow(
     )
 
     val formattedDuration = remember(song.duration) {
-        if (song.duration > 0) {
-            val mins = song.duration / 60
-            val secs = song.duration % 60
+        val sec = if (song.duration > 10_000L) song.duration / 1000L else song.duration
+        if (sec > 0) {
+            val mins = sec / 60
+            val secs = sec % 60
             String.format("%d:%02d", mins, secs)
         } else ""
     }
