@@ -2284,10 +2284,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun togglePlayPause() {
+        val state = _uiState.value
+        if (state.playbackState is PlaybackState.Error) {
+            retryCurrentSong()
+            return
+        }
         controller?.let {
             if (it.isPlaying) it.pause()
             else it.play()
         }
+    }
+
+    fun retryCurrentSong() {
+        val song = _uiState.value.currentSong ?: return
+        playSong(song, preserveQueue = true)
     }
 
     fun seekTo(positionMs: Long) {

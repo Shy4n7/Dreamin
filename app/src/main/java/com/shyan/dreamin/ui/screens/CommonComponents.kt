@@ -555,8 +555,12 @@ fun MiniPlayer(
                             fontSize = 14.sp
                         )
                         Text(
-                            s.artist,
-                            color = colors.onSurfaceVariant,
+                            when {
+                                playbackState is PlaybackState.Error -> "Network error • Tap to retry"
+                                playbackState == PlaybackState.Loading -> "Buffering stream..."
+                                else -> s.artist
+                            },
+                            color = if (playbackState is PlaybackState.Error) colors.error else colors.onSurfaceVariant,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -579,6 +583,13 @@ fun MiniPlayer(
                             modifier = Modifier.size(22.dp),
                             color = colors.primary,
                             strokeWidth = 2.dp
+                        )
+                    } else if (playbackState is PlaybackState.Error) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Retry playback",
+                            tint = colors.error,
+                            modifier = Modifier.size(26.dp)
                         )
                     } else {
                         Icon(
