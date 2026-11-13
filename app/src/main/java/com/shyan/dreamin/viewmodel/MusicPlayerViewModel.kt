@@ -80,6 +80,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val statsRepo = StatsRepository(db.playHistoryDao())
     private val playlistRepo = com.shyan.dreamin.data.local.PlaylistRepository(db.playlistDao())
     val downloadRepo = DownloadRepository(getApplication(), db.downloadDao())
+    private val streamResolver = com.shyan.dreamin.service.StreamResolver(downloadRepo, api)
     private val importMatchDao = db.importMatchDao()
     private val analyticsTracker = com.shyan.dreamin.data.local.PlaybackAnalyticsTracker(historyRepo, statsRepo)
 
@@ -102,7 +103,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     )
     private val searchCache = android.util.LruCache<String, SearchCacheEntry>(30)
 
-    private val youtubeStreamSongIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var errorRetrySongId: String? = null
     private var listenSong: Song? = null
     private var listenedMs: Long = 0L
@@ -1416,7 +1416,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun publishStreamSource(songId: String) {
-        val isYt = songId.startsWith("yt_") || youtubeStreamSongIds.contains(songId)
+        val isYt = com.shyan.dreamin.service.StreamResolver.isYoutubeStream(songId)
         _uiState.update {
             if (it.currentSong?.id != songId) it
             else it.copy(
@@ -1694,26 +1694,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private suspend fun resolveStreamUrl(song: Song): String {
-        try {
-            val url = com.shyan.dreamin.data.service.AudioStreamResolver.resolveStreamUrl(
-                song = song,
-                downloadRepo = downloadRepo,
-                apiService = api
-            )
-            return url
-        } catch (e: IllegalStateException) {
-            android.util.Log.w("MusicVM", "JioSaavn stream unavailable for '${song.title}', trying YouTube fallback")
-        }
-
-        val ytUrl = com.shyan.dreamin.data.service.YtMusicFallbackResolver.resolveStreamUrl(song)
-        if (!ytUrl.isNullOrBlank()) {
-            com.shyan.dreamin.data.service.AudioStreamResolver.putCachedStreamUrl(song.id, ytUrl)
-            youtubeStreamSongIds.add(song.id)
-            android.util.Log.d("MusicVM", "YouTube fallback stream resolved for '${song.title}'")
-            return ytUrl
-        }
-
-        throw IllegalStateException("Track unavailable: '${song.title}' could not be streamed from JioSaavn or YouTube.")
+        return streamResolver.resolve(song)
     }
 
     private fun parseAudioUri(streamUrl: String): android.net.Uri {
