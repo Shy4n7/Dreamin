@@ -65,7 +65,7 @@ Extract queue math out of the 3,193-line ViewModel so every later fix is testabl
 
 Larger refactor; makes background playback independent of the Activity.
 
-> **Status / handoff (2026-11-14):** Phases 0-1 committed on branch `fix/playback-queue-phase-0-1` (`e1dcb98`); build + 128 unit tests green. Phase 2: 2a done. Resume with sub-step 2b below.
+> **Status / handoff (2026-11-14):** Phases 0-1 committed on branch `fix/playback-queue-phase-0-1` (`e1dcb98`); build + 128 unit tests green. Phase 2: 2a, 2b done. Resume with sub-step 2c below.
 >
 > **Where things live now (post Phase 1):**
 > - Pure queue math: `…/data/queue/QueueOps.kt` (`next`, `previous`, `upcomingIndex(…, isShuffle)`, `playNext`, `addToQueue`, `removeById`, `removeAt`, `move`, `positionForPlay`, `shuffleUpcoming`, `remainingDurationMs`).
@@ -78,7 +78,7 @@ Larger refactor; makes background playback independent of the Activity.
 >
 > **Sub-steps (each independently committable):**
 > - [x] **2a Shared queue store.** (done: ViewModel mirrors queue state into the store one-way; 2d flips ownership to the service) Create `…/data/queue/PlaybackQueueStore.kt`: process-wide `object` with `MutableStateFlow<QueueSnapshot(items, currentIndex, userQueuedIds, playlistActive, repeatMode, isShuffle)>`. ViewModel writes every queue mutation through it and derives `PlayerUiState.queue/currentQueueIndex` from it. No behavior change; add a unit test that mutations round-trip.
-> - [ ] **2b Extract search/radio repository.** Move `searchOnDevice`, `searchAlbumsOnDevice`, `fetchJioSaavnRelated`, `resolveRadioCandidates`, `cleanArtworkUrl`, `unescapeHtml` into `…/data/repository/CatalogRepository.kt` (constructor-injected `OkHttpClient`, `ApiService`). ViewModel delegates. Keep existing tests green.
+> - [x] **2b Extract search/radio repository.** (done: `CatalogRepository(api)` class, ViewModel uses `catalog.*`) Move `searchOnDevice`, `searchAlbumsOnDevice`, `fetchJioSaavnRelated`, `resolveRadioCandidates`, `cleanArtworkUrl`, `unescapeHtml` into `…/data/repository/CatalogRepository.kt` (constructor-injected `OkHttpClient`, `ApiService`). ViewModel delegates. Keep existing tests green.
 > - [ ] **2c Stream resolver service-side.** Move `resolveStreamUrl` + `youtubeStreamSongIds` into `…/service/StreamResolver.kt` usable from both service and ViewModel.
 > - [ ] **2d QueueController in service.** `…/service/QueueController.kt` owns: STATE_ENDED auto-advance, preload of next item, radio extension when ≤2 remain (via `CatalogRepository`), using `PlaybackQueueStore` + `QueueOps`. Register as a `Player.Listener` in `MusicService.onCreate`. Remove the ViewModel's STATE_ENDED handling and preload code.
 > - [ ] **2e Direct controls.** `ForwardingPlayer.seekToNext/Previous` call `QueueController` directly; delete `ACTION_PLAY_NEXT/PREVIOUS` broadcasts and the receiver branches.

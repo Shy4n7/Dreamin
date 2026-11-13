@@ -72,6 +72,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var controller: MediaController? = null
 
     private val api = NetworkService.api
+    private val catalog = com.shyan.dreamin.data.repository.CatalogRepository(api)
     private val userPrefs = com.shyan.dreamin.data.local.UserPreferencesDataStore(getApplication<Application>())
     private val db = AppDatabase.getInstance(getApplication<Application>())
     private val historyRepo = PlayHistoryRepository(db.playHistoryDao())
@@ -862,18 +863,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Pass 1: Direct Clean Base Title + Primary Artist (Most accurate for Spotify tracks)
         val q1 = if (primaryArtist.isNotBlank()) "$cleanBaseTitle $primaryArtist" else cleanBaseTitle
         val p1 = if (queryCache != null) {
-            queryCache.getOrPut(q1) { searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
+            queryCache.getOrPut(q1) { catalog.searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
         } else {
-            searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false)
+            catalog.searchOnDevice(q1, limit = 8, targetLanguage = targetLang, rejectHindi = false)
         }
         allCandidates.addAll(p1)
 
         // Pass 2: Base Title alone (if combined query had zero results)
         if (allCandidates.isEmpty() && primaryArtist.isNotBlank()) {
             val p2 = if (queryCache != null) {
-                queryCache.getOrPut(cleanBaseTitle) { searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
+                queryCache.getOrPut(cleanBaseTitle) { catalog.searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
             } else {
-                searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false)
+                catalog.searchOnDevice(cleanBaseTitle, limit = 8, targetLanguage = targetLang, rejectHindi = false)
             }
             allCandidates.addAll(p2)
         }
@@ -881,9 +882,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // Pass 3: Full Clean Title
         if (allCandidates.isEmpty() && fullClean.length > cleanBaseTitle.length) {
             val p3 = if (queryCache != null) {
-                queryCache.getOrPut(fullClean) { searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
+                queryCache.getOrPut(fullClean) { catalog.searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false) }
             } else {
-                searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false)
+                catalog.searchOnDevice(fullClean, limit = 8, targetLanguage = targetLang, rejectHindi = false)
             }
             allCandidates.addAll(p3)
         }
@@ -1528,257 +1529,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private val noiseRegex = Regex("(?i)\\b(remix|8d|8d audio|bass boosted|slowed|reverb|cover|lofi|status|dialogue|teaser|trailer|jukebox|mashup|bgm|ringtone|sped up)\\b")
-    private val compilationRegex = com.shyan.dreamin.data.service.OfficialArtworkService.COMPILATION_REGEX
-
-    private fun cleanArtworkUrl(url: String): String {
-        if (url.isBlank()) return ""
-        val highRes = url.replace(Regex("_\\d+x\\d+\\."), "_500x500.")
-            .replace("50x50", "500x500")
-            .replace("150x150", "500x500")
-        return if (highRes.startsWith("http://")) "https://" + highRes.substring(7) else highRes
-    }
-
-    private fun unescapeHtml(text: String): String {
-        return text.replace("&quot;", "\"")
-            .replace("&#039;", "'")
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&#39;", "'")
-    }
-
     suspend fun searchSongsDirect(query: String): List<Song> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         try {
-            searchOnDevice(query.trim(), limit = 20)
+            catalog.searchOnDevice(query.trim(), limit = 20)
         } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    private suspend fun searchOnDevice(
-        query: String, 
-        limit: Int = 15, 
-        page: Int = 1,
-        targetLanguage: String = "",
-        rejectHindi: Boolean = false
-    ): List<Song> = withContext(Dispatchers.IO) {
-        val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=$page"
-        
-        for (attempt in 0..1) {
-            try {
-                val req = okhttp3.Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .header("Accept", "application/json, text/plain, */*")
-                    .header("Origin", "https://www.jiosaavn.com")
-                    .header("Referer", "https://www.jiosaavn.com/")
-                    .build()
-                val resp = NetworkService.httpClient.newCall(req).execute()
-                val text = resp.body?.string().orEmpty().trim()
-                if (text.startsWith("<") || !text.startsWith("{")) {
-                    if (attempt == 0) kotlinx.coroutines.delay(200L)
-                    continue
-                }
-                val root = org.json.JSONObject(text)
-                val results = root.optJSONArray("results")
-                if (results != null && results.length() > 0) {
-                    val allItems = mutableListOf<org.json.JSONObject>()
-                    val langItems = mutableListOf<org.json.JSONObject>()
-                    for (i in 0 until results.length()) {
-                        val it = results.getJSONObject(i)
-                        allItems.add(it)
-                        val itemLang = it.optString("language").ifBlank { it.optJSONObject("more_info")?.optString("language") ?: "" }.lowercase().trim()
-                        if (targetLanguage.isBlank() || itemLang.isBlank() || itemLang.equals(targetLanguage, ignoreCase = true)) {
-                            langItems.add(it)
-                        }
-                    }
-                    val rawItems = if (langItems.isNotEmpty()) langItems else allItems
-
-                    val grouped = rawItems.groupBy {
-                        it.optString("title").replace(Regex("(?i)\\s*\\(?\\s*from\\s+[\"\'\u201c\u2018].*?[\"\'\u201d\u2019]?\\s*\\)?$"), "")
-                            .replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
-                    }
-                    val songs = mutableListOf<Song>()
-                    for ((_, items) in grouped) {
-                        // 1. Detect movie from title tags
-                        var movieDetected = ""
-                        for (it in items) {
-                            val m = Regex("(?i)\\(?\\s*(?:from|movie)\\s+[\"\'\u201c\u2018]?(.*?)[\"\'\u201d\u2019]?\\s*\\)?").find(it.optString("title"))
-                            if (m != null) {
-                                val cand = m.groupValues[1].replace(Regex("[\"\'\u201c\u2018\u201d\u2019]"), "").trim().lowercase()
-                                if (cand.isNotBlank() && cand.length >= 2) {
-                                    movieDetected = cand
-                                    break
-                                }
-                            }
-                        }
-
-                        // 2. Select best candidate release from the provider
-                        val bestItem = items.minByOrNull { item ->
-                            val alb = unescapeHtml(item.optJSONObject("more_info")?.optString("album", "")?.trim() ?: "").lowercase()
-                            val albType = item.optJSONObject("more_info")?.optString("album_type", "")?.lowercase() ?: ""
-                            val itemImage = item.optString("image", "").lowercase()
-                            val isEditorialOrPlaylist = itemImage.contains("/editorial/") || itemImage.contains("/playlist/") || itemImage.contains("/818/") || itemImage.contains("/888/") || itemImage.contains("compilation")
-
-                            var score = 1000
-                            val isComp = compilationRegex.containsMatchIn(alb)
-                            val isSingle = alb.contains("single") || albType == "single"
-                            if (isComp) {
-                                score += 8000
-                            } else if (isSingle) {
-                                score += 5000 // Penalize single release so full movie soundtrack album is prioritized
-                            } else {
-                                score -= 400
-                                if (alb.contains("soundtrack") || alb.contains("original motion picture")) {
-                                    score -= 800
-                                }
-                            }
-                            if (movieDetected.isNotBlank() && (alb == movieDetected || alb.contains(movieDetected) || movieDetected.contains(alb))) {
-                                score -= 1000
-                            }
-                            if (!isEditorialOrPlaylist) {
-                                score -= 200
-                            }
-                            score
-                        } ?: items.first()
-
-                        val rawTitle = unescapeHtml(bestItem.optString("title"))
-                        if (noiseRegex.containsMatchIn(rawTitle)) continue
-                        val more = bestItem.optJSONObject("more_info") ?: org.json.JSONObject()
-                        val durationSec = more.optString("duration").toLongOrNull() ?: 0L
-                        if (durationSec in 1..49 || durationSec > 600) continue
-
-                        val image = cleanArtworkUrl(bestItem.optString("image"))
-                        val playCount = bestItem.optString("play_count").toLongOrNull()
-                            ?: (more.optString("play_count").toLongOrNull() ?: 0L)
-
-                        val artistMap = more.optJSONObject("artistMap")
-                        val primaryArr = artistMap?.optJSONArray("primary_artists")
-                        var artist = if (primaryArr != null && primaryArr.length() > 0) {
-                            (0 until primaryArr.length()).joinToString(", ") { unescapeHtml(primaryArr.getJSONObject(it).optString("name")) }
-                        } else unescapeHtml(more.optString("singers").ifBlank { "" })
-
-                        if (artist.isBlank()) {
-                            val music = unescapeHtml(more.optString("music"))
-                            val subtitle = unescapeHtml(bestItem.optString("subtitle"))
-                            val album = unescapeHtml(more.optString("album"))
-                            artist = when {
-                                music.isNotBlank() -> music
-                                subtitle.isNotBlank() -> subtitle
-                                album.isNotBlank() -> album
-                                else -> "Original Soundtrack"
-                            }
-                        }
-
-                        val itemLanguage = bestItem.optString("language").ifBlank { more.optString("language") }.lowercase().trim()
-                        val itemAlbum = unescapeHtml(more.optString("album").ifBlank { bestItem.optString("album") })
-
-                        val songItem = Song(
-                            id = bestItem.optString("id"),
-                            title = rawTitle,
-                            artist = artist,
-                            artworkUrl = image,
-                            duration = durationSec * 1000L,
-                            playCount = playCount,
-                            language = itemLanguage,
-                            album = itemAlbum
-                        )
-                        if (OfficialSongFilter.isOfficial(songItem, rejectHindi = rejectHindi)) {
-                            songs.add(songItem)
-                        }
-                    }
-                    if (songs.isNotEmpty()) {
-                        val ranked = com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(query, songs)
-                        return@withContext ranked.take(limit)
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.w("MusicVM", "searchOnDevice attempt $attempt failed: ${e.message}")
-                if (attempt == 0) {
-                    kotlinx.coroutines.delay(200L)
-                }
-            }
-        }
-        // Seamless fallback to server search
-        try {
-            val serverResp = api.search(query, page = page, limit = limit)
-            com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(query, serverResp.results).take(limit)
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    suspend fun searchAlbumsOnDevice(query: String, limit: Int = 8): List<AlbumItem> = withContext(Dispatchers.IO) {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) return@withContext emptyList()
-        val encoded = URLEncoder.encode(trimmed, "UTF-8")
-        val url = "https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encoded&n=$limit&p=1"
-
-        try {
-            val req = okhttp3.Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Origin", "https://www.jiosaavn.com")
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val resp = NetworkService.httpClient.newCall(req).execute()
-            val text = resp.body?.string().orEmpty().trim()
-            if (!text.startsWith("{")) return@withContext emptyList()
-            val root = org.json.JSONObject(text)
-            val results = root.optJSONArray("results") ?: return@withContext emptyList()
-
-            val albums = mutableListOf<AlbumItem>()
-            val seenKeys = mutableSetOf<String>()
-
-            for (i in 0 until results.length()) {
-                val it = results.getJSONObject(i)
-                val id = it.optString("id")
-                val rawTitle = unescapeHtml(it.optString("title"))
-                if (rawTitle.isBlank()) continue
-
-                val more = it.optJSONObject("more_info") ?: org.json.JSONObject()
-                val year = it.optString("year").ifBlank { more.optString("year") }
-                val songCount = more.optString("song_count").toIntOrNull() ?: 0
-
-                val artistMap = more.optJSONObject("artistMap")
-                val primaryArr = artistMap?.optJSONArray("primary_artists")
-                var artist = if (primaryArr != null && primaryArr.length() > 0) {
-                    (0 until primaryArr.length()).joinToString(", ") { idx -> unescapeHtml(primaryArr.getJSONObject(idx).optString("name")) }
-                } else {
-                    unescapeHtml(more.optString("music").ifBlank { it.optString("subtitle") })
-                }
-                if (artist.isBlank()) {
-                    artist = "Original Soundtrack"
-                }
-
-                val language = it.optString("language").ifBlank { more.optString("language") }.lowercase().trim()
-                val rawImage = it.optString("image")
-                val cleanImage = cleanArtworkUrl(rawImage)
-
-                val dedupeKey = "${rawTitle.lowercase()}_$year"
-                if (seenKeys.add(dedupeKey)) {
-                    albums.add(
-                        AlbumItem(
-                            id = id,
-                            title = rawTitle,
-                            artworkUrl = cleanImage,
-                            year = year,
-                            songCount = songCount,
-                            artist = artist,
-                            language = language
-                        )
-                    )
-                }
-            }
-            albums
-        } catch (e: Exception) {
-            android.util.Log.w("MusicVM", "searchAlbumsOnDevice failed: ${e.message}")
             emptyList()
         }
     }
@@ -2214,7 +1969,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         artistJob?.cancel()
         artistJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val songs = searchOnDevice("$cleanArtist hits", limit = 20)
+                val songs = catalog.searchOnDevice("$cleanArtist hits", limit = 20)
                 val artwork = songs.firstOrNull()?.artworkUrl ?: ""
                 _uiState.update {
                     it.copy(
@@ -2275,29 +2030,29 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val root = org.json.JSONObject(text)
                 val songList = root.optJSONArray("list") ?: org.json.JSONArray()
                 val songs = mutableListOf<Song>()
-                val albumTitle = unescapeHtml(root.optString("title").ifBlank { album.title })
+                val albumTitle = catalog.unescapeHtml(root.optString("title").ifBlank { album.title })
                 val albumYear = root.optString("year").ifBlank { album.year }
-                val albumImage = cleanArtworkUrl(root.optString("image").ifBlank { album.artworkUrl })
+                val albumImage = catalog.cleanArtworkUrl(root.optString("image").ifBlank { album.artworkUrl })
 
                 for (i in 0 until songList.length()) {
                     val it = songList.getJSONObject(i)
-                    val rawTitle = unescapeHtml(it.optString("title"))
+                    val rawTitle = catalog.unescapeHtml(it.optString("title"))
                     if (rawTitle.isBlank()) continue
 
                     val more = it.optJSONObject("more_info") ?: org.json.JSONObject()
                     val durationSec = more.optString("duration").toLongOrNull() ?: 0L
-                    val image = cleanArtworkUrl(it.optString("image").ifBlank { albumImage })
+                    val image = catalog.cleanArtworkUrl(it.optString("image").ifBlank { albumImage })
                     val playCount = it.optString("play_count").toLongOrNull()
                         ?: (more.optString("play_count").toLongOrNull() ?: 0L)
 
                     val artistMap = more.optJSONObject("artistMap")
                     val primaryArr = artistMap?.optJSONArray("primary_artists")
                     var artist = if (primaryArr != null && primaryArr.length() > 0) {
-                        (0 until primaryArr.length()).joinToString(", ") { idx -> unescapeHtml(primaryArr.getJSONObject(idx).optString("name")) }
-                    } else unescapeHtml(more.optString("singers").ifBlank { it.optString("subtitle") })
+                        (0 until primaryArr.length()).joinToString(", ") { idx -> catalog.unescapeHtml(primaryArr.getJSONObject(idx).optString("name")) }
+                    } else catalog.unescapeHtml(more.optString("singers").ifBlank { it.optString("subtitle") })
 
                     if (artist.isBlank()) {
-                        val music = unescapeHtml(more.optString("music"))
+                        val music = catalog.unescapeHtml(more.optString("music"))
                         artist = if (music.isNotBlank()) music else album.artist.ifBlank { "Original Soundtrack" }
                     }
 
@@ -2368,7 +2123,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val searchResults = searchAlbumsOnDevice(targetName, limit = 4)
+            val searchResults = catalog.searchAlbumsOnDevice(targetName, limit = 4)
             val bestMatch = searchResults.firstOrNull {
                 it.title.contains(targetName, ignoreCase = true) ||
                 targetName.contains(it.title, ignoreCase = true)
@@ -2480,8 +2235,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     for (track in tracks.take(8)) {
                         val cleanT = track.title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
                         val firstArtist = track.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
-                            ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
+                        val cand = catalog.searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
+                            ?: catalog.searchOnDevice(cleanT, limit = 1).firstOrNull()
                         if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
                             val finalCand = if (track.artworkUrl.isNotBlank() && (cand.artworkUrl.isBlank() || cand.artworkUrl.contains("150x150") || cand.artworkUrl.contains("50x50") || cand.artworkUrl.contains("default"))) {
                                 cand.copy(artworkUrl = track.artworkUrl, album = track.album.ifBlank { cand.album })
@@ -2496,7 +2251,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     // Fallback to related / artist hits if YouTube Radio hits were exhausted
                     val primaryArtist = current.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
                     if (primaryArtist.isNotBlank()) {
-                        val artistHits = searchOnDevice("$primaryArtist hits", limit = 6).filter { it.id != current.id }
+                        val artistHits = catalog.searchOnDevice("$primaryArtist hits", limit = 6).filter { it.id != current.id }
                         if (artistHits.isNotEmpty()) {
                             withContext(Dispatchers.Main) {
                                 playSong(artistHits.first(), fromPlaylist = false, preserveQueue = true)
@@ -2729,9 +2484,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 delay(220)
                 try {
                     val songsDeferred = async(Dispatchers.IO) {
-                        var songs = searchOnDevice(trimmed, page = 1)
+                        var songs = catalog.searchOnDevice(trimmed, page = 1)
                         if (songs.isEmpty() && didYouMean != null) {
-                            val altSongs = searchOnDevice(didYouMean, page = 1)
+                            val altSongs = catalog.searchOnDevice(didYouMean, page = 1)
                             if (altSongs.isNotEmpty()) {
                                 songs = altSongs
                             }
@@ -2750,7 +2505,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         songs
                     }
                     val albumsDeferred = async(Dispatchers.IO) {
-                        searchAlbumsOnDevice(trimmed, limit = 8)
+                        catalog.searchAlbumsOnDevice(trimmed, limit = 8)
                     }
 
                     val rawSongs = songsDeferred.await()
@@ -2814,7 +2569,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(isLoadingMoreSearch = true) }
         viewModelScope.launch {
             try {
-                val songs = searchOnDevice(state.searchQuery, page = nextPage)
+                val songs = catalog.searchOnDevice(state.searchQuery, page = nextPage)
                 val combined = state.searchResults + songs
                 val rankedCombined = withContext(Dispatchers.Default) {
                     com.shyan.dreamin.data.recommendation.IntelliMatchEngine.fuzzyRankSearchResults(state.searchQuery, combined)
@@ -2883,7 +2638,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val deferredResults = trendingQueries.map { q ->
             async {
-                searchOnDevice(q, limit = 3, targetLanguage = "tamil")
+                catalog.searchOnDevice(q, limit = 3, targetLanguage = "tamil")
             }
         }
 
@@ -2922,7 +2677,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         chartSemaphore.withPermit {
                             val cleanT = t.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
                             val firstArtist = a.split(",").firstOrNull()?.split("&")?.firstOrNull()?.trim() ?: ""
-                            searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil")
+                            catalog.searchOnDevice("$cleanT $firstArtist", limit = 1, targetLanguage = "tamil")
                         }
                     }
                 }
@@ -2967,79 +2722,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private suspend fun fetchJioSaavnRelated(songId: String): List<Song> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<Song>()
-        try {
-            val url = "https://www.jiosaavn.com/api.php?__call=reco.getreco&api_version=4&_format=json&_marker=0&ctx=web6dot0&pid=$songId"
-            val req = okhttp3.Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .header("Referer", "https://www.jiosaavn.com/")
-                .build()
-            val text = NetworkService.httpClient.newCall(req).execute().use { it.body?.string().orEmpty() }
-            val array = org.json.JSONArray(text)
-            for (i in 0 until array.length()) {
-                val it = array.getJSONObject(i)
-                val id = it.optString("id", "")
-                val title = unescapeHtml(it.optString("title", it.optString("song", "")))
-                val artist = unescapeHtml(it.optString("primary_artists", it.optString("singers", it.optString("artist", ""))))
-                val image = cleanArtworkUrl(it.optString("image", ""))
-                val more = it.optJSONObject("more_info")
-                val durSec = more?.optLong("duration", 0L) ?: 0L
-                val album = unescapeHtml(more?.optString("album", "") ?: "")
-                if (id.isNotBlank() && title.isNotBlank()) {
-                    results.add(
-                        Song(
-                            id = id,
-                            title = title,
-                            artist = artist,
-                            artworkUrl = image,
-                            duration = durSec * 1000L
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {}
-        results
-    }
-
     fun clearAllCaches() {
         com.shyan.dreamin.data.service.YouTubeRadioService.clearCache()
         com.shyan.dreamin.data.service.AudioStreamResolver.clearCache()
         com.shyan.dreamin.data.service.OfficialArtworkService.clearCache()
         com.shyan.dreamin.data.service.PaletteMemoryCache.clearCache()
-    }
-
-    private suspend fun resolveRadioCandidates(currentSong: Song, limit: Int): List<Song> = withContext(Dispatchers.IO) {
-        val ytSongs = mutableListOf<Song>()
-        try {
-            val tracks = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(currentSong)
-            if (tracks.isNotEmpty()) {
-                val deferredSearches = tracks.take(limit).map { track ->
-                    async {
-                        val cleanT = track.title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                        val firstArtist = track.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                        val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
-                            ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
-                        if (cand != null && cand.id != currentSong.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
-                            val finalCand = if (track.artworkUrl.isNotBlank() && (cand.artworkUrl.isBlank() || cand.artworkUrl.contains("150x150") || cand.artworkUrl.contains("50x50") || cand.artworkUrl.contains("default"))) {
-                                cand.copy(artworkUrl = track.artworkUrl, album = track.album.ifBlank { cand.album })
-                            } else cand
-                            finalCand
-                        } else null
-                    }
-                }
-                deferredSearches.forEach { def ->
-                    val res = def.await()
-                    if (res != null) {
-                        ytSongs.add(res)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("MusicVM", "Radio candidate error: ${e.message}")
-        }
-        ytSongs
     }
 
     private fun fetchUpNext(songId: String) {
@@ -3048,7 +2735,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { it.copy(isFetchingUpNext = true) }
             try {
                 val currentSong = _uiState.value.currentSong ?: return@launch
-                val ytSongs = resolveRadioCandidates(currentSong, limit = 16)
+                val ytSongs = catalog.resolveRadioCandidates(currentSong, limit = 16)
 
                 val finalQueueTracks = if (ytSongs.isNotEmpty()) {
                     SmartQueueEngine.buildQueue(
@@ -3060,8 +2747,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                 } else {
                     val primaryArtist = currentSong.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                    val related = fetchJioSaavnRelated(songId)
-                    val artistHits = if (primaryArtist.isNotBlank()) searchOnDevice("$primaryArtist hits", limit = 10) else emptyList()
+                    val related = catalog.fetchJioSaavnRelated(songId)
+                    val artistHits = if (primaryArtist.isNotBlank()) catalog.searchOnDevice("$primaryArtist hits", limit = 10) else emptyList()
                     SmartQueueEngine.buildQueue(
                         ytRadioHits = emptyList(),
                         fallbackHits = related + artistHits,
@@ -3122,13 +2809,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val currentSong = _uiState.value.currentSong ?: return@launch
                 val primaryArtist = currentSong.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                val ytRecSongs = resolveRadioCandidates(currentSong, limit = 12)
+                val ytRecSongs = catalog.resolveRadioCandidates(currentSong, limit = 12)
 
                 val finalRecs = if (ytRecSongs.isNotEmpty()) {
                     OfficialSongFilter.cleanOfficialList(ytRecSongs, rejectHindi = true)
                         .filter { it.id != songId }
                 } else {
-                val fallback = searchOnDevice("$primaryArtist hits", limit = 10, targetLanguage = currentSong.language.ifBlank { "" })
+                val fallback = catalog.searchOnDevice("$primaryArtist hits", limit = 10, targetLanguage = currentSong.language.ifBlank { "" })
                     OfficialSongFilter.cleanOfficialList(fallback, rejectHindi = true)
                         .filter { it.id != songId }
                 }
