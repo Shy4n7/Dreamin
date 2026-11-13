@@ -27,6 +27,8 @@ import com.shyan.dreamin.data.queue.QueuePosition
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
 import com.shyan.dreamin.data.queue.toQueueSnapshot
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.debounce
 import com.shyan.dreamin.service.MusicService
 import androidx.media3.common.C
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +59,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val MAX_LISTEN_TICK_MS = 3_000L
+        const val QUEUE_SAVE_DEBOUNCE_MS = 2_000L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
         val JIOSAAVN_FORMAT = AudioFormatInfo(codec = "AAC", bitrateKbps = 320, sampleRateHz = 44100, isLossless = false, source = "JioSaavn (320k AAC)")
     }
@@ -152,6 +155,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 .distinctUntilChanged()
                 .collect { PlaybackQueueStore.publish(it) }
         }
+        startQueuePersistence()
 
         connectToService()
         loadChart()
@@ -2380,7 +2384,44 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
         pendingResumePositionMs = session.positionMs
-        playSong(session.song)
+        viewModelScope.launch {
+            val saved = userPrefs.loadSavedQueue()
+            val idx = saved?.resumeIndexFor(session.song.id) ?: -1
+            if (saved != null && idx >= 0) {
+                _uiState.update {
+                    it.copy(
+                        queue = saved.items,
+                        currentQueueIndex = idx,
+                        playlistQueueActive = saved.playlistActive,
+                        userQueuedSongIds = saved.userQueuedIds
+                    )
+                }
+                playSong(saved.items[idx], fromPlaylist = saved.playlistActive, preserveQueue = true, queueIndex = idx)
+            } else {
+                playSong(session.song)
+            }
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private fun startQueuePersistence() {
+        viewModelScope.launch(Dispatchers.IO) {
+            PlaybackQueueStore.state
+                .drop(1)
+                .debounce(QUEUE_SAVE_DEBOUNCE_MS)
+                .collect { snap ->
+                    if (snap.items.isNotEmpty() && snap.currentIndex >= 0) {
+                        userPrefs.saveQueue(
+                            com.shyan.dreamin.data.local.UserPreferencesDataStore.SavedQueue(
+                                items = snap.items,
+                                currentIndex = snap.currentIndex,
+                                playlistActive = snap.playlistActive,
+                                userQueuedIds = snap.userQueuedIds
+                            )
+                        )
+                    }
+                }
+        }
     }
 
     fun activateSearch() {

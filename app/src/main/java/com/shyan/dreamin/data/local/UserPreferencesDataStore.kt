@@ -11,6 +11,7 @@ import com.google.gson.reflect.TypeToken
 import com.shyan.dreamin.data.model.Song
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_prefs")
@@ -18,6 +19,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class UserPreferencesDataStore(private val context: Context) {
 
     companion object {
+        private val SAVED_QUEUE_KEY = stringPreferencesKey("saved_queue")
         private val USER_NAME_KEY = stringPreferencesKey("user_name")
         private val RECENT_SEARCHES_KEY = stringPreferencesKey("recent_searches")
         private const val MAX_RECENT_SEARCHES = 8
@@ -94,5 +96,27 @@ class UserPreferencesDataStore(private val context: Context) {
             prefs[LAST_SONG_ARTWORK_KEY] = song.artworkUrl
             prefs[LAST_POSITION_KEY] = positionMs
         }
+    }
+
+    data class SavedQueue(
+        val items: List<Song>,
+        val currentIndex: Int,
+        val playlistActive: Boolean,
+        val userQueuedIds: List<String>
+    ) {
+        fun resumeIndexFor(songId: String): Int =
+            if (items.getOrNull(currentIndex)?.id == songId) currentIndex
+            else items.indexOfFirst { it.id == songId }
+    }
+
+    suspend fun saveQueue(queue: SavedQueue) {
+        context.dataStore.edit { prefs -> prefs[SAVED_QUEUE_KEY] = gson.toJson(queue) }
+    }
+
+    suspend fun loadSavedQueue(): SavedQueue? {
+        val json = context.dataStore.data.first()[SAVED_QUEUE_KEY] ?: return null
+        return runCatching {
+            gson.fromJson(json, SavedQueue::class.java).also { check(it.items.isNotEmpty()) }
+        }.getOrNull()
     }
 }
