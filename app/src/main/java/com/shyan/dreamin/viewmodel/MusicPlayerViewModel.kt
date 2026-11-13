@@ -24,6 +24,9 @@ import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.data.queue.QueueAdvance
 import com.shyan.dreamin.data.queue.QueueOps
 import com.shyan.dreamin.data.queue.QueuePosition
+import com.shyan.dreamin.data.queue.PlaybackQueueStore
+import com.shyan.dreamin.data.queue.toQueueSnapshot
+import kotlinx.coroutines.flow.map
 import com.shyan.dreamin.service.MusicService
 import androidx.media3.common.C
 import kotlinx.coroutines.Dispatchers
@@ -141,6 +144,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             launch { userPrefs.userName.distinctUntilChanged().collect { n -> _uiState.update { it.copy(userName = n) } } }
             launch { userPrefs.lastSession.distinctUntilChanged().collect { s -> if (_uiState.value.currentSong == null) _uiState.update { it.copy(lastSession = s) } } }
             launch { userPrefs.recentSearches.distinctUntilChanged().collect { r -> _uiState.update { it.copy(recentSearches = r) } } }
+        }
+
+        viewModelScope.launch {
+            _uiState.map { it.toQueueSnapshot() }
+                .distinctUntilChanged()
+                .collect { PlaybackQueueStore.publish(it) }
         }
 
         connectToService()

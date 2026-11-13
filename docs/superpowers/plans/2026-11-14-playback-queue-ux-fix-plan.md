@@ -65,6 +65,27 @@ Extract queue math out of the 3,193-line ViewModel so every later fix is testabl
 
 Larger refactor; makes background playback independent of the Activity.
 
+> **Status / handoff (2026-11-14):** Phases 0-1 committed on branch `fix/playback-queue-phase-0-1` (`e1dcb98`); build + 128 unit tests green. Phase 2: 2a done. Resume with sub-step 2b below.
+>
+> **Where things live now (post Phase 1):**
+> - Pure queue math: `…/data/queue/QueueOps.kt` (`next`, `previous`, `upcomingIndex(…, isShuffle)`, `playNext`, `addToQueue`, `removeById`, `removeAt`, `move`, `positionForPlay`, `shuffleUpcoming`, `remainingDurationMs`).
+> - Queue state: `PlayerUiState.queue` + `currentQueueIndex` (resolved via `resolvedCurrentIndex()` extension inside the ViewModel).
+> - Auto-advance: `playerListener.onPlaybackStateChanged(STATE_ENDED)` → `playNext(isAutoEnd = true)`; gapless preload: `preloadNextMediaItemInQueue` / `syncPreloadedMediaItem` / `preloadedIdAfterCurrent` / `clearItemsAfterCurrent`.
+> - Stream resolution: `resolveStreamUrl` (JioSaavn via `AudioStreamResolver`, YouTube fallback via `YtMusicFallbackResolver`, YT ids in `youtubeStreamSongIds`).
+> - Radio: `fetchUpNext`, `continueWithRadio`, `resolveRadioCandidates`, `fetchJioSaavnRelated` — all depend on the ViewModel's private `searchOnDevice` (~150 lines of JioSaavn JSON parsing).
+> - Service → app: `MusicService` `ForwardingPlayer` broadcasts `ACTION_PLAY_NEXT/PREVIOUS` when ExoPlayer has no neighbour item; ViewModel `mediaActionReceiver` handles them.
+> - Session persistence: `UserPreferencesDataStore.saveLastSession(song, positionMs)` (single song only).
+>
+> **Sub-steps (each independently committable):**
+> - [x] **2a Shared queue store.** (done: ViewModel mirrors queue state into the store one-way; 2d flips ownership to the service) Create `…/data/queue/PlaybackQueueStore.kt`: process-wide `object` with `MutableStateFlow<QueueSnapshot(items, currentIndex, userQueuedIds, playlistActive, repeatMode, isShuffle)>`. ViewModel writes every queue mutation through it and derives `PlayerUiState.queue/currentQueueIndex` from it. No behavior change; add a unit test that mutations round-trip.
+> - [ ] **2b Extract search/radio repository.** Move `searchOnDevice`, `searchAlbumsOnDevice`, `fetchJioSaavnRelated`, `resolveRadioCandidates`, `cleanArtworkUrl`, `unescapeHtml` into `…/data/repository/CatalogRepository.kt` (constructor-injected `OkHttpClient`, `ApiService`). ViewModel delegates. Keep existing tests green.
+> - [ ] **2c Stream resolver service-side.** Move `resolveStreamUrl` + `youtubeStreamSongIds` into `…/service/StreamResolver.kt` usable from both service and ViewModel.
+> - [ ] **2d QueueController in service.** `…/service/QueueController.kt` owns: STATE_ENDED auto-advance, preload of next item, radio extension when ≤2 remain (via `CatalogRepository`), using `PlaybackQueueStore` + `QueueOps`. Register as a `Player.Listener` in `MusicService.onCreate`. Remove the ViewModel's STATE_ENDED handling and preload code.
+> - [ ] **2e Direct controls.** `ForwardingPlayer.seekToNext/Previous` call `QueueController` directly; delete `ACTION_PLAY_NEXT/PREVIOUS` broadcasts and the receiver branches.
+> - [ ] **2f Persistence.** Save `QueueSnapshot` + position to DataStore (JSON via Gson, debounce 2 s, also on `onTaskRemoved`/`onDestroy`); restore in `MusicService.onCreate` and in the ViewModel on cold start (replaces single-song `lastSession` resume).
+>
+> **Verify after 2d-2f:** swipe app from recents mid-playlist → ≥3 songs continue; lock-screen next/previous work with app killed; reopening shows the same queue and position; existing 128 tests + new store/controller tests pass.
+
 **Files:** Create `…/service/QueueController.kt`; modify `MusicService.kt`, `MusicPlayerViewModel.kt`
 
 - [ ] Move `QueueState` + auto-advance (`STATE_ENDED` handling, preload of index+1, radio extension trigger) into a service-scoped `QueueController`.
