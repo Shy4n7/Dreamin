@@ -10,14 +10,12 @@ class PlaybackAnalyticsTracker(
 ) {
 
     /**
-     * Records track completion for scrobbling.
-     * Songs played for >= 30 seconds or >= 50% duration are counted as completed scrobbles.
+     * Records a play once the listener has actually heard >= 30 seconds or >= 50% of the track.
      */
-    suspend fun recordTrackEnd(song: Song, positionMs: Long, durationMs: Long) {
-        if (positionMs <= 0L) return
+    suspend fun recordTrackEnd(song: Song, listenedMs: Long, durationMs: Long) {
+        if (listenedMs <= 0L) return
 
-        // Persist to local play history & statistics if scrobble threshold met
-        val isScrobbled = positionMs >= 30_000L || (durationMs > 0L && positionMs >= durationMs / 2L)
+        val isScrobbled = listenedMs >= 30_000L || (durationMs > 0L && listenedMs >= durationMs / 2L)
         if (isScrobbled) {
             runCatching {
                 historyRepo.recordPlay(song)

@@ -181,6 +181,7 @@ data class PlayerUiState(
     val currentSong: Song? = null,
     val playbackState: PlaybackState = PlaybackState.Idle,
     val queue: List<Song> = emptyList(),
+    val currentQueueIndex: Int = -1,
     val searchResults: List<Song> = emptyList(),
     val searchAlbumResults: List<AlbumItem> = emptyList(),
     val selectedAlbum: AlbumDetail? = null,
