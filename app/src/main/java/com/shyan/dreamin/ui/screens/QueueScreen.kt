@@ -99,6 +99,7 @@ fun QueueScreen(
     onAddToPlaylist: (Song, Long) -> Unit,
     onPlayNext: (Song) -> Unit,
     onSaveQueueAsPlaylist: (String) -> Unit,
+    onShowMessage: (com.shyan.dreamin.viewmodel.UiMessage) -> Unit,
     onBack: () -> Unit,
     backHandlerEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -106,9 +107,7 @@ fun QueueScreen(
 ) {
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
     val sections = remember(state.queue, state.currentQueueIndex, state.userQueuedSongIds) {
         QueueSections.build(state.queue, state.currentQueueIndex, state.userQueuedSongIds)
@@ -161,15 +160,13 @@ fun QueueScreen(
 
     val removeWithUndo: (QueueRow, Boolean, Boolean) -> Unit = { row, wasUserQueued, wasUpcoming ->
         onRemoveFromQueue(row.index, row.song, wasUserQueued)
-        scope.launch {
-            snackbarHostState.currentSnackbarData?.dismiss()
-            val result = snackbarHostState.showSnackbar(
-                message = "Removed “${row.song.title}”",
+        onShowMessage(
+            com.shyan.dreamin.viewmodel.UiMessage(
+                text = "Removed “${row.song.title}”",
                 actionLabel = "Undo",
-                duration = SnackbarDuration.Short
+                onAction = { onRestoreToQueue(row.song, row.index, wasUserQueued, wasUpcoming) }
             )
-            if (result == SnackbarResult.ActionPerformed) onRestoreToQueue(row.song, row.index, wasUserQueued, wasUpcoming)
-        }
+        )
     }
 
     if (showSaveDialog) {
@@ -309,18 +306,6 @@ fun QueueScreen(
                     }
                 }
             }
-        }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp)
-        ) { data ->
-            Snackbar(
-                snackbarData = data,
-                containerColor = colors.surfaceContainer,
-                contentColor = Color.White,
-                actionColor = colors.primary
-            )
         }
     }
 }

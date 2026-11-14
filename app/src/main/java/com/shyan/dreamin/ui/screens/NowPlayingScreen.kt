@@ -72,6 +72,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private const val SEEK_SETTLE_TOLERANCE_MS = 500L
+private const val SLEEP_TIMER_TICK_MS = 30_000L
 private val DISMISS_DISTANCE = 56.dp
 private val DISMISS_VELOCITY = 900.dp
 private val SKIP_DISTANCE = 72.dp
@@ -343,6 +344,7 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onToggleFavorite: () -> Unit,
     onSetSleepTimer: (Int) -> Unit,
+    onSetSleepTimerEndOfSong: () -> Unit = {},
     onCancelSleepTimer: () -> Unit,
     onSongSelect: (Int, Song) -> Unit,
     onAddToPlaylist: (Long) -> Unit = {},
@@ -361,6 +363,7 @@ fun NowPlayingScreen(
     onArtistClick: (String) -> Unit = {},
     onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
     skipEvents: kotlinx.coroutines.flow.Flow<com.shyan.dreamin.data.queue.SkipEvent> = kotlinx.coroutines.flow.emptyFlow(),
+    onShowMessage: (com.shyan.dreamin.viewmodel.UiMessage) -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -641,12 +644,19 @@ fun NowPlayingScreen(
                         }
 
                         // ⏱️ Sleep Timer in Top Right (clean icon, no pill background)
-                        val isTimerActive = state.sleepTimerEndMs != null
-                        val timerText = remember(state.sleepTimerEndMs) {
-                            state.sleepTimerEndMs?.let { endMs ->
-                                val remainingMins = ((endMs - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-                                "${remainingMins}m"
+                        val isTimerActive = state.sleepTimerEndMs != null || state.sleepTimerEndOfSong
+                        val timerText by produceState<String?>(initialValue = null, state.sleepTimerEndMs, state.sleepTimerEndOfSong) {
+                            if (state.sleepTimerEndOfSong) {
+                                value = "End"
+                                return@produceState
                             }
+                            val endMs = state.sleepTimerEndMs
+                            while (endMs != null) {
+                                val remainingMins = ((endMs - System.currentTimeMillis() + 59_999L) / 60_000L).coerceAtLeast(0L)
+                                value = "${remainingMins}m"
+                                kotlinx.coroutines.delay(SLEEP_TIMER_TICK_MS)
+                            }
+                            value = null
                         }
                         Box(
                             modifier = Modifier
@@ -657,8 +667,7 @@ fun NowPlayingScreen(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.35f), radius = 22.dp)
                                 ) {
-                                    if (isTimerActive) onCancelSleepTimer()
-                                    else showSleepTimerDialog = true
+                                    showSleepTimerDialog = true
                                 }
                                 .padding(horizontal = 6.dp),
                             contentAlignment = Alignment.Center
@@ -673,9 +682,9 @@ fun NowPlayingScreen(
                                     tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
                                     modifier = Modifier.size(24.dp)
                                 )
-                                if (timerText != null) {
+                                timerText?.let { label ->
                                     Text(
-                                        text = timerText,
+                                        text = label,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.primary
@@ -911,7 +920,8 @@ fun NowPlayingScreen(
                                                 showPosterPicker = true
                                             },
                                             onDoubleClick = {
-                                                triggerFavoriteWithAnim()
+                                                if (!state.currentSongIsFavorite) triggerFavoriteWithAnim()
+                                                else haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 showHeartBurst = true
                                             }
                                         ),
@@ -1144,18 +1154,18 @@ fun NowPlayingScreen(
                                 .clickable(
                                     interactionSource = playInteraction,
                                     indication = ripple(bounded = false, color = Color.White.copy(alpha = 0.45f), radius = 36.dp),
-                                    enabled = !isLoading,
                                     onClick = onPlayPause
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(32.dp),
-                                    color = Color.White,
+                                    modifier = Modifier.size(64.dp),
+                                    color = Color.White.copy(alpha = 0.85f),
                                     strokeWidth = 2.5.dp
                                 )
-                            } else if (isError) {
+                            }
+                            if (isError) {
                                 Icon(
                                     imageVector = Icons.Filled.Refresh,
                                     contentDescription = "Retry playback",
@@ -1164,7 +1174,7 @@ fun NowPlayingScreen(
                                 )
                             } else {
                                 AnimatedContent(
-                                    targetState = isPlaying,
+                                    targetState = isPlaying || isLoading,
                                     transitionSpec = {
                                         (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
                                             .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
@@ -1254,6 +1264,7 @@ fun NowPlayingScreen(
                     onAddToPlaylist = onAddSongToPlaylist,
                     onPlayNext = onPlayNextFromQueue,
                     onSaveQueueAsPlaylist = onSaveQueueAsPlaylist,
+                    onShowMessage = onShowMessage,
                     onBack = {
                         scope.launch {
                             pagerState.animateScrollToPage(
@@ -1291,13 +1302,15 @@ fun NowPlayingScreen(
     }
 
     if (showSleepTimerDialog) {
-        val currentPlayback = progressFlow.value
-        val remainingMs = (currentPlayback.durationMs - currentPlayback.currentPositionMs).coerceAtLeast(0L)
         SleepTimerDialog(
             currentEndMs = state.sleepTimerEndMs,
-            remainingSongMs = remainingMs,
+            isEndOfSongActive = state.sleepTimerEndOfSong,
             onSetMinutes = { mins ->
                 onSetSleepTimer(mins)
+                showSleepTimerDialog = false
+            },
+            onSetEndOfSong = {
+                onSetSleepTimerEndOfSong()
                 showSleepTimerDialog = false
             },
             onCancel = {
@@ -1474,8 +1487,9 @@ private fun SleepTimerPointSlider(
 @Composable
 private fun SleepTimerDialog(
     currentEndMs: Long?,
-    remainingSongMs: Long,
+    isEndOfSongActive: Boolean,
     onSetMinutes: (Int) -> Unit,
+    onSetEndOfSong: () -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1491,7 +1505,7 @@ private fun SleepTimerDialog(
     }
 
     var selectedMinutes by remember { mutableIntStateOf(initialMins) }
-    var isEndOfSong by remember { mutableStateOf(false) }
+    var isEndOfSong by remember { mutableStateOf(isEndOfSongActive) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1606,8 +1620,7 @@ private fun SleepTimerDialog(
                         TextButton(
                             onClick = {
                                 if (isEndOfSong) {
-                                    val endMins = ((remainingSongMs + 59999L) / 60000L).coerceAtLeast(1L).toInt()
-                                    onSetMinutes(endMins)
+                                    onSetEndOfSong()
                                 } else {
                                     onSetMinutes(selectedMinutes)
                                 }

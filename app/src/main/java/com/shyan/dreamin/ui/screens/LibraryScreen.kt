@@ -123,6 +123,7 @@ fun LibraryScreen(
     onRenamePlaylist: (Long, String) -> Unit = { _, _ -> },
     onUpdatePlaylistCover: (Long, android.net.Uri?) -> Unit = { _, _ -> },
     onSongClickFromPlaylist: (Song, List<Song>) -> Unit = { song, _ -> onSongClick(song) },
+    onSongClickInList: (Song, List<Song>) -> Unit = { song, _ -> onSongClick(song) },
     onShufflePlaylist: (List<Song>) -> Unit = {},
     onDownloadPlaylist: (List<Song>) -> Unit = {},
     onDownloadSong: (Song) -> Unit = {},
@@ -247,7 +248,9 @@ fun LibraryScreen(
                             bottomPadding = bottomPadding,
                             favorites = state.favorites,
                             currentSong = state.currentSong,
-                            onSongClick = onSongClick,
+                            onSongClick = { song -> onSongClickInList(song, state.favorites) },
+                            onAddToQueue = onAddToQueue,
+                            onPlayNext = onPlayNext,
                             onAddToPlaylist = onAddToPlaylist,
                             triggerKey = returnSpringKey
                         )
@@ -255,7 +258,9 @@ fun LibraryScreen(
                             bottomPadding = bottomPadding,
                             downloadedSongs = state.downloadedSongs,
                             currentSong = state.currentSong,
-                            onSongClick = onSongClick,
+                            onSongClick = { song -> onSongClickInList(song, state.downloadedSongs) },
+                            onAddToQueue = onAddToQueue,
+                            onPlayNext = onPlayNext,
                             onDeleteDownload = onDeleteDownload,
                             onAddToPlaylist = onAddToPlaylist,
                             triggerKey = returnSpringKey
@@ -324,6 +329,8 @@ fun DownloadsTab(
     downloadedSongs: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
+    onAddToQueue: (Song) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
     onDeleteDownload: (String) -> Unit,
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
     triggerKey: Any? = Unit
@@ -396,7 +403,8 @@ fun DownloadsTab(
                         song = song,
                         isPlaying = currentSong?.id == song.id,
                         onClick = { onSongClick(song) },
-                        onAddToQueue = {},
+                        onAddToQueue = { onAddToQueue(song) },
+                        onPlayNext = { onPlayNext(song) },
                         onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
                     )
                 }
@@ -412,6 +420,8 @@ fun FavoritesTab(
     favorites: List<Song>,
     currentSong: Song?,
     onSongClick: (Song) -> Unit,
+    onAddToQueue: (Song) -> Unit = {},
+    onPlayNext: (Song) -> Unit = {},
     onAddToPlaylist: (Song, Long) -> Unit = { _, _ -> },
     triggerKey: Any? = Unit
 ) {
@@ -451,7 +461,8 @@ fun FavoritesTab(
                         song = song,
                         isPlaying = currentSong?.id == song.id,
                         onClick = { onSongClick(song) },
-                        onAddToQueue = {},
+                        onAddToQueue = { onAddToQueue(song) },
+                        onPlayNext = { onPlayNext(song) },
                         onAddToPlaylist = { playlistId -> onAddToPlaylist(song, playlistId) }
                     )
                 }

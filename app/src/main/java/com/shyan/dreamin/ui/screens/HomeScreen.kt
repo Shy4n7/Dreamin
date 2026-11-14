@@ -1937,7 +1937,7 @@ fun HomeFeedOnlyContent(
                 HorizontalSongCardsRow(
                     songs = recentlyPlayed,
                     currentSongId = currentSong?.id,
-                    onSongClick = { song -> onSongClick(song) }
+                    onSongClick = { song -> onSongClickFromList(song, recentlyPlayed) }
                 )
             }
         }
@@ -1948,7 +1948,7 @@ fun HomeFeedOnlyContent(
                 HorizontalSongCardsRow(
                     songs = topSongs,
                     currentSongId = currentSong?.id,
-                    onSongClick = { song -> onSongClick(song) }
+                    onSongClick = { song -> onSongClickFromList(song, topSongs) }
                 )
             }
         }

@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -111,6 +113,8 @@ private fun MainAppScaffold(
     }
     val keyboard = LocalSoftwareKeyboardController.current
     val hazeState = remember { HazeState() }
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    com.shyan.dreamin.ui.components.CollectUiMessages(vm.messages, snackbarHostState)
     val navScreens = Screen.entries
     val trendingCharts = state.trendingCharts
     val onHomeSongClick = remember(onOpenNowPlaying) {
@@ -154,10 +158,16 @@ private fun MainAppScaffold(
     }
 
     androidx.compose.animation.SharedTransitionLayout {
-    CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalSharedTransitionScope provides this) {
+    CompositionLocalProvider(
+        com.shyan.dreamin.ui.components.LocalSharedTransitionScope provides this,
+        LocalCreatePlaylistWithSong provides vm::createPlaylistWithSong
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
+            snackbarHost = {
+                if (!isNowPlayingOpen) com.shyan.dreamin.ui.components.DreaminSnackbarHost(snackbarHostState)
+            },
             bottomBar = {
                 val footerAura by animateColorAsState(
                     targetValue = Color(state.dominantColor),
@@ -359,6 +369,7 @@ private fun MainAppScaffold(
                             onRenamePlaylist         = vm::renamePlaylist,
                             onUpdatePlaylistCover    = vm::updatePlaylistCover,
                             onSongClickFromPlaylist  = { song, songs -> vm.playSongFromPlaylist(song, songs); onOpenNowPlaying() },
+                            onSongClickInList        = { song, songs -> vm.playSongFromList(song, songs); onOpenNowPlaying() },
                             onShufflePlaylist        = { songs -> vm.shuffleAndPlayPlaylist(songs); onOpenNowPlaying() },
                             onDownloadPlaylist       = vm::downloadAllSongsInPlaylist,
                             onDownloadSong           = vm::downloadSong,
@@ -558,7 +569,7 @@ private fun MainAppScaffold(
                     stiffness = Spring.StiffnessMediumLow
                 )
             ) { 70 } + fadeOut(tween(180)),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().zIndex(3.5f)
         ) {
             val profile = state.selectedArtistProfile
             if (profile != null) {
@@ -596,6 +607,7 @@ private fun MainAppScaffold(
                 onToggleRepeat     = vm::toggleRepeat,
                 onToggleFavorite   = vm::toggleFavorite,
                 onSetSleepTimer    = vm::setSleepTimer,
+                onSetSleepTimerEndOfSong = vm::setSleepTimerEndOfSong,
                 onCancelSleepTimer = vm::cancelSleepTimer,
                 onSongSelect       = { index, song -> vm.playQueueRow(index, song.id) },
                 onAddToPlaylist    = { playlistId ->
@@ -615,12 +627,24 @@ private fun MainAppScaffold(
                 onRetryLyrics        = vm::loadLyricsForCurrentSong,
                 onDownload           = vm::downloadSong,
                 onDeleteDownload     = vm::deleteDownload,
-                onArtistClick        = vm::openArtistProfile,
+                onArtistClick        = { artist -> vm.openArtistProfile(artist); onCloseNowPlaying() },
                 onUpdateSongArtwork  = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
                 skipEvents           = vm.skipEvents,
+                onShowMessage        = vm::showMessage,
                 onBack               = onCloseNowPlaying
             )
             }
+        }
+
+        if (isNowPlayingOpen) {
+            com.shyan.dreamin.ui.components.DreaminSnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.BottomCenter)
+                    .zIndex(5f)
+                    .navigationBarsPadding()
+                    .padding(bottom = 120.dp)
+            )
         }
     }
     }

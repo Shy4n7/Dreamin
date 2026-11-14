@@ -169,6 +169,7 @@ val SonicNocturneColors = DreaminColors(
 
 val LocalDreaminColors = compositionLocalOf { SonicNocturneColors }
 val LocalPlaylists = staticCompositionLocalOf<List<com.shyan.dreamin.data.local.Playlist>> { emptyList() }
+val LocalCreatePlaylistWithSong = staticCompositionLocalOf<(String, android.net.Uri?, com.shyan.dreamin.data.model.Song) -> Unit> { { _, _, _ -> } }
 
 fun blendDominantTint(base: Color, tint: Color, alpha: Float): Color = Color(
     red   = base.red   * (1f - alpha) + tint.red   * alpha,

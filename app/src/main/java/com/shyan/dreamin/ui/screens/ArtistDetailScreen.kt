@@ -40,6 +40,7 @@ fun ArtistDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = LocalDreaminColors.current
+    androidx.activity.compose.BackHandler(onBack = onBack)
 
     Box(
         modifier = modifier

@@ -165,20 +165,22 @@ Larger refactor; makes background playback independent of the Activity.
 
 **Files:** `MusicPlayerScreen.kt`, `NowPlayingScreen.kt`, `ArtistDetailScreen.kt`, `CommonComponents.kt`, `LibraryScreen.kt`, `MusicService.kt`
 
-- [ ] **#30 Artist from Now Playing.** Give the artist overlay `zIndex(3.5f)` and collapse Now Playing (or raise artist above it) on artist tap; add `BackHandler` to `ArtistDetailScreen`.
-- [ ] **#31** Double-tap artwork only adds to favorites (never removes); burst still shows.
-- [ ] **#32 Sleep timer.**
+- [x] **#30 Artist from Now Playing.** Give the artist overlay `zIndex(3.5f)` and collapse Now Playing (or raise artist above it) on artist tap; add `BackHandler` to `ArtistDetailScreen`.
+- [x] **#31** Double-tap artwork only adds to favorites (never removes); burst still shows.
+- [x] **#32 Sleep timer.**
   - Live countdown text (ticker every 30 s via `produceState`).
   - Service notifies expiry via session extras; ViewModel clears `sleepTimerEndMs`.
   - Tap on active timer opens the dialog instead of cancelling.
   - "End of song" = pause on `STATE_ENDED`/transition of the current track, not a minute estimate.
   - Fade with 30+ steps on an exponential curve.
-- [ ] **#33** Play/pause button stays enabled while buffering (pause allowed); show spinner as a ring around the icon instead of replacing it.
-- [ ] **#34** Wire "Create new playlist" in `AddToPlaylistDialog` to `CreatePlaylistDialog` then add the song; remove the duplicate "+".
-- [ ] **#35** Align copy: "Add to queue" = after current + user block; rename sheet item and subtitle accordingly.
-- [ ] **#36** Library favorites/downloads/recent use `playSongFromList(song, list)` so context continues (offline-safe for downloads).
-- [ ] **#37** Global snackbar host in `MainAppScaffold` (above mini player); confirmations for add to queue, play next, add to playlist (with "Already in playlist" case), remove with Undo.
-- [ ] Notification shuffle button: proper shuffle icon with on/off states.
+- [x] **#33** Play/pause button stays enabled while buffering (pause allowed); show spinner as a ring around the icon instead of replacing it.
+- [x] **#34** Wire "Create new playlist" in `AddToPlaylistDialog` to `CreatePlaylistDialog` then add the song; remove the duplicate "+".
+- [x] **#35** Align copy: "Add to queue" = after current + user block; rename sheet item and subtitle accordingly.
+- [x] **#36** Library favorites/downloads/recent use `playSongFromList(song, list)` so context continues (offline-safe for downloads).
+- [x] **#37** Global snackbar host in `MainAppScaffold` (above mini player); confirmations for add to queue, play next, add to playlist (with "Already in playlist" case), remove with Undo.
+- [x] Notification shuffle button: proper shuffle icon with on/off states.
+
+> **Status (2026-11-15):** Phase 6 done; build + 186 unit tests green; not verified on a device. Sleep timer moved to `service/SleepTimerController.kt` (state published as session extras `EXTRA_SLEEP_TIMER_END_MS` / `EXTRA_SLEEP_TIMER_END_OF_SONG`; "End of song" means the end of whatever song is playing; it uses `ExoPlayer.pauseAtEndOfMediaItems`, and at the end of the queue `QueueController.shouldHoldAtEnd` loads the next song paused). UI confirmations come from `MusicPlayerViewModel.messages` (`UiMessage`) into `DreaminSnackbarHost`; queue removal Undo also goes through it, so only one snackbar shows at a time. Library favorites/downloads and Home recent/top play with list context.
 
 ---
 

@@ -44,7 +44,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -92,7 +94,8 @@ class CoilBitmapLoader(private val context: android.content.Context) : BitmapLoa
 class MusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var sleepTimerJob: Job? = null
+    private var sleepTimer: SleepTimerController? = null
+    private var isShuffleOn: Boolean = false
     private var favoriteJob: Job? = null
     private var isCurrentFavorite: Boolean = false
     private var queueController: QueueController? = null
@@ -106,7 +109,9 @@ class MusicService : MediaSessionService() {
         const val CUSTOM_COMMAND_SHUFFLE = "com.shyan.dreamin.COMMAND_SHUFFLE"
         const val CUSTOM_COMMAND_SET_SLEEP_TIMER = "com.shyan.dreamin.COMMAND_SET_SLEEP_TIMER"
         const val CUSTOM_COMMAND_CANCEL_SLEEP_TIMER = "com.shyan.dreamin.COMMAND_CANCEL_SLEEP_TIMER"
+        const val CUSTOM_COMMAND_SLEEP_END_OF_SONG = "com.shyan.dreamin.COMMAND_SLEEP_END_OF_SONG"
         const val EXTRA_SLEEP_TIMER_END_MS = "sleep_timer_end_ms"
+        const val EXTRA_SLEEP_TIMER_END_OF_SONG = "sleep_timer_end_of_song"
     }
 
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
@@ -207,6 +212,21 @@ class MusicService : MediaSessionService() {
             catalog = CatalogRepository(NetworkService.api),
             downloadRepo = downloadRepo
         ).also { it.start() }
+        sleepTimer = SleepTimerController(
+            player = player,
+            scope = serviceScope,
+            queueController = { queueController },
+            publishExtras = { extras -> mediaSession?.setSessionExtras(extras) }
+        ).also { it.start() }
+        serviceScope.launch {
+            PlaybackQueueStore.state
+                .map { it.isShuffle }
+                .distinctUntilChanged()
+                .collect { shuffle ->
+                    isShuffleOn = shuffle
+                    updateCustomLayout()
+                }
+        }
         queuePersistence = QueuePersistence(
             player = player,
             prefs = UserPreferencesDataStore(applicationContext),
@@ -260,6 +280,7 @@ class MusicService : MediaSessionService() {
                     .add(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
                     .add(SessionCommand(CUSTOM_COMMAND_SET_SLEEP_TIMER, Bundle.EMPTY))
                     .add(SessionCommand(CUSTOM_COMMAND_CANCEL_SLEEP_TIMER, Bundle.EMPTY))
+                    .add(SessionCommand(CUSTOM_COMMAND_SLEEP_END_OF_SONG, Bundle.EMPTY))
                     .build()
 
                 val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
@@ -272,7 +293,7 @@ class MusicService : MediaSessionService() {
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                     .setAvailableSessionCommands(sessionCommands)
                     .setAvailablePlayerCommands(availablePlayerCommands)
-                    .setCustomLayout(listOf(buildFavoriteButton(isCurrentFavorite), buildShuffleButton()))
+                    .setCustomLayout(listOf(buildFavoriteButton(isCurrentFavorite), buildShuffleButton(isShuffleOn)))
                     .build()
             }
 
@@ -285,13 +306,9 @@ class MusicService : MediaSessionService() {
                 when (customCommand.customAction) {
                     CUSTOM_COMMAND_FAVORITE -> sendBroadcast(Intent(ACTION_TOGGLE_FAVORITE).setPackage(packageName))
                     CUSTOM_COMMAND_SHUFFLE -> PlaybackQueueStore.update { QueueTransitions.toggleShuffle(it) }
-                    CUSTOM_COMMAND_SET_SLEEP_TIMER -> {
-                        val endEpochMs = args.getLong(EXTRA_SLEEP_TIMER_END_MS, 0L)
-                        startServiceSleepTimer(endEpochMs)
-                    }
-                    CUSTOM_COMMAND_CANCEL_SLEEP_TIMER -> {
-                        cancelServiceSleepTimer()
-                    }
+                    CUSTOM_COMMAND_SET_SLEEP_TIMER -> sleepTimer?.setEndTime(args.getLong(EXTRA_SLEEP_TIMER_END_MS, 0L))
+                    CUSTOM_COMMAND_CANCEL_SLEEP_TIMER -> sleepTimer?.cancel()
+                    CUSTOM_COMMAND_SLEEP_END_OF_SONG -> sleepTimer?.setEndOfSong()
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
@@ -403,37 +420,6 @@ class MusicService : MediaSessionService() {
         } catch (_: Exception) {}
     }
 
-    private fun startServiceSleepTimer(endEpochMs: Long) {
-        sleepTimerJob?.cancel()
-        val remainingMs = endEpochMs - System.currentTimeMillis()
-        if (remainingMs <= 0L) return
-
-        sleepTimerJob = serviceScope.launch {
-            if (remainingMs > 10_000L) {
-                delay(remainingMs - 10_000L)
-                val p = mediaSession?.player
-                val originalVolume = p?.volume ?: 1.0f
-                // Gentle audio fade out over 10 seconds without affecting master device volume
-                for (i in 10 downTo 1) {
-                    p?.volume = originalVolume * (i / 10f)
-                    delay(1000)
-                }
-                p?.pause()
-                p?.volume = originalVolume
-            } else {
-                delay(remainingMs)
-                mediaSession?.player?.pause()
-            }
-            sleepTimerJob = null
-        }
-    }
-
-    private fun cancelServiceSleepTimer() {
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        mediaSession?.player?.volume = 1.0f
-    }
-
     private fun buildFavoriteButton(isFavorite: Boolean): CommandButton {
         return CommandButton.Builder()
             .setDisplayName(if (isFavorite) "Favorited" else "Favorite")
@@ -445,18 +431,21 @@ class MusicService : MediaSessionService() {
             .build()
     }
 
-    private fun buildShuffleButton(): CommandButton {
+    private fun buildShuffleButton(isOn: Boolean): CommandButton {
         return CommandButton.Builder()
-            .setDisplayName("Shuffle")
-            .setIconResId(android.R.drawable.ic_menu_rotate)
+            .setDisplayName(if (isOn) "Shuffle on" else "Shuffle off")
+            .setIconResId(
+                if (isOn) com.shyan.dreamin.R.drawable.ic_shuffle_on
+                else com.shyan.dreamin.R.drawable.ic_shuffle
+            )
             .setSessionCommand(SessionCommand(CUSTOM_COMMAND_SHUFFLE, Bundle.EMPTY))
             .build()
     }
 
-    private fun updateCustomLayout(isFavorite: Boolean) {
+    private fun updateCustomLayout(isFavorite: Boolean = isCurrentFavorite) {
         isCurrentFavorite = isFavorite
         val session = mediaSession ?: return
-        val layout = listOf(buildFavoriteButton(isFavorite), buildShuffleButton())
+        val layout = listOf(buildFavoriteButton(isFavorite), buildShuffleButton(isShuffleOn))
         for (controller in session.connectedControllers) {
             session.setCustomLayout(controller, layout)
         }
@@ -493,6 +482,8 @@ class MusicService : MediaSessionService() {
         queuePersistence?.saveBlocking()
         queuePersistence?.release()
         queuePersistence = null
+        sleepTimer?.release()
+        sleepTimer = null
         queueController?.release()
         queueController = null
         serviceScope.cancel()

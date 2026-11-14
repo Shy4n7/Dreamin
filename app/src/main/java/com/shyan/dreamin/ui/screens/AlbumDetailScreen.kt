@@ -505,7 +505,7 @@ private fun AlbumSongRow(
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Add to Queue", color = colors.onSurface) },
+                    text = { Text("Add to queue", color = colors.onSurface) },
                     leadingIcon = {
                         Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = colors.onSurface)
                     },

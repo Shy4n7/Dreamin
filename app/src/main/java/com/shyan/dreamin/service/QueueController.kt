@@ -44,6 +44,8 @@ class QueueController(
     private var retriedSongId: String? = null
     private var isRetryReload = false
     private var lastSkipAtMs = 0L
+    var shouldHoldAtEnd: () -> Boolean = { false }
+    var onHeldAtEnd: (() -> Unit)? = null
 
     fun start() {
         player.addListener(this)
@@ -102,7 +104,9 @@ class QueueController(
         when (playbackState) {
             Player.STATE_ENDED -> {
                 consecutiveFailures = 0
-                perform(QueueTransitions.onAutoEnd(store.state.value))
+                val hold = shouldHoldAtEnd()
+                perform(QueueTransitions.onAutoEnd(store.state.value), autoplay = !hold)
+                if (hold) onHeldAtEnd?.invoke()
             }
         }
     }
@@ -148,31 +152,31 @@ class QueueController(
         syncPreload(delayMs = PRELOAD_SETTLE_MS)
     }
 
-    private fun perform(action: AutoEndAction) {
+    private fun perform(action: AutoEndAction, autoplay: Boolean = true) {
         when (action) {
             AutoEndAction.ReplayCurrent -> {
                 player.seekTo(0L)
-                player.play()
+                if (autoplay) player.play() else player.pause()
             }
             is AutoEndAction.Play -> {
                 store.publish(action.snapshot)
-                play(action.song)
+                play(action.song, autoplay)
             }
-            is AutoEndAction.ContinueWithRadio -> continueWithRadio(action)
+            is AutoEndAction.ContinueWithRadio -> continueWithRadio(action, autoplay)
             AutoEndAction.Stop -> Unit
         }
     }
 
-    private fun play(song: Song) {
+    private fun play(song: Song, autoplay: Boolean = true) {
         advanceJob?.cancel()
         advanceJob = scope.launch {
             try {
                 val url = streamResolver.resolve(song)
                 if (store.state.value.currentSong?.id != song.id) return@launch
                 store.clearHalt()
+                player.playWhenReady = autoplay
                 player.setMediaItem(MediaItemFactory.build(song, url))
                 player.prepare()
-                player.play()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -206,7 +210,7 @@ class QueueController(
         perform(action)
     }
 
-    private fun continueWithRadio(action: AutoEndAction.ContinueWithRadio) {
+    private fun continueWithRadio(action: AutoEndAction.ContinueWithRadio, autoplay: Boolean = true) {
         store.publish(action.snapshot)
         advanceJob?.cancel()
         advanceJob = scope.launch {
@@ -218,13 +222,13 @@ class QueueController(
                 val queued = afterExtension.items.getOrNull(action.slot)
                 if (queued != null) {
                     store.publish(afterExtension.copy(currentIndex = action.slot))
-                    play(queued)
+                    play(queued, autoplay)
                     return@launch
                 }
                 val pick = catalog.findRadioContinuation(action.seed)
                 if (pick != null) {
                     store.update { QueueTransitions.playAfterCurrent(it, pick) }
-                    play(pick)
+                    play(pick, autoplay)
                 } else {
                     replayCurrentIfAny()
                 }

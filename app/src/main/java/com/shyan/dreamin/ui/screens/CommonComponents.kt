@@ -550,13 +550,7 @@ fun MiniPlayer(
                 }
 
                 IconButton(onClick = onPlayPause, modifier = Modifier.size(44.dp)) {
-                    if (playbackState == PlaybackState.Loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = colors.primary,
-                            strokeWidth = 2.dp
-                        )
-                    } else if (playbackState is PlaybackState.Error) {
+                    if (playbackState is PlaybackState.Error) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Retry playback",
@@ -564,12 +558,22 @@ fun MiniPlayer(
                             modifier = Modifier.size(26.dp)
                         )
                     } else {
-                        Icon(
-                            imageVector = if (playbackState == PlaybackState.Playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (playbackState == PlaybackState.Playing) "Pause" else "Play",
-                            tint = colors.onSurface,
-                            modifier = Modifier.size(28.dp)
-                        )
+                        val showsPause = playbackState == PlaybackState.Playing || playbackState == PlaybackState.Loading
+                        Box(contentAlignment = Alignment.Center) {
+                            if (playbackState == PlaybackState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(38.dp),
+                                    color = colors.primary,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            Icon(
+                                imageVector = if (showsPause) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (showsPause) "Pause" else "Play",
+                                tint = colors.onSurface,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
                     }
                 }
 
@@ -623,6 +627,8 @@ fun SongRow(
     val swipeOffset = remember { Animatable(0f) }
     val swipeThreshold = 110f
     var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showCreatePlaylist by remember { mutableStateOf(false) }
+    val createPlaylistWithSong = LocalCreatePlaylistWithSong.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
@@ -1017,6 +1023,20 @@ fun SongRow(
             onSelect = { playlistId ->
                 onAddToPlaylist(playlistId)
                 showPlaylistPicker = false
+            },
+            onCreateNew = {
+                showPlaylistPicker = false
+                showCreatePlaylist = true
+            }
+        )
+    }
+
+    if (showCreatePlaylist) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylist = false },
+            onCreate = { name, coverUri ->
+                createPlaylistWithSong(name, coverUri, song)
+                showCreatePlaylist = false
             }
         )
     }
@@ -1116,7 +1136,6 @@ fun SongQuickActionsBottomSheet(
                 }
             }
 
-            // Action Item 2: Add to Queue (Append at end of queue)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1131,8 +1150,8 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Add to End of Queue", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Text("Append to upcoming tracks", fontSize = 12.sp, color = colors.onSurfaceVariant)
+                    Text("Add to queue", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("Plays after your other queued songs", fontSize = 12.sp, color = colors.onSurfaceVariant)
                 }
             }
 
@@ -1186,7 +1205,7 @@ fun AddToPlaylistDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(18.dp))
-                        Text("+ Create New Playlist", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Create new playlist", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
                 playlists.forEach { playlist ->

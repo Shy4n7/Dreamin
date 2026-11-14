@@ -204,6 +204,7 @@ data class PlayerUiState(
     val currentSongIsFavorite: Boolean = false,
     val listeningStats: ListeningStats = ListeningStats(),
     val sleepTimerEndMs: Long? = null,
+    val sleepTimerEndOfSong: Boolean = false,
     val lastSession: com.shyan.dreamin.data.local.UserPreferencesDataStore.LastSession? = null,
     val recentSearches: List<String> = emptyList(),
     val searchPage: Int = 1,

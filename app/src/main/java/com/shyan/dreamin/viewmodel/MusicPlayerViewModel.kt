@@ -60,6 +60,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         const val MAX_LISTEN_TICK_MS = 3_000L
         const val PAUSED_POLL_EXTRA_DELAY_MS = 400L
         const val POSTER_WAIT_MS = 150L
+        const val MESSAGE_BUFFER = 4
         const val REPLAY_START_WINDOW_MS = 1_000L
         const val REPLAY_MIN_PLAYED_MS = 3_000L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
@@ -91,6 +92,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var isListenerAttached = false
     private var currentPlayJob: Job? = null
+    private var pendingPause = false
+    private val _messages = kotlinx.coroutines.flow.MutableSharedFlow<UiMessage>(
+        extraBufferCapacity = MESSAGE_BUFFER,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
+    val messages: kotlinx.coroutines.flow.SharedFlow<UiMessage> = _messages
     private var searchJob: Job? = null
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
@@ -1008,9 +1015,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun addSongToPlaylist(playlistId: Long, song: Song) {
         viewModelScope.launch {
+            val name = _uiState.value.playlists.firstOrNull { it.id == playlistId }?.name ?: "playlist"
             val existing = playlistRepo.getSongs(playlistId)
-            if (existing.any { it.id == song.id }) return@launch
+            if (existing.any { it.id == song.id }) {
+                notify("Already in $name")
+                return@launch
+            }
             playlistRepo.addSong(playlistId, song, existing.size)
+            notify("Added to $name")
+        }
+    }
+
+    fun createPlaylistWithSong(name: String, coverUri: android.net.Uri?, song: Song) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val savedCover = if (coverUri != null) saveImageToInternalStorage(coverUri) else null
+            val playlistId = playlistRepo.createPlaylist(name.trim(), coverUrl = savedCover)
+            playlistRepo.addSong(playlistId, song, 0)
+            notify("Added to ${name.trim()}")
         }
     }
 
@@ -1074,10 +1096,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playWithQueue(shuffled.first(), shuffled, playlistActive = false)
     }
 
+    fun setSleepTimerEndOfSong() {
+        _uiState.update { it.copy(sleepTimerEndMs = null, sleepTimerEndOfSong = true) }
+        controller?.sendCustomCommand(
+            androidx.media3.session.SessionCommand(MusicService.CUSTOM_COMMAND_SLEEP_END_OF_SONG, android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY
+        )
+    }
+
     fun setSleepTimer(minutes: Int) {
         val totalMs = minutes * 60_000L
         val endMs = System.currentTimeMillis() + totalMs
-        _uiState.update { it.copy(sleepTimerEndMs = endMs) }
+        _uiState.update { it.copy(sleepTimerEndMs = endMs, sleepTimerEndOfSong = false) }
         val args = android.os.Bundle().apply {
             putLong(MusicService.EXTRA_SLEEP_TIMER_END_MS, endMs)
         }
@@ -1088,7 +1118,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun cancelSleepTimer() {
-        _uiState.update { it.copy(sleepTimerEndMs = null) }
+        _uiState.update { it.copy(sleepTimerEndMs = null, sleepTimerEndOfSong = false) }
         controller?.sendCustomCommand(
             androidx.media3.session.SessionCommand(MusicService.CUSTOM_COMMAND_CANCEL_SLEEP_TIMER, android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
@@ -1109,6 +1139,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     this@MusicPlayerViewModel.controller = null
                     isListenerAttached = false
                 }
+
+                override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
+                    applySleepTimerExtras(extras)
+                }
             })
             .buildAsync()
         controllerFuture = future
@@ -1122,8 +1156,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             applyPlayerModes(c)
             syncStateFromController(c)
+            applySleepTimerExtras(c.sessionExtras)
             startPositionPoller()
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun applySleepTimerExtras(extras: android.os.Bundle) {
+        val endMs = extras.getLong(MusicService.EXTRA_SLEEP_TIMER_END_MS, 0L).takeIf { it > 0L }
+        val endOfSong = extras.getBoolean(MusicService.EXTRA_SLEEP_TIMER_END_OF_SONG, false)
+        _uiState.update { it.copy(sleepTimerEndMs = endMs, sleepTimerEndOfSong = endOfSong) }
+    }
+
+    private fun notify(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+        showMessage(UiMessage(text, actionLabel, onAction))
+    }
+
+    fun showMessage(message: UiMessage) {
+        _messages.tryEmit(message)
     }
 
     fun onAppForegrounded() {
@@ -1558,6 +1607,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         startPositionMs: Long = 0L
     ) {
         val song = withCachedPoster(requestedSong)
+        pendingPause = false
         currentPlayJob?.cancel()
         controller?.let { c ->
             if (c.isPlaying || c.playWhenReady) {
@@ -1631,11 +1681,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (mediaItemCount > 1) {
                         removeMediaItems(1, mediaItemCount)
                     }
-                    playWhenReady = true
+                    val startPaused = pendingPause
+                    pendingPause = false
+                    playWhenReady = !startPaused
                     setMediaItem(mediaItem, startPositionMs)
                     prepare()
-                    play()
+                    if (!startPaused) play()
                 } ?: run {
+                    pendingPause = false
                     android.util.Log.e("MusicVM", "MediaController not ready after timeout for ${song.title}")
                     _uiState.update { it.copy(playbackState = PlaybackState.Error("Player connecting... Please tap again.")) }
                 }
@@ -1645,6 +1698,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                pendingPause = false
                 android.util.Log.e("MusicVM", "playSong failed: ${e.message}")
                 _uiState.update { it.copy(playbackState = PlaybackState.Error(e.message ?: "Failed to load song")) }
             }
@@ -1973,8 +2027,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             retryCurrentSong()
             return
         }
+        if (currentPlayJob?.isActive == true) {
+            pendingPause = !pendingPause
+            _uiState.update { it.copy(playbackState = if (pendingPause) PlaybackState.Paused else PlaybackState.Loading) }
+            return
+        }
         controller?.let {
-            if (it.isPlaying) it.pause()
+            if (it.playWhenReady) it.pause()
             else it.play()
         }
     }
@@ -2035,6 +2094,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun addToQueue(song: Song) {
+        if (song.id == PlaybackQueueStore.state.value.currentSong?.id) {
+            notify("Already playing")
+            return
+        }
+        notify("Added to queue")
         updateQueueState { state ->
             if (song.id == state.currentSong?.id) return@updateQueueState state
             val position = QueueOps.addToQueue(
@@ -2053,6 +2117,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playNext(song: Song) {
+        if (song.id == PlaybackQueueStore.state.value.currentSong?.id) {
+            notify("Already playing")
+            return
+        }
+        notify("Will play next")
         updateQueueState { state ->
             if (song.id == state.currentSong?.id) return@updateQueueState state
             val position = QueueOps.playNext(state.queue, state.resolvedCurrentIndex(), state.currentSong, song)
