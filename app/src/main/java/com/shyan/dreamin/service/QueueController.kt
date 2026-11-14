@@ -2,12 +2,15 @@ package com.shyan.dreamin.service
 
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import com.shyan.dreamin.data.local.DownloadRepository
 import com.shyan.dreamin.data.model.Song
 import com.shyan.dreamin.data.queue.AutoEndAction
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
 import com.shyan.dreamin.data.queue.QueueTransitions
 import com.shyan.dreamin.data.repository.CatalogRepository
+import com.shyan.dreamin.data.service.AudioStreamResolver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -25,7 +28,9 @@ class QueueController(
     private val scope: CoroutineScope,
     private val streamResolver: StreamResolver,
     private val catalog: CatalogRepository,
-    private val store: PlaybackQueueStore = PlaybackQueueStore
+    private val downloadRepo: DownloadRepository,
+    private val store: PlaybackQueueStore = PlaybackQueueStore,
+    private val clock: () -> Long = android.os.SystemClock::elapsedRealtime
 ) : Player.Listener {
 
     private var advanceJob: Job? = null
@@ -34,6 +39,9 @@ class QueueController(
     private var storeJob: Job? = null
     private var consecutiveFailures = 0
     private var pendingPreloadId: String? = null
+    private var retriedSongId: String? = null
+    private var isRetryReload = false
+    private var lastSkipAtMs = 0L
 
     fun start() {
         player.addListener(this)
@@ -51,15 +59,74 @@ class QueueController(
         listOf(storeJob, advanceJob, preloadJob, extendJob).forEach { it?.cancel() }
     }
 
+    fun skipToNext() {
+        if (!acceptSkip()) return
+        consecutiveFailures = 0
+        val snapshot = store.state.value
+        val action = QueueTransitions.onAutoEnd(snapshot)
+        val isPreloaded = action is AutoEndAction.Play &&
+            action.snapshot.items == snapshot.items &&
+            preloadedIdAfterCurrent() == action.song.id
+        if (isPreloaded) {
+            advanceJob?.cancel()
+            player.seekToNextMediaItem()
+            player.play()
+            return
+        }
+        perform(action)
+    }
+
+    fun skipToPrevious() {
+        if (!acceptSkip()) return
+        consecutiveFailures = 0
+        perform(QueueTransitions.onUserPrevious(store.state.value, player.currentPosition))
+    }
+
     override fun onPlaybackStateChanged(playbackState: Int) {
-        if (playbackState == Player.STATE_ENDED) {
-            perform(QueueTransitions.onAutoEnd(store.state.value))
+        when (playbackState) {
+            Player.STATE_ENDED -> {
+                consecutiveFailures = 0
+                perform(QueueTransitions.onAutoEnd(store.state.value))
+            }
+        }
+    }
+
+    override fun onPlayerError(error: PlaybackException) {
+        android.util.Log.e(TAG, "Playback error: ${error.message}", error)
+        val current = store.state.value.currentSong ?: return
+        if (player.currentMediaItem?.mediaId != current.id) return
+        AudioStreamResolver.removeCachedStreamUrl(current.id)
+        if (retriedSongId == current.id) {
+            skipUnplayable(current)
+            return
+        }
+        retriedSongId = current.id
+        advanceJob?.cancel()
+        advanceJob = scope.launch {
+            try {
+                downloadRepo.deletePrefetch(current.id)
+                val url = streamResolver.resolve(current)
+                if (store.state.value.currentSong?.id != current.id) return@launch
+                isRetryReload = true
+                player.setMediaItem(MediaItemFactory.build(current, url))
+                player.prepare()
+                player.play()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Re-resolve failed for '${current.title}': ${e.message}")
+                skipUnplayable(current)
+            }
         }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         pruneItemsBeforeCurrent()
         val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() } ?: return
+        val isFreshLoad = reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED && !isRetryReload
+        if (id != retriedSongId || isFreshLoad) retriedSongId = null
+        isRetryReload = false
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) consecutiveFailures = 0
         store.update { QueueTransitions.onItemTransition(it, id) }
         maybeExtend()
         syncPreload(delayMs = PRELOAD_SETTLE_MS)
@@ -90,7 +157,6 @@ class QueueController(
                 player.setMediaItem(MediaItemFactory.build(song, url))
                 player.prepare()
                 player.play()
-                consecutiveFailures = 0
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -98,6 +164,13 @@ class QueueController(
                 skipUnplayable(song)
             }
         }
+    }
+
+    private fun acceptSkip(): Boolean {
+        val now = clock()
+        if (now - lastSkipAtMs < SKIP_DEBOUNCE_MS) return false
+        lastSkipAtMs = now
+        return true
     }
 
     private fun skipUnplayable(song: Song) {
@@ -230,6 +303,7 @@ class QueueController(
         const val PRELOAD_SETTLE_MS = 1_200L
         const val EXTENSION_WAIT_MS = 2_500L
         const val MAX_CONSECUTIVE_FAILURES = 3
+        const val SKIP_DEBOUNCE_MS = 350L
         const val HALT_UNPLAYABLE = "Couldn't play the next songs"
         const val HALT_NO_RADIO = "Couldn't find another song to play"
     }

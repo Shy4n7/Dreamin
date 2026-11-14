@@ -88,6 +88,28 @@ class QueueTransitionsTest {
     }
 
     @Test
+    fun `previous early in a song plays the item before it`() {
+        val action = QueueTransitions.onUserPrevious(snap(a, b, c, index = 2), positionMs = 1_000L)
+        assertEquals(AutoEndAction.Play(snap(a, b, c, index = 1), b), action)
+    }
+
+    @Test
+    fun `previous after three seconds restarts the current song`() {
+        assertEquals(AutoEndAction.ReplayCurrent, QueueTransitions.onUserPrevious(snap(a, b, index = 1), positionMs = 5_000L))
+    }
+
+    @Test
+    fun `previous on the first song of a radio queue restarts it`() {
+        assertEquals(AutoEndAction.ReplayCurrent, QueueTransitions.onUserPrevious(snap(a, b, index = 0), positionMs = 0L))
+    }
+
+    @Test
+    fun `previous on the first song of a playlist wraps to the last`() {
+        val action = QueueTransitions.onUserPrevious(snap(a, b, c, index = 0, playlist = true), positionMs = 0L)
+        assertEquals(AutoEndAction.Play(snap(a, b, c, index = 2, playlist = true), c), action)
+    }
+
+    @Test
     fun `failure for a song that is no longer current is ignored`() {
         assertEquals(AutoEndAction.Stop, QueueTransitions.skipFailed(snap(a, b, index = 0), "b"))
     }

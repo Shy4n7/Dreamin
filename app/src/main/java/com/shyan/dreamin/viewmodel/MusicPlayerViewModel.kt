@@ -7,7 +7,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.session.MediaController
@@ -21,11 +20,9 @@ import com.shyan.dreamin.data.local.StatsRepository
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.data.network.LyricsService
 import com.shyan.dreamin.data.network.NetworkService
-import com.shyan.dreamin.data.queue.QueueAdvance
 import com.shyan.dreamin.data.queue.QueueOps
 import com.shyan.dreamin.data.queue.QueuePosition
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
-import com.shyan.dreamin.data.queue.AutoEndAction
 import com.shyan.dreamin.data.queue.QueueTransitions
 import com.shyan.dreamin.data.queue.toQueueSnapshot
 import com.shyan.dreamin.data.queue.withQueue
@@ -64,7 +61,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private companion object {
         const val MAX_LISTEN_TICK_MS = 3_000L
         const val QUEUE_SAVE_DEBOUNCE_MS = 2_000L
-        const val RADIO_EXTENSION_WAIT_MS = 2_500L
+        const val REPLAY_START_WINDOW_MS = 1_000L
+        const val REPLAY_MIN_PLAYED_MS = 3_000L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
         val JIOSAAVN_FORMAT = AudioFormatInfo(codec = "AAC", bitrateKbps = 320, sampleRateHz = 44100, isLossless = false, source = "JioSaavn (320k AAC)")
     }
@@ -110,7 +108,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     )
     private val searchCache = android.util.LruCache<String, SearchCacheEntry>(30)
 
-    private var errorRetrySongId: String? = null
     private var listenSong: Song? = null
     private var listenedMs: Long = 0L
     private var listenDurationMs: Long = 0L
@@ -134,8 +131,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             when (intent?.action) {
-                MusicService.ACTION_PLAY_NEXT -> playNext()
-                MusicService.ACTION_PLAY_PREVIOUS -> playPrevious()
                 MusicService.ACTION_TOGGLE_FAVORITE -> _uiState.value.currentSong?.let { toggleFavoriteFor(it) }
                 MusicService.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
             }
@@ -203,8 +198,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val context = getApplication<Application>()
         val filter = android.content.IntentFilter().apply {
-            addAction(MusicService.ACTION_PLAY_NEXT)
-            addAction(MusicService.ACTION_PLAY_PREVIOUS)
             addAction(MusicService.ACTION_TOGGLE_FAVORITE)
             addAction(MusicService.ACTION_TOGGLE_SHUFFLE)
         }
@@ -1192,6 +1185,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { it.copy(playbackState = playbackState) }
         }
 
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            val isRestart = reason == Player.DISCONTINUITY_REASON_SEEK &&
+                oldPosition.mediaItemIndex == newPosition.mediaItemIndex &&
+                newPosition.positionMs < REPLAY_START_WINDOW_MS &&
+                oldPosition.positionMs >= REPLAY_MIN_PLAYED_MS
+            if (!isRestart) return
+            val song = _uiState.value.currentSong ?: return
+            finishListen()
+            beginListen(song)
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             val c = controller
             val playWhenReady = c?.playWhenReady == true
@@ -1264,8 +1272,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
             val duration = controller?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
 
-            if (id != errorRetrySongId) errorRetrySongId = null
-
             if (id != null) {
                 val snapshot = QueueTransitions.onItemTransition(PlaybackQueueStore.state.value, id)
                 val fromQueue = snapshot.currentSong?.takeIf { it.id == id }
@@ -1304,57 +1310,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
             }
-        }
-
-        override fun onPlayerError(error: PlaybackException) {
-            android.util.Log.e("MusicVM", "ExoPlayer error: ${error.message}", error)
-            val current = _uiState.value.currentSong ?: return
-            com.shyan.dreamin.data.service.AudioStreamResolver.removeCachedStreamUrl(current.id)
-            if (errorRetrySongId == current.id) {
-                android.util.Log.w("MusicVM", "Retry already used for '${current.title}', skipping")
-                skipFailedSong(current)
-                return
-            }
-            errorRetrySongId = current.id
-            viewModelScope.launch {
-                downloadRepo.deletePrefetch(current.id)
-                try {
-                    val fallbackUrl = resolveStreamUrl(current)
-                    publishStreamSource(current.id)
-                    controller?.apply {
-                        setMediaItem(MediaItemFactory.build(current, fallbackUrl))
-                        prepare()
-                        play()
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    android.util.Log.w("MusicVM", "Song failed to resolve after error, skipping: ${e.message}")
-                    skipFailedSong(current)
-                }
-            }
-        }
-    }
-
-    private fun skipFailedSong(failed: Song) {
-        if (_uiState.value.currentSong?.id != failed.id) return
-        val snapshot = PlaybackQueueStore.state.value
-        if (snapshot.currentSong?.id != failed.id) {
-            playNext(isAutoEnd = true)
-            return
-        }
-        when (val action = QueueTransitions.skipFailed(snapshot, failed.id)) {
-            is AutoEndAction.Play -> {
-                PlaybackQueueStore.publish(action.snapshot)
-                playSong(action.song, fromPlaylist = action.snapshot.playlistActive, preserveQueue = true, queueIndex = action.snapshot.currentIndex)
-            }
-            is AutoEndAction.ContinueWithRadio -> {
-                PlaybackQueueStore.publish(action.snapshot)
-                _uiState.update { it.copy(playbackState = PlaybackState.Loading) }
-                continueWithRadio(action.seed, nextSlotIndex = action.slot)
-            }
-            AutoEndAction.ReplayCurrent, AutoEndAction.Stop ->
-                _uiState.update { it.copy(playbackState = PlaybackState.Error("Couldn't play this song")) }
         }
     }
 
@@ -1575,7 +1530,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun playSong(song: Song, fromPlaylist: Boolean = false, preserveQueue: Boolean = false, queueIndex: Int? = null) {
         currentPlayJob?.cancel()
-        errorRetrySongId = null
         controller?.let { c ->
             if (c.isPlaying || c.playWhenReady) {
                 c.playWhenReady = false
@@ -2004,101 +1958,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         controller?.seekTo(positionMs)
     }
 
-    private var lastSkipTimestampMs: Long = 0L
-
-    fun playNext(isAutoEnd: Boolean = false) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (!isAutoEnd && now - lastSkipTimestampMs < 350L) return
-        lastSkipTimestampMs = now
-
-        val state = _uiState.value.withQueue(PlaybackQueueStore.state.value)
-        val current = state.currentSong ?: return
-        val advance = QueueOps.next(
-            state.queue,
-            state.resolvedCurrentIndex(),
-            state.repeatMode,
-            state.playlistQueueActive,
-            state.isShuffle
-        )
-
-        when (advance) {
-            QueueAdvance.ReplayCurrent -> {
-                finishListen()
-                beginListen(current)
-                controller?.seekTo(0L)
-                controller?.play()
-            }
-            is QueueAdvance.PlayIndex -> {
-                val items = advance.reshuffledItems ?: state.queue
-                if (advance.reshuffledItems != null) {
-                    updateQueueState { it.copy(queue = items, currentQueueIndex = 0) }
-                }
-                val nextSong = items.getOrNull(advance.index) ?: return
-                playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true, queueIndex = advance.index)
-            }
-            QueueAdvance.EndOfQueue -> {
-                if (!state.playlistQueueActive) continueWithRadio(current)
-            }
-        }
-    }
-
-    private fun continueWithRadio(current: Song, nextSlotIndex: Int? = null) {
-        viewModelScope.launch {
-            try {
-                if (PlaybackQueueStore.isExtending.value) {
-                    kotlinx.coroutines.withTimeoutOrNull(RADIO_EXTENSION_WAIT_MS) {
-                        PlaybackQueueStore.isExtending.first { !it }
-                    }
-                }
-                val snapshot = PlaybackQueueStore.state.value
-                val target = if (snapshot.currentIndex >= 0) snapshot.currentIndex + 1 else nextSlotIndex
-                val queued = target?.let { snapshot.items.getOrNull(it) }
-                if (queued != null) {
-                    playSong(queued, fromPlaylist = false, preserveQueue = true, queueIndex = target)
-                    return@launch
-                }
-                val pick = catalog.findRadioContinuation(current)
-                if (pick != null) playSong(pick, fromPlaylist = false, preserveQueue = true)
-                else radioFailsafe(current)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("MusicVM", "Continuous autoplay radio error: ${e.message}")
-                radioFailsafe(current)
-            }
-        }
-    }
-
-    private fun radioFailsafe(current: Song) {
-        if (errorRetrySongId == current.id) {
-            _uiState.update { it.copy(playbackState = PlaybackState.Error("Couldn't find another song to play")) }
-            return
-        }
-        controller?.seekTo(0L)
-        controller?.play()
+    fun playNext() {
+        controller?.seekToNext() ?: connectToService()
     }
 
     fun playPrevious() {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSkipTimestampMs < 350L) return
-        lastSkipTimestampMs = now
-
-        val state = _uiState.value.withQueue(PlaybackQueueStore.state.value)
-        if (state.currentSong == null) return
-        val advance = QueueOps.previous(
-            state.queue,
-            state.resolvedCurrentIndex(),
-            controller?.currentPosition ?: 0L,
-            state.repeatMode,
-            state.playlistQueueActive
-        )
-        when (advance) {
-            is QueueAdvance.PlayIndex -> {
-                val prevSong = state.queue.getOrNull(advance.index) ?: return
-                playSong(prevSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true, queueIndex = advance.index)
-            }
-            else -> controller?.seekTo(0L)
-        }
+        controller?.seekToPrevious() ?: connectToService()
     }
 
     fun addToQueue(song: Song) {

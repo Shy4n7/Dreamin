@@ -95,8 +95,6 @@ class MusicService : MediaSessionService() {
     private var queueController: QueueController? = null
 
     companion object {
-        const val ACTION_PLAY_NEXT = "com.shyan.dreamin.ACTION_PLAY_NEXT"
-        const val ACTION_PLAY_PREVIOUS = "com.shyan.dreamin.ACTION_PLAY_PREVIOUS"
         const val ACTION_TOGGLE_FAVORITE = "com.shyan.dreamin.ACTION_TOGGLE_FAVORITE"
         const val ACTION_TOGGLE_SHUFFLE = "com.shyan.dreamin.ACTION_TOGGLE_SHUFFLE"
 
@@ -194,13 +192,14 @@ class MusicService : MediaSessionService() {
         })
         AudioFxManager.attachAudioSession(player.audioSessionId)
 
-        val db = AppDatabase.getInstance(applicationContext)
+        val downloadRepo = DownloadRepository(applicationContext, AppDatabase.getInstance(applicationContext).downloadDao())
         queueController = QueueController(
             context = applicationContext,
             player = player,
             scope = serviceScope,
-            streamResolver = StreamResolver(DownloadRepository(applicationContext, db.downloadDao()), NetworkService.api),
-            catalog = CatalogRepository(NetworkService.api)
+            streamResolver = StreamResolver(downloadRepo, NetworkService.api),
+            catalog = CatalogRepository(NetworkService.api),
+            downloadRepo = downloadRepo
         ).also { it.start() }
 
         val forwardingPlayer = object : ForwardingPlayer(player) {
@@ -224,31 +223,19 @@ class MusicService : MediaSessionService() {
             }
 
             override fun seekToNext() {
-                seekToNextMediaItem()
+                queueController?.skipToNext()
             }
 
             override fun seekToNextMediaItem() {
-                val p = player
-                if (p.mediaItemCount > 1 && p.currentMediaItemIndex < p.mediaItemCount - 1) {
-                    p.seekToNextMediaItem()
-                } else {
-                    sendBroadcast(Intent(ACTION_PLAY_NEXT).setPackage(packageName))
-                }
+                queueController?.skipToNext()
             }
 
             override fun seekToPrevious() {
-                seekToPreviousMediaItem()
+                queueController?.skipToPrevious()
             }
 
             override fun seekToPreviousMediaItem() {
-                val p = player
-                if (p.currentPosition > 3000L) {
-                    p.seekTo(0L)
-                } else if (p.mediaItemCount > 1 && p.currentMediaItemIndex > 0) {
-                    p.seekToPreviousMediaItem()
-                } else {
-                    sendBroadcast(Intent(ACTION_PLAY_PREVIOUS).setPackage(packageName))
-                }
+                queueController?.skipToPrevious()
             }
         }
 

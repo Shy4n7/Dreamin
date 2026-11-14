@@ -54,6 +54,20 @@ object QueueTransitions {
         }
     }
 
+    fun onUserPrevious(snapshot: QueueSnapshot, positionMs: Long): AutoEndAction {
+        if (snapshot.currentSong == null) return AutoEndAction.ReplayCurrent
+        val advance = QueueOps.previous(
+            snapshot.items,
+            snapshot.currentIndex,
+            positionMs,
+            snapshot.repeatMode,
+            snapshot.playlistActive
+        )
+        if (advance !is QueueAdvance.PlayIndex) return AutoEndAction.ReplayCurrent
+        val song = snapshot.items.getOrNull(advance.index) ?: return AutoEndAction.ReplayCurrent
+        return AutoEndAction.Play(snapshot.copy(currentIndex = advance.index), song)
+    }
+
     fun skipFailed(snapshot: QueueSnapshot, failedId: String): AutoEndAction {
         val failed = snapshot.currentSong?.takeIf { it.id == failedId } ?: return AutoEndAction.Stop
         val idx = snapshot.currentIndex
