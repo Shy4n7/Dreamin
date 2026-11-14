@@ -326,4 +326,54 @@ class CatalogRepository(private val api: MusicApi = NetworkService.api) {
         }
         ytSongs
     }
+
+    suspend fun buildUpNext(
+        currentSong: Song,
+        existingQueue: List<Song>,
+        relatedSeedId: String = currentSong.id
+    ): List<Song> = withContext(Dispatchers.IO) {
+        val ytSongs = resolveRadioCandidates(currentSong, limit = 16)
+        if (ytSongs.isNotEmpty()) {
+            return@withContext com.shyan.dreamin.data.recommendation.SmartQueueEngine.buildQueue(
+                ytRadioHits = ytSongs,
+                fallbackHits = emptyList(),
+                currentSong = currentSong,
+                existingQueue = existingQueue,
+                limit = 18
+            )
+        }
+        val primaryArtist = primaryArtistOf(currentSong)
+        val related = fetchJioSaavnRelated(relatedSeedId)
+        val artistHits = if (primaryArtist.isNotBlank()) searchOnDevice("$primaryArtist hits", limit = 10) else emptyList()
+        com.shyan.dreamin.data.recommendation.SmartQueueEngine.buildQueue(
+            ytRadioHits = emptyList(),
+            fallbackHits = related + artistHits,
+            currentSong = currentSong,
+            existingQueue = existingQueue,
+            limit = 15
+        )
+    }
+
+    suspend fun findRadioContinuation(currentSong: Song): Song? = withContext(Dispatchers.IO) {
+        val tracks = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(currentSong)
+        for (track in tracks.take(8)) {
+            val cleanT = track.title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+            val firstArtist = track.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
+            val cand = searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
+                ?: searchOnDevice(cleanT, limit = 1).firstOrNull()
+            if (cand != null && cand.id != currentSong.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
+                val needsArtwork = cand.artworkUrl.isBlank() || cand.artworkUrl.contains("150x150") ||
+                    cand.artworkUrl.contains("50x50") || cand.artworkUrl.contains("default")
+                return@withContext if (track.artworkUrl.isNotBlank() && needsArtwork) {
+                    cand.copy(artworkUrl = track.artworkUrl, album = track.album.ifBlank { cand.album })
+                } else cand
+            }
+        }
+        val primaryArtist = primaryArtistOf(currentSong)
+        if (primaryArtist.isBlank()) return@withContext null
+        searchOnDevice("$primaryArtist hits", limit = 6).firstOrNull { it.id != currentSong.id }
+    }
+
+    private fun primaryArtistOf(song: Song): String =
+        song.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
 }

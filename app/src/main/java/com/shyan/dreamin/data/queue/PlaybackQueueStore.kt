@@ -6,6 +6,7 @@ import com.shyan.dreamin.data.model.TrackRepeatMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 data class QueueSnapshot(
     val items: List<Song> = emptyList(),
@@ -27,15 +28,49 @@ fun PlayerUiState.toQueueSnapshot(): QueueSnapshot = QueueSnapshot(
     isShuffle = isShuffle
 )
 
+fun PlayerUiState.withQueue(snapshot: QueueSnapshot): PlayerUiState = copy(
+    currentSong = snapshot.currentSong ?: currentSong,
+    queue = snapshot.items,
+    currentQueueIndex = snapshot.currentIndex,
+    userQueuedSongIds = snapshot.userQueuedIds,
+    playlistQueueActive = snapshot.playlistActive,
+    repeatMode = snapshot.repeatMode,
+    isShuffle = snapshot.isShuffle
+)
+
 object PlaybackQueueStore {
     private val _state = MutableStateFlow(QueueSnapshot())
     val state: StateFlow<QueueSnapshot> = _state.asStateFlow()
+
+    private val _isExtending = MutableStateFlow(false)
+    val isExtending: StateFlow<Boolean> = _isExtending.asStateFlow()
 
     fun publish(snapshot: QueueSnapshot) {
         _state.value = snapshot
     }
 
+    fun update(transform: (QueueSnapshot) -> QueueSnapshot) {
+        _state.update(transform)
+    }
+
+    private val _haltMessage = MutableStateFlow<String?>(null)
+    val haltMessage: StateFlow<String?> = _haltMessage.asStateFlow()
+
+    fun setExtending(extending: Boolean) {
+        _isExtending.value = extending
+    }
+
+    fun halt(message: String) {
+        _haltMessage.value = message
+    }
+
+    fun clearHalt() {
+        _haltMessage.value = null
+    }
+
     fun reset() {
         _state.value = QueueSnapshot()
+        _isExtending.value = false
+        _haltMessage.value = null
     }
 }

@@ -32,6 +32,9 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.shyan.dreamin.MainActivity
 import com.shyan.dreamin.data.local.AppDatabase
+import com.shyan.dreamin.data.local.DownloadRepository
+import com.shyan.dreamin.data.network.NetworkService
+import com.shyan.dreamin.data.repository.CatalogRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,6 +92,7 @@ class MusicService : MediaSessionService() {
     private var sleepTimerJob: Job? = null
     private var favoriteJob: Job? = null
     private var isCurrentFavorite: Boolean = false
+    private var queueController: QueueController? = null
 
     companion object {
         const val ACTION_PLAY_NEXT = "com.shyan.dreamin.ACTION_PLAY_NEXT"
@@ -189,6 +193,15 @@ class MusicService : MediaSessionService() {
             }
         })
         AudioFxManager.attachAudioSession(player.audioSessionId)
+
+        val db = AppDatabase.getInstance(applicationContext)
+        queueController = QueueController(
+            context = applicationContext,
+            player = player,
+            scope = serviceScope,
+            streamResolver = StreamResolver(DownloadRepository(applicationContext, db.downloadDao()), NetworkService.api),
+            catalog = CatalogRepository(NetworkService.api)
+        ).also { it.start() }
 
         val forwardingPlayer = object : ForwardingPlayer(player) {
             override fun getAvailableCommands(): Player.Commands {
@@ -438,6 +451,8 @@ class MusicService : MediaSessionService() {
     override fun onDestroy() {
         favoriteJob?.cancel()
         favoriteJob = null
+        queueController?.release()
+        queueController = null
         serviceScope.cancel()
         try {
             if (wifiLock?.isHeld == true) {

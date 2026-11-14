@@ -25,9 +25,13 @@ import com.shyan.dreamin.data.queue.QueueAdvance
 import com.shyan.dreamin.data.queue.QueueOps
 import com.shyan.dreamin.data.queue.QueuePosition
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
+import com.shyan.dreamin.data.queue.AutoEndAction
+import com.shyan.dreamin.data.queue.QueueTransitions
 import com.shyan.dreamin.data.queue.toQueueSnapshot
-import kotlinx.coroutines.flow.map
+import com.shyan.dreamin.data.queue.withQueue
+import com.shyan.dreamin.service.MediaItemFactory
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.flow.debounce
 import com.shyan.dreamin.service.MusicService
 import androidx.media3.common.C
@@ -60,6 +64,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private companion object {
         const val MAX_LISTEN_TICK_MS = 3_000L
         const val QUEUE_SAVE_DEBOUNCE_MS = 2_000L
+        const val RADIO_EXTENSION_WAIT_MS = 2_500L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
         val JIOSAAVN_FORMAT = AudioFormatInfo(codec = "AAC", bitrateKbps = 320, sampleRateHz = 44100, isLossless = false, source = "JioSaavn (320k AAC)")
     }
@@ -93,7 +98,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
     private var prefetchJob: Job? = null
-    private var preloadJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
     private var albumJob: Job? = null
@@ -114,6 +118,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun PlayerUiState.resolvedCurrentIndex(): Int =
         QueueOps.resolveCurrentIndex(queue, currentSong?.id, currentQueueIndex)
+
+    private fun updateQueueState(transform: (PlayerUiState) -> PlayerUiState) {
+        val updated = _uiState.updateAndGet { transform(it.withQueue(PlaybackQueueStore.state.value)) }
+        PlaybackQueueStore.publish(updated.toQueueSnapshot())
+    }
+
+    private fun isFavorite(favorites: List<Song>, song: Song?): Boolean {
+        if (song == null) return false
+        return favorites.any { f ->
+            f.id == song.id || (f.title.isNotBlank() && f.title.equals(song.title, ignoreCase = true) && f.artist.equals(song.artist, ignoreCase = true))
+        }
+    }
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -151,9 +167,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         viewModelScope.launch {
-            _uiState.map { it.toQueueSnapshot() }
-                .distinctUntilChanged()
-                .collect { PlaybackQueueStore.publish(it) }
+            PlaybackQueueStore.state.collect { snapshot ->
+                _uiState.update { state ->
+                    val synced = state.withQueue(snapshot)
+                    if (synced.currentSong?.id == state.currentSong?.id) synced
+                    else synced.copy(currentSongIsFavorite = isFavorite(state.favorites, synced.currentSong))
+                }
+            }
+        }
+        viewModelScope.launch {
+            PlaybackQueueStore.haltMessage.collect { message ->
+                if (message != null) _uiState.update { it.copy(playbackState = PlaybackState.Error(message)) }
+            }
+        }
+        viewModelScope.launch {
+            PlaybackQueueStore.isExtending.collect { extending ->
+                _uiState.update { it.copy(isFetchingUpNext = extending) }
+            }
         }
         startQueuePersistence()
 
@@ -1012,26 +1042,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val songs = playlistRepo.getSongs(playlistId)
             if (songs.isEmpty()) return@launch
-            _uiState.update { it.copy(queue = songs, playlistQueueActive = true) }
+            updateQueueState { it.copy(queue = songs, playlistQueueActive = true) }
             playSong(songs.first(), fromPlaylist = true, preserveQueue = true)
         }
     }
 
     fun playSongFromPlaylist(song: Song, playlistSongs: List<Song>) {
-        _uiState.update { it.copy(queue = playlistSongs, playlistQueueActive = true) }
+        updateQueueState { it.copy(queue = playlistSongs, playlistQueueActive = true) }
         playSong(song, fromPlaylist = true, preserveQueue = true)
     }
 
     fun shuffleAndPlayPlaylist(playlistSongs: List<Song>) {
         if (playlistSongs.isEmpty()) return
         val shuffled = playlistSongs.shuffled()
-        _uiState.update { it.copy(queue = shuffled, playlistQueueActive = true) }
+        updateQueueState { it.copy(queue = shuffled, playlistQueueActive = true) }
         playSong(shuffled.first(), fromPlaylist = true, preserveQueue = true)
     }
 
     fun playSongFromList(song: Song, songs: List<Song>) {
         if (songs.isNotEmpty()) {
-            _uiState.update { it.copy(queue = songs, playlistQueueActive = false) }
+            updateQueueState { it.copy(queue = songs, playlistQueueActive = false) }
             playSong(song, fromPlaylist = false, preserveQueue = true)
         } else {
             playSong(song)
@@ -1041,7 +1071,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun shuffleAndPlayList(songs: List<Song>) {
         if (songs.isEmpty()) return
         val shuffled = songs.shuffled()
-        _uiState.update { it.copy(queue = shuffled, playlistQueueActive = false) }
+        updateQueueState { it.copy(queue = shuffled, playlistQueueActive = false) }
         playSong(shuffled.first(), fromPlaylist = false, preserveQueue = true)
     }
 
@@ -1111,7 +1141,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun applyPlayerModes(c: MediaController) {
         c.shuffleModeEnabled = false
-        c.repeatMode = if (_uiState.value.repeatMode == TrackRepeatMode.ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        c.repeatMode = if (PlaybackQueueStore.state.value.repeatMode == TrackRepeatMode.ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     private fun syncStateFromController(c: MediaController) {
@@ -1119,7 +1149,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val meta = mediaItem.mediaMetadata
         val id = mediaItem.mediaId.takeIf { it.isNotBlank() } ?: return
         val title = meta.title?.toString()?.takeIf { it.isNotBlank() } ?: return
-        val song = Song(
+        val song = PlaybackQueueStore.state.value.currentSong?.takeIf { it.id == id } ?: Song(
             id = id,
             title = title,
             artist = meta.artist?.toString() ?: "",
@@ -1144,6 +1174,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 pendingResumePositionMs = 0L
                 controller?.seekTo(pos)
             }
+            if (state == Player.STATE_READY && listenSong == null) {
+                _uiState.value.currentSong?.let { beginListen(it) }
+            }
             val c = controller
             val isPlaying = c?.isPlaying == true
             val playWhenReady = c?.playWhenReady == true
@@ -1152,9 +1185,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state == Player.STATE_READY -> if (playWhenReady || isPlaying) PlaybackState.Playing else PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
                     finishListen()
-                    viewModelScope.launch {
-                        playNext(isAutoEnd = true)
-                    }
                     PlaybackState.Loading
                 }
                 else -> PlaybackState.Idle
@@ -1234,47 +1264,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val id = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
             val duration = controller?.duration?.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
 
-            val c = controller
-            if (c != null && c.currentMediaItemIndex > 0) {
-                c.removeMediaItems(0, c.currentMediaItemIndex)
-            }
             if (id != errorRetrySongId) errorRetrySongId = null
 
             if (id != null) {
-                _uiState.update { state ->
-                    val hintIdx = state.resolvedCurrentIndex()
-                    val matchIdx = when {
-                        state.queue.getOrNull(hintIdx)?.id == id -> hintIdx
-                        state.queue.getOrNull(hintIdx + 1)?.id == id -> hintIdx + 1
-                        else -> state.queue.indexOfFirst { it.id == id }
-                    }
-                    val matching = state.queue.getOrNull(matchIdx)
-                    if (matching != null) {
-                        state.copy(
-                            currentSong = matching,
-                            currentQueueIndex = matchIdx,
-                            currentSongIsFavorite = state.favorites.any { f ->
-                                f.id == matching.id || (f.title.isNotBlank() && f.title.equals(matching.title, ignoreCase = true) && f.artist.equals(matching.artist, ignoreCase = true))
-                            },
-                            userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != matching.id }
+                val snapshot = QueueTransitions.onItemTransition(PlaybackQueueStore.state.value, id)
+                val fromQueue = snapshot.currentSong?.takeIf { it.id == id }
+                val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
+                val song = fromQueue ?: title?.let {
+                    Song(id = id, title = it, artist = meta.artist?.toString() ?: "", artworkUrl = meta.artworkUri?.toString() ?: "")
+                }
+                if (song != null) {
+                    _uiState.update { state ->
+                        state.withQueue(snapshot).copy(
+                            currentSong = song,
+                            currentSongIsFavorite = isFavorite(state.favorites, song)
                         )
-                    } else {
-                        val title = meta?.title?.toString()?.takeIf { it.isNotBlank() }
-                        if (title != null) {
-                            val newSong = Song(
-                                id = id,
-                                title = title,
-                                artist = meta.artist?.toString() ?: "",
-                                artworkUrl = meta.artworkUri?.toString() ?: ""
-                            )
-                            state.copy(
-                                currentSong = newSong,
-                                currentSongIsFavorite = state.favorites.any { f ->
-                                    f.id == newSong.id || (f.title.isNotBlank() && f.title.equals(newSong.title, ignoreCase = true) && f.artist.equals(newSong.artist, ignoreCase = true))
-                                },
-                                userQueuedSongIds = state.userQueuedSongIds.filter { qId -> qId != newSong.id }
-                            )
-                        } else state
                     }
                 }
             }
@@ -1288,18 +1292,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 publishStreamSource(activeSong.id)
                 extractDominantColor(activeSong.displayArtworkUrl)
                 loadLyricsForCurrentSong()
-
-                // Auto-extend queue when reaching the last 2 songs
-                if (!_uiState.value.playlistQueueActive) {
-                    val currentQueue = _uiState.value.queue
-                    val currentIdx = _uiState.value.resolvedCurrentIndex()
-                    val remaining = if (currentIdx >= 0) currentQueue.size - (currentIdx + 1) else 0
-                    if (com.shyan.dreamin.data.recommendation.SmartQueueEngine.shouldAutoExtendQueue(remaining, _uiState.value.playlistQueueActive, _uiState.value.isFetchingUpNext)) {
-                        val seedSong = currentQueue.lastOrNull() ?: activeSong
-                        fetchUpNext(seedSong.id)
-                    }
-                }
-
                 prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
                 if (!activeSong.id.startsWith("yt_")) {
                     viewModelScope.launch(Dispatchers.IO) {
@@ -1312,9 +1304,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
             }
-
-            // Immediately preload the next track into index 1
-            preloadNextMediaItemInQueue()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -1333,7 +1322,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     val fallbackUrl = resolveStreamUrl(current)
                     publishStreamSource(current.id)
                     controller?.apply {
-                        setMediaItem(buildMediaItem(current, fallbackUrl))
+                        setMediaItem(MediaItemFactory.build(current, fallbackUrl))
                         prepare()
                         play()
                     }
@@ -1348,44 +1337,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun skipFailedSong(failed: Song) {
-        val state = _uiState.value
-        if (state.currentSong?.id != failed.id) return
-        val idx = state.resolvedCurrentIndex()
-        if (idx < 0) {
+        if (_uiState.value.currentSong?.id != failed.id) return
+        val snapshot = PlaybackQueueStore.state.value
+        if (snapshot.currentSong?.id != failed.id) {
             playNext(isAutoEnd = true)
             return
         }
-        val remaining = QueueOps.removeAt(state.queue, idx)
-        val loops = state.repeatMode == TrackRepeatMode.ALL || state.playlistQueueActive
-        val target = when {
-            idx < remaining.size -> idx
-            loops && remaining.isNotEmpty() -> 0
-            else -> null
-        }
-        if (target != null) {
-            _uiState.update { it.copy(queue = remaining, currentQueueIndex = target) }
-            playSong(remaining[target], fromPlaylist = state.playlistQueueActive, preserveQueue = true, queueIndex = target)
-        } else {
-            _uiState.update { it.copy(queue = remaining, currentQueueIndex = -1, playbackState = PlaybackState.Loading) }
-            continueWithRadio(failed, nextSlotIndex = idx)
+        when (val action = QueueTransitions.skipFailed(snapshot, failed.id)) {
+            is AutoEndAction.Play -> {
+                PlaybackQueueStore.publish(action.snapshot)
+                playSong(action.song, fromPlaylist = action.snapshot.playlistActive, preserveQueue = true, queueIndex = action.snapshot.currentIndex)
+            }
+            is AutoEndAction.ContinueWithRadio -> {
+                PlaybackQueueStore.publish(action.snapshot)
+                _uiState.update { it.copy(playbackState = PlaybackState.Loading) }
+                continueWithRadio(action.seed, nextSlotIndex = action.slot)
+            }
+            AutoEndAction.ReplayCurrent, AutoEndAction.Stop ->
+                _uiState.update { it.copy(playbackState = PlaybackState.Error("Couldn't play this song")) }
         }
     }
-
-    private fun buildMediaItem(song: Song, streamUrl: String): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(song.id)
-            .setUri(parseAudioUri(streamUrl))
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(song.title)
-                    .setArtist(song.artist)
-                    .setArtworkUri(
-                        song.displayArtworkUrl.takeIf { it.isNotBlank() }
-                            ?.let { android.net.Uri.parse(it) }
-                    )
-                    .build()
-            )
-            .build()
 
     private fun beginListen(song: Song) {
         listenSong = song
@@ -1598,126 +1569,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         triggerSmartQueuePrefetch(nextSong?.id)
     }
 
-    /**
-     * Gapless Playback Engine: Preloads the immediate next media item from the active queue
-     * directly into ExoPlayer's playlist (index 1). When the current track ends, ExoPlayer
-     * seamlessly crossfades into the preloaded track with 0ms gap.
-     */
-    private fun preloadNextMediaItemInQueue(forceImmediate: Boolean = false) {
-        preloadJob?.cancel()
-        preloadJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (!forceImmediate) {
-                    // Wait briefly so current song finishes its immediate setup & buffering
-                    delay(1200)
-                }
-
-                val state = _uiState.value
-                val currentSong = state.currentSong ?: return@launch
-                val nextIdx = QueueOps.upcomingIndex(
-                    state.queue,
-                    state.resolvedCurrentIndex(),
-                    state.repeatMode,
-                    state.playlistQueueActive,
-                    state.isShuffle
-                ) ?: return@launch
-                val nextSong = state.queue[nextIdx]
-
-                val isAlreadyQueued = withContext(Dispatchers.Main) {
-                    val c = controller ?: return@withContext true
-                    preloadedIdAfterCurrent(c) == nextSong.id
-                }
-                if (isAlreadyQueued) return@launch
-
-                val streamUrl = resolveStreamUrl(nextSong)
-                if (streamUrl.isBlank()) return@launch
-                val mediaItem = buildMediaItem(nextSong, streamUrl)
-
-                withContext(Dispatchers.Main) {
-                    val activeC = controller ?: return@withContext
-                    if (activeC.currentMediaItem?.mediaId != currentSong.id) return@withContext
-                    if (preloadedIdAfterCurrent(activeC) == nextSong.id) return@withContext
-                    clearItemsAfterCurrent(activeC)
-                    activeC.addMediaItem(mediaItem)
-                    android.util.Log.d("MusicVM", "Preloaded next track into ExoPlayer: ${nextSong.title}")
-                }
-
-                try {
-                    val context = getApplication<Application>()
-                    com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(context, streamUrl, viewModelScope)
-                } catch (_: Exception) {}
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.w("MusicVM", "Failed to preload next track: ${e.message}")
-            }
-        }
-    }
-
-    /**
-     * Synchronizes ExoPlayer's preloaded item with queue changes immediately.
-     * When songs are queued next, reordered, or removed, any stale preloaded track
-     * at index 1 is pruned from ExoPlayer and replaced with the true upcoming song.
-     */
-    private fun syncPreloadedMediaItem() {
-        val state = _uiState.value
-        if (state.currentSong == null) return
-        val nextIdx = QueueOps.upcomingIndex(
-            state.queue,
-            state.resolvedCurrentIndex(),
-            state.repeatMode,
-            state.playlistQueueActive,
-            state.isShuffle
-        )
-        val nextSong = nextIdx?.let { state.queue[it] }
-
-        val activeC = controller
-        if (activeC != null) {
-            val queuedId = preloadedIdAfterCurrent(activeC)
-            if (queuedId != null && queuedId != nextSong?.id) {
-                clearItemsAfterCurrent(activeC)
-            }
-        }
-
-        if (nextSong != null) {
-            preloadNextMediaItemInQueue(forceImmediate = true)
-        }
-    }
-
-    private fun preloadedIdAfterCurrent(c: MediaController): String? {
-        val nextIdx = c.currentMediaItemIndex + 1
-        if (nextIdx >= c.mediaItemCount) return null
-        return runCatching { c.getMediaItemAt(nextIdx).mediaId }.getOrNull()
-    }
-
-    private fun clearItemsAfterCurrent(c: MediaController) {
-        val nextIdx = c.currentMediaItemIndex + 1
-        if (nextIdx < c.mediaItemCount) {
-            c.removeMediaItems(nextIdx, c.mediaItemCount)
-        }
-    }
-
     private suspend fun resolveStreamUrl(song: Song): String {
         return streamResolver.resolve(song)
-    }
-
-    private fun parseAudioUri(streamUrl: String): android.net.Uri {
-        val trimmed = streamUrl.trim()
-        return when {
-            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> {
-                val sanitized = trimmed.replace("\\/", "/").replace(" ", "%20")
-                android.net.Uri.parse(sanitized)
-            }
-            trimmed.startsWith("file://") -> android.net.Uri.parse(trimmed)
-            else -> {
-                val file = java.io.File(trimmed)
-                if (file.exists() && file.length() > 0) {
-                    android.net.Uri.fromFile(file)
-                } else {
-                    android.net.Uri.parse(trimmed)
-                }
-            }
-        }
     }
 
     fun playSong(song: Song, fromPlaylist: Boolean = false, preserveQueue: Boolean = false, queueIndex: Int? = null) {
@@ -1729,11 +1582,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 c.pause()
             }
         }
-        val isPlaylistActive = fromPlaylist || (preserveQueue && _uiState.value.playlistQueueActive)
-        val isAlreadyInQueue = _uiState.value.queue.any { it.id == song.id }
+        PlaybackQueueStore.clearHalt()
+        val queueState = PlaybackQueueStore.state.value
+        val isPlaylistActive = fromPlaylist || (preserveQueue && queueState.playlistActive)
+        val isAlreadyInQueue = queueState.items.any { it.id == song.id }
 
-        // Optimistic UI: update song + state immediately so artwork/title swap is instant
-        _uiState.update {
+        updateQueueState {
             val currentIdx = it.resolvedCurrentIndex()
             val position = when {
                 preserveQueue || (isAlreadyInQueue && isPlaylistActive) ->
@@ -1748,9 +1602,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 queue = position.items,
                 currentQueueIndex = position.currentIndex,
                 playbackState = PlaybackState.Loading,
-                currentSongIsFavorite = it.favorites.any { s ->
-                    s.id == song.id || (s.title.isNotBlank() && s.title.equals(song.title, ignoreCase = true) && s.artist.equals(song.artist, ignoreCase = true))
-                },
+                currentSongIsFavorite = isFavorite(it.favorites, song),
                 playlistQueueActive = isPlaylistActive,
                 userQueuedSongIds = it.userQueuedSongIds.filter { qId -> qId != song.id },
                 currentSongStreamSource = null,
@@ -1776,7 +1628,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val streamUrl = resolveStreamUrl(song)
                 publishStreamSource(song.id)
-                val mediaItem = buildMediaItem(song, streamUrl)
+                val mediaItem = MediaItemFactory.build(song, streamUrl)
 
                 var activeController = controller
                 if (activeController == null || !activeController.isConnected) {
@@ -1815,17 +1667,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     _uiState.update { it.copy(playbackState = PlaybackState.Error("Player connecting... Please tap again.")) }
                 }
 
-                if (!isPlaylistActive) {
-                    val currentQueue = _uiState.value.queue
-                    val currentIdx = _uiState.value.resolvedCurrentIndex()
-                    val remaining = if (currentIdx >= 0) currentQueue.size - (currentIdx + 1) else 0
-                    if (remaining <= 2 && !_uiState.value.isFetchingUpNext) {
-                        fetchUpNext(song.id)
-                    }
-                }
                 fetchRecommendations(song.id)
                 triggerSmartQueuePrefetch(song.id)
-                preloadNextMediaItemInQueue()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1837,6 +1680,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun updateSongArtworkAcrossApp(songId: String, officialPoster: String) {
         if (officialPoster.isBlank()) return
+
+        viewModelScope.launch(Dispatchers.Main) {
+            PlaybackQueueStore.update { snapshot ->
+                if (snapshot.items.none { it.id == songId }) snapshot
+                else snapshot.copy(items = snapshot.items.map { if (it.id == songId) it.copy(artworkUrl = officialPoster) else it })
+            }
+        }
 
         _uiState.update { state ->
             fun shouldUpdate(s: Song?): Boolean = s != null && s.id == songId
@@ -2125,7 +1975,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun playAlbum(album: AlbumDetail, startSong: Song? = null) {
         if (album.songs.isNotEmpty()) {
             val songToPlay = startSong ?: album.songs.first()
-            _uiState.update { it.copy(queue = album.songs, playlistQueueActive = false) }
+            updateQueueState { it.copy(queue = album.songs, playlistQueueActive = false) }
             playSong(songToPlay, fromPlaylist = false, preserveQueue = true)
         } else if (startSong != null) {
             playSong(startSong)
@@ -2161,7 +2011,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (!isAutoEnd && now - lastSkipTimestampMs < 350L) return
         lastSkipTimestampMs = now
 
-        val state = _uiState.value
+        val state = _uiState.value.withQueue(PlaybackQueueStore.state.value)
         val current = state.currentSong ?: return
         val advance = QueueOps.next(
             state.queue,
@@ -2181,16 +2031,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             is QueueAdvance.PlayIndex -> {
                 val items = advance.reshuffledItems ?: state.queue
                 if (advance.reshuffledItems != null) {
-                    _uiState.update { it.copy(queue = items, currentQueueIndex = 0) }
+                    updateQueueState { it.copy(queue = items, currentQueueIndex = 0) }
                 }
                 val nextSong = items.getOrNull(advance.index) ?: return
                 playSong(nextSong, fromPlaylist = state.playlistQueueActive, preserveQueue = true, queueIndex = advance.index)
-                val remaining = items.size - (advance.index + 1)
-                if (advance.reshuffledItems == null &&
-                    com.shyan.dreamin.data.recommendation.SmartQueueEngine.shouldAutoExtendQueue(remaining, state.playlistQueueActive, _uiState.value.isFetchingUpNext)
-                ) {
-                    fetchUpNext((items.lastOrNull() ?: nextSong).id)
-                }
             }
             QueueAdvance.EndOfQueue -> {
                 if (!state.playlistQueueActive) continueWithRadio(current)
@@ -2199,60 +2043,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun continueWithRadio(current: Song, nextSlotIndex: Int? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    if (_uiState.value.isFetchingUpNext) {
-                        for (i in 0..15) {
-                            delay(150)
-                            val updated = _uiState.value
-                            val updatedIdx = updated.resolvedCurrentIndex()
-                            val target = if (updatedIdx >= 0) updatedIdx + 1 else nextSlotIndex
-                            if (target != null && target in updated.queue.indices) {
-                                withContext(Dispatchers.Main) {
-                                    playSong(updated.queue[target], fromPlaylist = false, preserveQueue = true, queueIndex = target)
-                                }
-                                return@launch
-                            }
-                        }
+        viewModelScope.launch {
+            try {
+                if (PlaybackQueueStore.isExtending.value) {
+                    kotlinx.coroutines.withTimeoutOrNull(RADIO_EXTENSION_WAIT_MS) {
+                        PlaybackQueueStore.isExtending.first { !it }
                     }
-
-                    val tracks = com.shyan.dreamin.data.service.YouTubeRadioService.fetchRadioRecommendations(current)
-                    for (track in tracks.take(8)) {
-                        val cleanT = track.title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                        val firstArtist = track.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                        val cand = catalog.searchOnDevice("$cleanT $firstArtist", limit = 1).firstOrNull()
-                            ?: catalog.searchOnDevice(cleanT, limit = 1).firstOrNull()
-                        if (cand != null && cand.id != current.id && OfficialSongFilter.isOfficial(cand, rejectHindi = false)) {
-                            val finalCand = if (track.artworkUrl.isNotBlank() && (cand.artworkUrl.isBlank() || cand.artworkUrl.contains("150x150") || cand.artworkUrl.contains("50x50") || cand.artworkUrl.contains("default"))) {
-                                cand.copy(artworkUrl = track.artworkUrl, album = track.album.ifBlank { cand.album })
-                            } else cand
-                            withContext(Dispatchers.Main) {
-                                playSong(finalCand, fromPlaylist = false, preserveQueue = true)
-                            }
-                            return@launch
-                        }
-                    }
-
-                    // Fallback to related / artist hits if YouTube Radio hits were exhausted
-                    val primaryArtist = current.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                    if (primaryArtist.isNotBlank()) {
-                        val artistHits = catalog.searchOnDevice("$primaryArtist hits", limit = 6).filter { it.id != current.id }
-                        if (artistHits.isNotEmpty()) {
-                            withContext(Dispatchers.Main) {
-                                playSong(artistHits.first(), fromPlaylist = false, preserveQueue = true)
-                            }
-                            return@launch
-                        }
-                    }
-
-                    withContext(Dispatchers.Main) { radioFailsafe(current) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    android.util.Log.e("MusicVM", "Continuous autoplay radio error: ${e.message}")
-                    withContext(Dispatchers.Main) { radioFailsafe(current) }
                 }
+                val snapshot = PlaybackQueueStore.state.value
+                val target = if (snapshot.currentIndex >= 0) snapshot.currentIndex + 1 else nextSlotIndex
+                val queued = target?.let { snapshot.items.getOrNull(it) }
+                if (queued != null) {
+                    playSong(queued, fromPlaylist = false, preserveQueue = true, queueIndex = target)
+                    return@launch
+                }
+                val pick = catalog.findRadioContinuation(current)
+                if (pick != null) playSong(pick, fromPlaylist = false, preserveQueue = true)
+                else radioFailsafe(current)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Continuous autoplay radio error: ${e.message}")
+                radioFailsafe(current)
             }
+        }
     }
 
     private fun radioFailsafe(current: Song) {
@@ -2269,7 +2083,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (now - lastSkipTimestampMs < 350L) return
         lastSkipTimestampMs = now
 
-        val state = _uiState.value
+        val state = _uiState.value.withQueue(PlaybackQueueStore.state.value)
         if (state.currentSong == null) return
         val advance = QueueOps.previous(
             state.queue,
@@ -2288,8 +2102,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun addToQueue(song: Song) {
-        _uiState.update { state ->
-            if (song.id == state.currentSong?.id) return@update state
+        updateQueueState { state ->
+            if (song.id == state.currentSong?.id) return@updateQueueState state
             val position = QueueOps.addToQueue(
                 state.queue,
                 state.resolvedCurrentIndex(),
@@ -2303,12 +2117,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = state.userQueuedSongIds.filter { it != song.id } + song.id
             )
         }
-        syncPreloadedMediaItem()
     }
 
     fun playNext(song: Song) {
-        _uiState.update { state ->
-            if (song.id == state.currentSong?.id) return@update state
+        updateQueueState { state ->
+            if (song.id == state.currentSong?.id) return@updateQueueState state
             val position = QueueOps.playNext(state.queue, state.resolvedCurrentIndex(), state.currentSong, song)
             state.copy(
                 queue = position.items,
@@ -2316,12 +2129,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = listOf(song.id) + state.userQueuedSongIds.filter { it != song.id }
             )
         }
-        syncPreloadedMediaItem()
     }
 
     fun removeFromQueue(song: Song) {
-        _uiState.update { state ->
-            if (song.id == state.currentSong?.id) return@update state
+        updateQueueState { state ->
+            if (song.id == state.currentSong?.id) return@updateQueueState state
             val position = QueueOps.removeById(state.queue, state.resolvedCurrentIndex(), song.id)
             state.copy(
                 queue = position.items,
@@ -2329,12 +2141,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = state.userQueuedSongIds.filter { id -> id != song.id }
             )
         }
-        syncPreloadedMediaItem()
     }
 
     fun restoreToQueue(song: Song, index: Int) {
-        _uiState.update { state ->
-            if (state.queue.any { it.id == song.id }) return@update state
+        updateQueueState { state ->
+            if (state.queue.any { it.id == song.id }) return@updateQueueState state
             val currentIdx = state.resolvedCurrentIndex()
             val insertIdx = index.coerceIn(0, state.queue.size)
             state.copy(
@@ -2343,11 +2154,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = state.userQueuedSongIds + song.id
             )
         }
-        syncPreloadedMediaItem()
     }
 
     fun clearQueue() {
-        _uiState.update { state ->
+        updateQueueState { state ->
             val current = state.currentSong
             state.copy(
                 queue = if (current != null) listOf(current) else emptyList(),
@@ -2355,16 +2165,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 userQueuedSongIds = emptyList()
             )
         }
-        syncPreloadedMediaItem()
     }
 
     fun reorderQueue(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
-        _uiState.update { state ->
+        updateQueueState { state ->
             val position = QueueOps.move(state.queue, state.resolvedCurrentIndex(), fromIndex, toIndex)
             state.copy(queue = position.items, currentQueueIndex = position.currentIndex)
         }
-        syncPreloadedMediaItem()
     }
 
     fun toggleQueue() {
@@ -2388,8 +2196,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val saved = userPrefs.loadSavedQueue()
             val idx = saved?.resumeIndexFor(session.song.id) ?: -1
             if (saved != null && idx >= 0) {
-                _uiState.update {
+                updateQueueState {
                     it.copy(
+                        currentSong = saved.items[idx],
                         queue = saved.items,
                         currentQueueIndex = idx,
                         playlistQueueActive = saved.playlistActive,
@@ -2751,80 +2560,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         com.shyan.dreamin.data.service.PaletteMemoryCache.clearCache()
     }
 
-    private fun fetchUpNext(songId: String) {
-        if (_uiState.value.playlistQueueActive) return
-        viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(isFetchingUpNext = true) }
-            try {
-                val currentSong = _uiState.value.currentSong ?: return@launch
-                val ytSongs = catalog.resolveRadioCandidates(currentSong, limit = 16)
-
-                val finalQueueTracks = if (ytSongs.isNotEmpty()) {
-                    SmartQueueEngine.buildQueue(
-                        ytRadioHits = ytSongs,
-                        fallbackHits = emptyList(),
-                        currentSong = currentSong,
-                        existingQueue = _uiState.value.queue,
-                        limit = 18
-                    )
-                } else {
-                    val primaryArtist = currentSong.artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: ""
-                    val related = catalog.fetchJioSaavnRelated(songId)
-                    val artistHits = if (primaryArtist.isNotBlank()) catalog.searchOnDevice("$primaryArtist hits", limit = 10) else emptyList()
-                    SmartQueueEngine.buildQueue(
-                        ytRadioHits = emptyList(),
-                        fallbackHits = related + artistHits,
-                        currentSong = currentSong,
-                        existingQueue = _uiState.value.queue,
-                        limit = 15
-                    )
-                }
-
-                if (finalQueueTracks.isNotEmpty()) {
-                    _uiState.update { state ->
-                        if (state.playlistQueueActive) return@update state
-                        val existingIds = state.queue.map { it.id }.toSet()
-                        val newUnique = finalQueueTracks.filter { it.id !in existingIds }
-                        state.copy(queue = state.queue + newUnique)
-                    }
-
-                    // Preload the next item in ExoPlayer if it only has 1 item
-                    preloadNextMediaItemInQueue()
-
-                    // Pre-buffer the immediate upcoming track for seamless zero-gap transitions
-                    finalQueueTracks.firstOrNull()?.let { upcomingSong ->
-                        launch(Dispatchers.IO) {
-                            try {
-                                val stream = resolveStreamUrl(upcomingSong)
-                                if (stream.isNotBlank()) {
-                                    val context = getApplication<Application>()
-                                    com.shyan.dreamin.service.PreBufferManager.preBufferUpcomingStream(context, stream, viewModelScope)
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    }
-
-                    finalQueueTracks.forEach { qSong ->
-                        launch(Dispatchers.IO) {
-                            try {
-                                if (qSong.artworkUrl.isBlank() || qSong.artworkUrl.contains("default") || com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(qSong) == null) {
-                                    val poster = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(qSong)
-                                    if (!poster.isNullOrBlank()) {
-                                        updateSongArtworkAcrossApp(qSong.id, poster)
-                                    }
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("MusicVM", "fetchUpNext error: ${e.message}")
-            } finally {
-                _uiState.update { it.copy(isFetchingUpNext = false) }
-            }
-        }
-    }
-
     private fun fetchRecommendations(songId: String) {
         val seedTitle = _uiState.value.currentSong?.artist
         viewModelScope.launch(Dispatchers.IO) {
@@ -2866,25 +2601,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun toggleShuffle() {
-        val newShuffle = !_uiState.value.isShuffle
-        _uiState.update { state ->
+        val newShuffle = !PlaybackQueueStore.state.value.isShuffle
+        updateQueueState { state ->
             val idx = state.resolvedCurrentIndex()
             val reorderedQueue = if (newShuffle) QueueOps.shuffleUpcoming(state.queue, idx) else state.queue
             state.copy(isShuffle = newShuffle, queue = reorderedQueue, currentQueueIndex = idx)
         }
         controller?.let { applyPlayerModes(it) }
-        syncPreloadedMediaItem()
     }
 
     fun toggleRepeat() {
-        val next = when (_uiState.value.repeatMode) {
+        val next = when (PlaybackQueueStore.state.value.repeatMode) {
             TrackRepeatMode.OFF -> TrackRepeatMode.ONE
             TrackRepeatMode.ONE -> TrackRepeatMode.ALL
             TrackRepeatMode.ALL -> TrackRepeatMode.OFF
         }
-        _uiState.update { it.copy(repeatMode = next) }
+        updateQueueState { it.copy(repeatMode = next) }
         controller?.let { applyPlayerModes(it) }
-        syncPreloadedMediaItem()
     }
 
     fun extractColorsFromArtwork(artworkUrl: String) {
