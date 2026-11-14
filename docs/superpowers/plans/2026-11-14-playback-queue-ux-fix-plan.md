@@ -65,7 +65,9 @@ Extract queue math out of the 3,193-line ViewModel so every later fix is testabl
 
 Larger refactor; makes background playback independent of the Activity.
 
-> **Status / handoff (2026-11-15):** Phases 0-1 committed on branch `fix/playback-queue-phase-0-1` (`e1dcb98`). Phase 2: 2a-2e done; 2f partially done (ViewModel side); build + 157 unit tests green. Resume by finishing 2f (save on `onTaskRemoved`/`onDestroy`, restore in `MusicService.onCreate`). Not yet verified on a device.
+> **Status / handoff (2026-11-15):** Phases 0-1 committed on branch `fix/playback-queue-phase-0-1` (`e1dcb98`). Phase 2 (2a-2f) is code-complete; build + 164 unit tests green. Next: run the "Verify after 2d-2f" device checks below, then start Phase 3.
+>
+> **After 2f:** service-side `QueuePersistence` saves the queue (debounced 2 s) and the current song + position (on pause, on song change, every 15 s while playing, on `onTaskRemoved`, blocking on `onDestroy`). `MusicService` implements `onPlaybackResumption`, so Bluetooth/headset/lock-screen play on an empty player restores the saved queue at the saved position (`QueueRestore.resumeTarget`, unit tested); a Media3 `MediaButtonReceiver` is declared in the manifest. Restore happens on resumption rather than in `onCreate`, so app start does not silently load a stream. The ViewModel no longer saves anything; its cold-start `resumeLastSession` reads the same keys.
 >
 > **After 2e:** every next/previous (app buttons via `MediaController.seekToNext/Previous`, lock screen, notification, Bluetooth) goes through `ForwardingPlayer` → `QueueController.skipToNext/skipToPrevious` (350 ms debounce; uses the preloaded item gaplessly when it matches). ExoPlayer error recovery (re-resolve once, then skip, halt after 3 failures in a row) also lives in `QueueController.onPlayerError`. The ViewModel no longer has any next/previous, radio or error logic.
 >
@@ -86,7 +88,7 @@ Larger refactor; makes background playback independent of the Activity.
 > - [x] **2c Stream resolver service-side.** (done: `service/StreamResolver(downloadRepo, api)`, `StreamResolver.isYoutubeStream(id)`) Move `resolveStreamUrl` + `youtubeStreamSongIds` into `…/service/StreamResolver.kt` usable from both service and ViewModel.
 > - [x] **2d QueueController in service.** (done: store owns the queue; see "After 2d" above) `…/service/QueueController.kt` owns: STATE_ENDED auto-advance, preload of next item, radio extension when ≤2 remain (via `CatalogRepository`), using `PlaybackQueueStore` + `QueueOps`. Register as a `Player.Listener` in `MusicService.onCreate`. Remove the ViewModel's STATE_ENDED handling and preload code.
 > - [x] **2e Direct controls.** (done; also moved error recovery into `QueueController`) `ForwardingPlayer.seekToNext/Previous` call `QueueController` directly; delete `ACTION_PLAY_NEXT/PREVIOUS` broadcasts and the receiver branches.
-> - [~] **2f Persistence.** (partial: queue snapshot saved to DataStore debounced 2 s via `startQueuePersistence`; `resumeLastSession` restores the full queue + index. Still TODO: save on `onTaskRemoved`/`onDestroy` and restore inside `MusicService.onCreate` once 2d exists) Save `QueueSnapshot` + position to DataStore (JSON via Gson, debounce 2 s, also on `onTaskRemoved`/`onDestroy`); restore in `MusicService.onCreate` and in the ViewModel on cold start (replaces single-song `lastSession` resume).
+> - [x] **2f Persistence.** (done: service `QueuePersistence` + `onPlaybackResumption`; see "After 2f" above) Save `QueueSnapshot` + position to DataStore (JSON via Gson, debounce 2 s, also on `onTaskRemoved`/`onDestroy`); restore in `MusicService.onCreate` and in the ViewModel on cold start (replaces single-song `lastSession` resume).
 >
 > **Verify after 2d-2f:** swipe app from recents mid-playlist → ≥3 songs continue; lock-screen next/previous work with app killed; reopening shows the same queue and position; existing 128 tests + new store/controller tests pass.
 

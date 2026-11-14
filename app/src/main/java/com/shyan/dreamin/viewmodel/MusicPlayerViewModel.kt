@@ -27,9 +27,7 @@ import com.shyan.dreamin.data.queue.QueueTransitions
 import com.shyan.dreamin.data.queue.toQueueSnapshot
 import com.shyan.dreamin.data.queue.withQueue
 import com.shyan.dreamin.service.MediaItemFactory
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.updateAndGet
-import kotlinx.coroutines.flow.debounce
 import com.shyan.dreamin.service.MusicService
 import androidx.media3.common.C
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +58,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val MAX_LISTEN_TICK_MS = 3_000L
-        const val QUEUE_SAVE_DEBOUNCE_MS = 2_000L
         const val REPLAY_START_WINDOW_MS = 1_000L
         const val REPLAY_MIN_PLAYED_MS = 3_000L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
@@ -180,7 +177,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 _uiState.update { it.copy(isFetchingUpNext = extending) }
             }
         }
-        startQueuePersistence()
 
         connectToService()
         loadChart()
@@ -1362,7 +1358,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun startPositionPoller() {
         val powerManager = getApplication<Application>().getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
         viewModelScope.launch {
-            var saveCounter = 0
             while (isActive) {
                 val isScreenOn = powerManager?.isInteractive ?: true
                 val pollDelay = if (isScreenOn) 100L else 2500L
@@ -1386,14 +1381,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (currentSongId != null && lastPrefetchedTrackId != currentSongId) {
                         lastPrefetchedTrackId = currentSongId
                         prefetchQueueArtworks(_uiState.value.queue, currentSongId)
-                    }
-                }
-
-                saveCounter += if (isScreenOn) 1 else 25
-                if (saveCounter >= 100) {
-                    saveCounter = 0
-                    _uiState.value.currentSong?.let { song ->
-                        userPrefs.saveLastSession(song, pos)
                     }
                 }
             }
@@ -2077,27 +2064,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    @OptIn(kotlinx.coroutines.FlowPreview::class)
-    private fun startQueuePersistence() {
-        viewModelScope.launch(Dispatchers.IO) {
-            PlaybackQueueStore.state
-                .drop(1)
-                .debounce(QUEUE_SAVE_DEBOUNCE_MS)
-                .collect { snap ->
-                    if (snap.items.isNotEmpty() && snap.currentIndex >= 0) {
-                        userPrefs.saveQueue(
-                            com.shyan.dreamin.data.local.UserPreferencesDataStore.SavedQueue(
-                                items = snap.items,
-                                currentIndex = snap.currentIndex,
-                                playlistActive = snap.playlistActive,
-                                userQueuedIds = snap.userQueuedIds
-                            )
-                        )
-                    }
-                }
-        }
-    }
-
     fun activateSearch() {
         _uiState.update { it.copy(isSearchActive = true) }
     }
@@ -2490,11 +2456,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     override fun onCleared() {
-        val song = _uiState.value.currentSong
-        val pos = controller?.currentPosition?.coerceAtLeast(0L) ?: 0L
-        if (song != null) {
-            viewModelScope.launch { userPrefs.saveLastSession(song, pos) }
-        }
         controller?.removeListener(playerListener)
         isListenerAttached = false
         openPlaylistJob?.cancel()

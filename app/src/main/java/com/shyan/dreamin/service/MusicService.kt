@@ -33,6 +33,8 @@ import com.google.common.util.concurrent.SettableFuture
 import com.shyan.dreamin.MainActivity
 import com.shyan.dreamin.data.local.AppDatabase
 import com.shyan.dreamin.data.local.DownloadRepository
+import com.shyan.dreamin.data.local.UserPreferencesDataStore
+import com.shyan.dreamin.data.queue.PlaybackQueueStore
 import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.data.repository.CatalogRepository
 import kotlinx.coroutines.CoroutineScope
@@ -93,6 +95,8 @@ class MusicService : MediaSessionService() {
     private var favoriteJob: Job? = null
     private var isCurrentFavorite: Boolean = false
     private var queueController: QueueController? = null
+    private var queuePersistence: QueuePersistence? = null
+    private var streamResolver: StreamResolver? = null
 
     companion object {
         const val ACTION_TOGGLE_FAVORITE = "com.shyan.dreamin.ACTION_TOGGLE_FAVORITE"
@@ -193,13 +197,20 @@ class MusicService : MediaSessionService() {
         AudioFxManager.attachAudioSession(player.audioSessionId)
 
         val downloadRepo = DownloadRepository(applicationContext, AppDatabase.getInstance(applicationContext).downloadDao())
+        val resolver = StreamResolver(downloadRepo, NetworkService.api)
+        streamResolver = resolver
         queueController = QueueController(
             context = applicationContext,
             player = player,
             scope = serviceScope,
-            streamResolver = StreamResolver(downloadRepo, NetworkService.api),
+            streamResolver = resolver,
             catalog = CatalogRepository(NetworkService.api),
             downloadRepo = downloadRepo
+        ).also { it.start() }
+        queuePersistence = QueuePersistence(
+            player = player,
+            prefs = UserPreferencesDataStore(applicationContext),
+            scope = serviceScope
         ).also { it.start() }
 
         val forwardingPlayer = object : ForwardingPlayer(player) {
@@ -284,6 +295,11 @@ class MusicService : MediaSessionService() {
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
+
+            override fun onPlaybackResumption(
+                session: MediaSession,
+                controller: MediaSession.ControllerInfo
+            ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = resumePlayback()
         }
 
         val sessionActivity = PendingIntent.getActivity(
@@ -322,7 +338,43 @@ class MusicService : MediaSessionService() {
         }
     }
 
+    private fun resumePlayback(): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+        val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+        serviceScope.launch {
+            try {
+                val target = queuePersistence?.loadResumeTarget()
+                val song = target?.song
+                val resolver = streamResolver
+                if (target == null || song == null || resolver == null) {
+                    future.setException(IllegalStateException("No playback session to resume"))
+                    return@launch
+                }
+                PlaybackQueueStore.publish(target.snapshot)
+                val url = resolver.resolve(song)
+                if (PlaybackQueueStore.state.value.currentSong?.id != song.id) {
+                    future.setException(IllegalStateException("Queue changed while resuming"))
+                    return@launch
+                }
+                future.set(
+                    MediaSession.MediaItemsWithStartPosition(
+                        listOf(MediaItemFactory.build(song, url)),
+                        0,
+                        target.positionMs
+                    )
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                future.cancel(false)
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("MusicService", "Playback resumption failed: ${e.message}")
+                future.setException(e)
+            }
+        }
+        return future
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
+        queuePersistence?.saveNow()
         val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
@@ -438,6 +490,9 @@ class MusicService : MediaSessionService() {
     override fun onDestroy() {
         favoriteJob?.cancel()
         favoriteJob = null
+        queuePersistence?.saveBlocking()
+        queuePersistence?.release()
+        queuePersistence = null
         queueController?.release()
         queueController = null
         serviceScope.cancel()
