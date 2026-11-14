@@ -188,15 +188,17 @@ Larger refactor; makes background playback independent of the Activity.
 
 **Files:** `…/ui/screens/UiUtils.kt`, `…/ui/theme/Theme.kt`, `…/ui/theme/Type.kt`, all screens/components
 
-- [ ] Single color source: delete duplicate palette in `theme/Theme.kt` (or `UiUtils.kt`), map `ResonanceTheme` to `DreaminColors`. Replace `Color(0xFFA8C7FA)` etc. in Sleep Timer and others with tokens.
-- [ ] Motion tokens: extend `DreaminMotion` (`Quick`, `Standard`, `Emphasized`, `Bouncy`, enter/exit durations) and replace ad-hoc `spring`/`tween` (≈60 sites, 9 damping ratios).
-- [ ] `DreaminHaptics`: `tap` (ContextClick/Confirm), `toggle`, `tick` (SegmentTick/TextHandleMove), `longPress`; replace the 17 `LongPress` uses.
-- [ ] Typography: map the 26 ad-hoc font sizes onto `SonicNocturneTypography` styles.
-- [ ] Shape tokens: `small 8`, `medium 14`, `large 18`, `xl 26` dp; replace 17 radii.
-- [ ] Icons: SkipPrevious/SkipNext everywhere; one animated "now playing" equalizer indicator (static when paused) used by SongRow, Queue, Album, Artist, Playlist.
-- [ ] Titles: `displayTitle` everywhere a row/title is shown; Now Playing header shows "Now Playing" or album/context, not the title again.
-- [ ] One `SongOptionsMenu` and one `AddToPlaylistSheet` shared by SongRow, Queue, Now Playing, Playlist; sentence-case copy throughout.
-- [ ] Align reorder gesture (handle-drag) between Queue and PlaylistDetail.
+- [x] Single color source: delete duplicate palette in `theme/Theme.kt` (or `UiUtils.kt`), map `ResonanceTheme` to `DreaminColors`. Replace `Color(0xFFA8C7FA)` etc. in Sleep Timer and others with tokens.
+- [x] Motion tokens: extend `DreaminMotion` (`Quick`, `Standard`, `Emphasized`, `Bouncy`, enter/exit durations) and replace ad-hoc `spring`/`tween` (≈60 sites, 9 damping ratios).
+- [x] `DreaminHaptics`: `tap` (ContextClick/Confirm), `toggle`, `tick` (SegmentTick/TextHandleMove), `longPress`; replace the 17 `LongPress` uses.
+- [x] Typography: map the 26 ad-hoc font sizes onto `SonicNocturneTypography` styles.
+- [x] Shape tokens: `small 8`, `medium 14`, `large 18`, `xl 26` dp; replace 17 radii.
+- [x] Icons: SkipPrevious/SkipNext everywhere; one animated "now playing" equalizer indicator (static when paused) used by SongRow, Queue, Album, Artist, Playlist.
+- [x] Titles: `displayTitle` everywhere a row/title is shown; Now Playing header shows "Now Playing" or album/context, not the title again.
+- [x] One `SongOptionsMenu` and one `AddToPlaylistSheet` shared by SongRow, Queue, Now Playing, Playlist; sentence-case copy throughout.
+- [x] Align reorder gesture (handle-drag) between Queue and PlaylistDetail.
+
+> **Status (2026-11-15):** Phase 7 done; build + 186 unit tests green; not verified on a device. Tokens live in `ui/theme/` (`Color.kt` DreaminColors + `LocalDreaminColors`, `Motion.kt`, `Shape.kt`, `Haptics.kt`, `Type.kt`); `ResonanceTheme` derives the Material scheme from `DreaminColors`. UI has no hex literals or raw `fontSize` values; the remaining raw `tween`s are infinite loops and parametric ramps. Mapping onto the type scale and shape tokens slightly changes some sizes, weights and corner radii (for example 13.5 sp to 14 sp, 22 dp to 18 dp corners). Compose UI 1.7 has only two haptic types, so `DreaminHaptics` calls `View.performHapticFeedback` with platform constants. `NowPlayingIndicator` reads `LocalPlaybackActive` (provided in `MusicPlayerScreen`). `SongOptionsMenu`/`SongMenuActions` and `AddToPlaylistSheet` live in `ui/screens/SongOptions.kt`; the long-press `SongQuickActionsBottomSheet` stays as a separate affordance. Playlist and queue share `ui/components/ReorderHandle` (immediate drag on the handle); playlist reorder still writes each step to the database rather than on drag end. Notification metadata still uses the raw title, because the service matches favorites by it.
 
 ---
 

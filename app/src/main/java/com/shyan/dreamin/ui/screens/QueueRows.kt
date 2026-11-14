@@ -283,7 +283,7 @@ internal fun QueueSongItemRow(
             }
 
             if (onDragStart != null) {
-                DragHandle(dragKey, isDragging, onDragStart, onDrag, onDragEnd)
+                com.shyan.dreamin.ui.components.ReorderHandle(dragKey, isDragging, onDragStart, onDrag, onDragEnd)
             }
         }
     }
@@ -298,44 +298,3 @@ internal fun QueueSongItemRow(
     }
 }
 
-@Composable
-private fun DragHandle(
-    dragKey: String,
-    isDragging: Boolean,
-    onDragStart: () -> Unit,
-    onDrag: (Float) -> Unit,
-    onDragEnd: () -> Unit
-) {
-    val colors = LocalDreaminColors.current
-    val currentOnDragStart by rememberUpdatedState(onDragStart)
-    val currentOnDrag by rememberUpdatedState(onDrag)
-    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
-    val handleScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.15f else 1.0f,
-        animationSpec = DreaminMotion.bouncy(),
-        label = "drag_handle_scale"
-    )
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .pointerInput(dragKey) {
-                detectVerticalDragGestures(
-                    onDragStart = { currentOnDragStart() },
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        currentOnDrag(dragAmount)
-                    },
-                    onDragEnd = { currentOnDragEnd() },
-                    onDragCancel = { currentOnDragEnd() }
-                )
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.DragHandle,
-            contentDescription = "Reorder",
-            tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.65f),
-            modifier = Modifier.size(22.dp).graphicsLayer { scaleX = handleScale; scaleY = handleScale }
-        )
-    }
-}

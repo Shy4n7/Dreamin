@@ -2179,26 +2179,13 @@ fun PlaylistSongRow(
 
             // Reorder handle (Custom mode, not multi-select)
             if (isReorderable && !isMultiSelectMode) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .pointerInput(Unit) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { onDragStart() },
-                                onDrag = { _, dragAmount -> onDrag(dragAmount.y) },
-                                onDragEnd = { onDragEnd() },
-                                onDragCancel = { onDragEnd() }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.DragHandle,
-                        contentDescription = "Drag to reorder",
-                        tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.45f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                com.shyan.dreamin.ui.components.ReorderHandle(
+                    dragKey = song.id,
+                    isDragging = isDragging,
+                    onDragStart = onDragStart,
+                    onDrag = onDrag,
+                    onDragEnd = onDragEnd
+                )
             }
 
             Spacer(modifier = Modifier.width(4.dp))
