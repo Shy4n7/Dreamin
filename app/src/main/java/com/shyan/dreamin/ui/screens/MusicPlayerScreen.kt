@@ -591,15 +591,17 @@ private fun MainAppScaffold(
                 onToggleFavorite   = vm::toggleFavorite,
                 onSetSleepTimer    = vm::setSleepTimer,
                 onCancelSleepTimer = vm::cancelSleepTimer,
-                onSongSelect       = vm::playFromQueue,
+                onSongSelect       = { index, song -> vm.playQueueRow(index, song.id) },
                 onAddToPlaylist    = { playlistId ->
                     state.currentSong?.let { vm.addSongToPlaylist(playlistId, it) }
                 },
                 onCreatePlaylist   = { name, coverUri ->
                     vm.createPlaylist(name, coverUri)
                 },
-                onRemoveFromQueue    = vm::removeFromQueue,
+                onRemoveFromQueue    = { index, song, wasUserQueued -> vm.removeFromQueue(index, song.id, wasUserQueued) },
                 onRestoreToQueue     = vm::restoreToQueue,
+                onPlayNextFromQueue  = { song -> vm.playNext(song) },
+                onAddSongToPlaylist  = { song, playlistId -> vm.addSongToPlaylist(playlistId, song) },
                 onClearQueue         = vm::clearQueue,
                 onReorderQueue       = vm::reorderQueue,
                 onSaveQueueAsPlaylist = vm::saveQueueAsPlaylist,

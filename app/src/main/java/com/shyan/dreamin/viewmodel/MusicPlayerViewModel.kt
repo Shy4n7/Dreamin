@@ -1957,18 +1957,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         controller?.seekToNext() ?: connectToService()
     }
 
-    fun playFromQueue(song: Song) {
+    fun playQueueRow(index: Int, songId: String) {
         val snapshot = PlaybackQueueStore.state.value
+        val song = snapshot.items.getOrNull(index)?.takeIf { it.id == songId } ?: return
         val c = controller
-        val nextIndex = snapshot.currentIndex + 1
         val preloadedNextId = c?.takeIf { it.currentMediaItemIndex + 1 < it.mediaItemCount }
             ?.getMediaItemAt(c.currentMediaItemIndex + 1)?.mediaId
-        if (c != null && snapshot.items.getOrNull(nextIndex)?.id == song.id && preloadedNextId == song.id) {
+        if (c != null && index == snapshot.currentIndex + 1 && preloadedNextId == song.id) {
             c.seekTo(c.currentMediaItemIndex + 1, 0L)
             c.play()
             return
         }
-        playSong(song, fromPlaylist = snapshot.playlistActive, preserveQueue = true)
+        playSong(song, fromPlaylist = snapshot.playlistActive, preserveQueue = true, queueIndex = index)
     }
 
     fun playPrevious() {
@@ -2005,37 +2005,37 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun removeFromQueue(song: Song) {
+    fun removeFromQueue(index: Int, songId: String, wasUserQueued: Boolean) {
         updateQueueState { state ->
-            if (song.id == state.currentSong?.id) return@updateQueueState state
-            val position = QueueOps.removeById(state.queue, state.resolvedCurrentIndex(), song.id)
+            val currentIdx = state.resolvedCurrentIndex()
+            if (index == currentIdx || state.queue.getOrNull(index)?.id != songId) return@updateQueueState state
             state.copy(
-                queue = position.items,
-                currentQueueIndex = position.currentIndex,
-                userQueuedSongIds = state.userQueuedSongIds.filter { id -> id != song.id }
+                queue = QueueOps.removeAt(state.queue, index),
+                currentQueueIndex = if (index < currentIdx) currentIdx - 1 else currentIdx,
+                userQueuedSongIds = if (wasUserQueued) state.userQueuedSongIds.filter { it != songId } else state.userQueuedSongIds
             )
         }
     }
 
-    fun restoreToQueue(song: Song, index: Int) {
+    fun restoreToQueue(song: Song, index: Int, wasUserQueued: Boolean, wasUpcoming: Boolean) {
         updateQueueState { state ->
-            if (state.queue.any { it.id == song.id }) return@updateQueueState state
             val currentIdx = state.resolvedCurrentIndex()
-            val insertIdx = index.coerceIn(0, state.queue.size)
+            val floor = if (wasUpcoming && currentIdx >= 0) currentIdx + 1 else 0
+            val insertIdx = index.coerceIn(floor, state.queue.size)
             state.copy(
                 queue = state.queue.toMutableList().apply { add(insertIdx, song) }.toList(),
                 currentQueueIndex = if (currentIdx >= 0 && insertIdx <= currentIdx) currentIdx + 1 else currentIdx,
-                userQueuedSongIds = state.userQueuedSongIds + song.id
+                userQueuedSongIds = if (wasUserQueued) state.userQueuedSongIds + song.id else state.userQueuedSongIds
             )
         }
     }
 
     fun clearQueue() {
         updateQueueState { state ->
-            val current = state.currentSong
+            val currentIdx = state.resolvedCurrentIndex()
             state.copy(
-                queue = if (current != null) listOf(current) else emptyList(),
-                currentQueueIndex = if (current != null) 0 else -1,
+                queue = if (currentIdx >= 0) state.queue.take(currentIdx + 1) else emptyList(),
+                currentQueueIndex = currentIdx,
                 userQueuedSongIds = emptyList()
             )
         }

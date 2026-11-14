@@ -6,11 +6,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,33 +22,36 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.shyan.dreamin.data.model.*
+import com.shyan.dreamin.data.queue.QueueRow
+import com.shyan.dreamin.data.queue.QueueSections
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/**
- * 📜 Breathing curating animated line indicator for dynamic queue fetching.
- */
+private const val KEY_HISTORY_HEADER = "header:history"
+private const val KEY_NOW_PLAYING_HEADER = "header:now_playing"
+private const val KEY_FROM_YOU_HEADER = "header:from_you"
+private const val KEY_NEXT_UP_HEADER = "header:next_up"
+private const val KEY_CURATING = "footer:curating"
+
+private data class DragSession(val key: String, val rows: List<QueueRow>, val committedKeys: List<String>)
+
 @Composable
 fun BreathingCuratingLine(modifier: Modifier = Modifier) {
     val colors = LocalDreaminColors.current
@@ -54,28 +59,16 @@ fun BreathingCuratingLine(modifier: Modifier = Modifier) {
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.2f,
         targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
+        animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
         label = "line_alpha"
     )
     val scaleX by infiniteTransition.animateFloat(
         initialValue = 0.55f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
+        animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
         label = "line_scale"
     )
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(scaleX)
@@ -83,804 +76,513 @@ fun BreathingCuratingLine(modifier: Modifier = Modifier) {
                 .clip(RoundedCornerShape(2.dp))
                 .background(
                     androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(
-                            Color.Transparent,
-                            colors.primary.copy(alpha = alpha),
-                            colors.secondary.copy(alpha = alpha),
-                            Color.Transparent
-                        )
+                        listOf(Color.Transparent, colors.primary.copy(alpha = alpha), colors.secondary.copy(alpha = alpha), Color.Transparent)
                     )
                 )
         )
     }
 }
 
-/**
- * 🎵 Redesigned High-Fidelity Queue Screen.
- *
- * Implements the sleek dark queue layout matching design reference Screenshot 2:
- * - Mini artwork header with song title, artist, Heart, Lock, and 3-dots actions.
- * - Shuffle, Repeat, and Radio quick mode action pills.
- * - Section header with song count and total remaining queue duration.
- * - Ultra-smooth drag-to-reorder list with active song indicators.
- */
 @Composable
 fun QueueScreen(
     state: PlayerUiState,
-    onSongClick: (Song) -> Unit,
-    onRemoveFromQueue: (Song) -> Unit,
-    onRestoreToQueue: (Song, Int) -> Unit = { _, _ -> },
-    onReorderQueue: (Int, Int) -> Unit = { _, _ -> },
-    onToggleShuffle: () -> Unit = {},
-    onToggleRepeat: () -> Unit = {},
-    onToggleFavorite: () -> Unit = {},
-    onToggleQueueLock: () -> Unit = {},
-    onStartRadio: () -> Unit = {},
-    onAddToPlaylist: ((Song, Long) -> Unit)? = null,
-    onPlayNext: ((Song) -> Unit)? = null,
-    onSaveQueueAsPlaylist: (String) -> Unit = {},
-    onBack: () -> Unit = {},
-    backHandlerEnabled: Boolean = true,
+    progressFlow: StateFlow<PlaybackProgress>,
+    onSongClick: (Int, Song) -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onRemoveFromQueue: (Int, Song, Boolean) -> Unit,
+    onRestoreToQueue: (Song, Int, Boolean, Boolean) -> Unit,
+    onReorderQueue: (Int, Int) -> Unit,
+    onClearUpcoming: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onToggleRepeat: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onAddToPlaylist: (Song, Long) -> Unit,
+    onPlayNext: (Song) -> Unit,
+    onSaveQueueAsPlaylist: (String) -> Unit,
+    onBack: () -> Unit,
+    backHandlerEnabled: Boolean,
     modifier: Modifier = Modifier,
     backgroundColor: Color = Color.Transparent
 ) {
     val colors = LocalDreaminColors.current
     val haptic = LocalHapticFeedback.current
-    val density = LocalDensity.current
-    val coroutineScope = rememberCoroutineScope()
-    val heartButtonScale = remember { Animatable(1f) }
-
-    val triggerFavoriteWithAnim = remember(onToggleFavorite) {
-        {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            coroutineScope.launch {
-                heartButtonScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
-                heartButtonScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-                heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
-            }
-            onToggleFavorite()
-        }
-    }
-
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    var draggingIndex by remember { mutableStateOf<Int?>(null) }
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    val rowHeightPx = with(density) { 64.dp.toPx() }
+    val snackbarHostState = remember { SnackbarHostState() }
 
+    val sections = remember(state.queue, state.currentQueueIndex, state.userQueuedSongIds) {
+        QueueSections.build(state.queue, state.currentQueueIndex, state.userQueuedSongIds)
+    }
+    val latestSections by rememberUpdatedState(sections)
+    var historyExpanded by rememberSaveable { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
-
-    var pullDownAccumulated by remember { mutableFloatStateOf(0f) }
-    var pullDownTriggered by remember { mutableStateOf(false) }
-    val pullDownThresholdPx = with(density) { 36.dp.toPx() }
-
-    val queueNestedScrollConnection = remember(listState, onBack) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // If user drags downward and the list cannot scroll backward (at the top)
-                if (available.y > 0 && !listState.canScrollBackward) {
-                    if (!pullDownTriggered) {
-                        pullDownAccumulated += available.y
-                        if (pullDownAccumulated > pullDownThresholdPx) {
-                            pullDownTriggered = true
-                            pullDownAccumulated = 0f
-                            onBack()
-                        }
-                    }
-                    return Offset(0f, available.y)
-                } else if (available.y < 0) {
-                    pullDownAccumulated = 0f
-                    pullDownTriggered = false
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (available.y > 80f && !listState.canScrollBackward && !pullDownTriggered) {
-                    pullDownTriggered = true
-                    pullDownAccumulated = 0f
-                    onBack()
-                    return available
-                }
-                pullDownAccumulated = 0f
-                return Velocity.Zero
-            }
-        }
-    }
-
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress) {
-            pullDownAccumulated = 0f
-            pullDownTriggered = false
-        }
-    }
-
-    LaunchedEffect(backHandlerEnabled) {
-        if (backHandlerEnabled) {
-            pullDownAccumulated = 0f
-            pullDownTriggered = false
-        }
-    }
-
-    val queueItemKeys = remember(state.queue) {
-        val countMap = HashMap<String, Int>(state.queue.size)
-        state.queue.map { song ->
-            val count = countMap[song.id] ?: 0
-            countMap[song.id] = count + 1
-            if (count == 0) song.id else "${song.id}#$count"
-        }
-    }
-
-    LaunchedEffect(state.queue.size) {
-        if (draggingIndex != null && draggingIndex !in state.queue.indices) {
-            draggingIndex = null
-            dragOffsetY = 0f
-        }
-    }
+    var dragSession by remember { mutableStateOf<DragSession?>(null) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
     BackHandler(enabled = backHandlerEnabled) { onBack() }
 
-    // Calculate total formatted duration of upcoming tracks
-    val totalDurationFormatted = remember(state.queue) {
-        val totalSecs = state.queue.sumOf { song: Song ->
-            if (song.duration > 10_000L) song.duration / 1000L else song.duration
+    LaunchedEffect(backHandlerEnabled) {
+        if (!backHandlerEnabled) return@LaunchedEffect
+        val nowPlayingIndex = if (historyExpanded && sections.history.isNotEmpty()) 1 + sections.history.size else 0
+        listState.scrollToItem(nowPlayingIndex)
+    }
+
+    val trySwap: () -> Unit = trySwap@{
+        val session = dragSession ?: return@trySwap
+        val swapped = swapAcrossNeighbor(session, dragOffsetY, listState, latestSections.fromYou.size) ?: return@trySwap
+        dragSession = swapped.first
+        dragOffsetY = swapped.second
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    val endDrag: () -> Unit = endDrag@{
+        val session = dragSession ?: return@endDrag
+        val committed = latestSections
+        val localIndex = session.rows.indexOfFirst { it.key == session.key }
+        val row = session.rows.getOrNull(localIndex)
+        val unchanged = committed.upcoming.map { it.key } == session.committedKeys
+        val upcomingStart = (committed.current?.index ?: -1) + 1
+        if (row != null && unchanged && row.index != upcomingStart + localIndex) {
+            onReorderQueue(row.index, upcomingStart + localIndex)
         }
-        val hours = totalSecs / 3600
-        val minutes = (totalSecs % 3600) / 60
-        val seconds = totalSecs % 60
-        if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            String.format("%d:%02d", minutes, seconds)
+        dragSession = null
+        dragOffsetY = 0f
+    }
+
+    EdgeAutoScroll(
+        draggingKey = dragSession?.key,
+        listState = listState,
+        dragOffsetY = { dragOffsetY },
+        onScrolled = { consumed ->
+            dragOffsetY += consumed
+            trySwap()
+        }
+    )
+
+    val removeWithUndo: (QueueRow, Boolean, Boolean) -> Unit = { row, wasUserQueued, wasUpcoming ->
+        onRemoveFromQueue(row.index, row.song, wasUserQueued)
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = "Removed “${row.song.title}”",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) onRestoreToQueue(row.song, row.index, wasUserQueued, wasUpcoming)
         }
     }
 
     if (showSaveDialog) {
         SaveQueueDialog(
             onDismiss = { showSaveDialog = false },
-            onSave = { name ->
-                onSaveQueueAsPlaylist(name)
-                showSaveDialog = false
-            }
+            onSave = { name -> onSaveQueueAsPlaylist(name); showSaveDialog = false }
         )
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(backgroundColor)
-            .statusBarsPadding()
-    ) {
-        // Top Header: Collapse Arrow on Top Left + Drag Handle Pill (tap or drag down to return to Now Playing)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-        ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .size(44.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Back to Now Playing",
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .pointerInput(onBack) {
-                        detectVerticalDragGestures(
-                            onVerticalDrag = { change, dragAmount ->
-                                if (dragAmount > 8f) {
-                                    change.consume()
-                                    onBack()
-                                }
-                            }
-                        )
-                    }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onBack() }
-                    .padding(horizontal = 32.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.40f))
-                )
-            }
-        }
-
-        // 1. Top Bar (Mini artwork, Title, Artist, Heart, Lock, More)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Mini artwork thumbnail
-            val currentSong = state.currentSong
-            AsyncImage(
-                model = currentSong?.displayArtworkUrl,
-                contentDescription = currentSong?.title,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onBack() },
-                contentScale = ContentScale.Crop
+    Box(modifier = modifier.fillMaxSize().background(backgroundColor)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            QueueTopHandle(onBack)
+            QueueNowPlayingBar(
+                state = state,
+                hasUpcoming = sections.upcoming.isNotEmpty(),
+                onBack = onBack,
+                onToggleFavorite = onToggleFavorite,
+                onSaveQueue = { showSaveDialog = true },
+                onClearUpcoming = onClearUpcoming
             )
+            QueueModePills(state, onToggleShuffle, onToggleRepeat)
+            QueueSummaryHeader(sections, progressFlow)
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onBack() }
-            ) {
-                Text(
-                    text = currentSong?.title ?: "No Track Playing",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = currentSong?.artist ?: "Dreamin",
-                    fontSize = 13.sp,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Action Button: Heart with tactile spring animation
-            val isFav = state.currentSongIsFavorite
-            val favBgColor by animateColorAsState(
-                targetValue = if (isFav) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.10f),
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                label = "queue_fav_bg_color"
-            )
-            val favIconColor by animateColorAsState(
-                targetValue = if (isFav) colors.primary else Color.White,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                label = "queue_fav_icon_color"
-            )
-
-            IconButton(
-                onClick = triggerFavoriteWithAnim,
-                modifier = Modifier
-                    .size(44.dp)
-                    .graphicsLayer {
-                        scaleX = heartButtonScale.value
-                        scaleY = heartButtonScale.value
-                    }
-                    .clip(CircleShape)
-                    .background(favBgColor)
-            ) {
-                AnimatedContent(
-                    targetState = isFav,
-                    transitionSpec = {
-                        (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
-                            .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
-                    },
-                    label = "queue_fav_icon_morph"
-                ) { fav ->
-                    Icon(
-                        imageVector = if (fav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
-                        tint = favIconColor,
-                        modifier = Modifier.size(22.dp)
-                    )
+            if (state.queue.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("Queue is empty. Play a song to get started.", color = colors.onSurfaceVariant, fontSize = 15.sp)
                 }
-            }
-        }
+            } else {
+                val upcomingRows = dragSession?.rows ?: sections.upcoming
+                val fromYouCount = sections.fromYou.size
+                val isPlaying = state.playbackState is PlaybackState.Playing
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 2. Quick Action Pills Row (Shuffle, Repeat)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Shuffle Pill
-            QueueActionPill(
-                icon = Icons.Filled.Shuffle,
-                label = "Shuffle",
-                isActive = state.isShuffle,
-                onClick = onToggleShuffle,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Repeat Pill
-            val repeatActive = state.repeatMode != TrackRepeatMode.OFF
-            val repeatIcon = if (state.repeatMode == TrackRepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat
-            QueueActionPill(
-                icon = repeatIcon,
-                label = "Repeat",
-                isActive = repeatActive,
-                onClick = onToggleRepeat,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 3. Section Header ("Continue Playing", "Next in Queue", count, duration)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(onBack) {
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { change, dragAmount ->
-                            if (dragAmount > 8f) {
-                                change.consume()
-                                onBack()
-                            }
-                        }
-                    )
-                }
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = "Continue Playing",
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "Next in Queue",
-                    fontSize = 13.sp,
-                    color = colors.onSurfaceVariant
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${state.queue.size} songs",
-                    fontSize = 13.sp,
-                    color = colors.onSurfaceVariant
-                )
-                Text(
-                    text = totalDurationFormatted,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.85f)
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = state.isFetchingUpNext,
-            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(300)) + shrinkVertically(tween(250))
-        ) {
-            BreathingCuratingLine(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 4. Queue List
-        if (state.queue.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Queue is empty. Play a song to get started.",
-                    color = colors.onSurfaceVariant,
-                    fontSize = 15.sp
-                )
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(queueNestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 40.dp)
-            ) {
-                itemsIndexed(
-                    items = state.queue,
-                    key = { index, _ -> queueItemKeys.getOrElse(index) { "${state.queue.getOrNull(index)?.id ?: index}_$index" } },
-                    contentType = { _, _ -> "queue_row" }
-                ) { index, song ->
-                    val isCurrent = song.id == state.currentSong?.id
-                    val isDragging = draggingIndex == index
-
-                    val rowModifier = if (isDragging) {
-                        Modifier
-                    } else {
-                        Modifier.animateItem(
-                            fadeInSpec = tween(220, easing = LinearOutSlowInEasing),
-                            fadeOutSpec = tween(180, easing = FastOutLinearInEasing),
-                            placementSpec = spring(
-                                dampingRatio = 0.82f,
-                                stiffness = Spring.StiffnessMediumLow
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 40.dp)
+                ) {
+                    if (sections.history.isNotEmpty()) {
+                        item(key = KEY_HISTORY_HEADER) {
+                            QueueSectionHeader(
+                                title = "History",
+                                trailing = sections.history.size.toString(),
+                                expanded = historyExpanded,
+                                onClick = { historyExpanded = !historyExpanded }
                             )
-                        )
+                        }
+                        if (historyExpanded) {
+                            items(sections.history, key = { it.key }) { row ->
+                                QueueSongItemRow(
+                                    song = row.song,
+                                    dragKey = row.key,
+                                    isCurrent = false,
+                                    isPlaying = false,
+                                    isHistory = true,
+                                    isDragging = false,
+                                    dragOffsetY = { 0f },
+                                    onClick = { onSongClick(row.index, row.song) },
+                                    onRemove = { removeWithUndo(row, false, false) },
+                                    onPlayNext = { onPlayNext(row.song) },
+                                    onAddToPlaylist = { pid -> onAddToPlaylist(row.song, pid) },
+                                    playlists = state.playlists,
+                                    onDragStart = null,
+                                    onDrag = {},
+                                    onDragEnd = {},
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
+                        }
                     }
 
-                    QueueSongItemRow(
-                        song = song,
-                        isCurrent = isCurrent,
-                        isDragging = isDragging,
-                        dragOffsetY = if (isDragging) dragOffsetY else 0f,
-                        modifier = rowModifier,
-                        onClick = { onSongClick(song) },
-                        onRemove = { onRemoveFromQueue(song) },
-                        onPlayNext = { onPlayNext?.invoke(song) },
-                        onAddToPlaylist = { pid -> onAddToPlaylist?.invoke(song, pid) },
-                        playlists = state.playlists,
-                        onDragStart = {
-                            draggingIndex = index
-                            dragOffsetY = 0f
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        onDrag = { deltaY ->
-                            dragOffsetY += deltaY
-                            val currIdx = draggingIndex ?: return@QueueSongItemRow
-                            val threshold = rowHeightPx * 0.72f
-
-                            if (dragOffsetY > threshold && currIdx < state.queue.lastIndex) {
-                                onReorderQueue(currIdx, currIdx + 1)
-                                draggingIndex = currIdx + 1
-                                dragOffsetY -= rowHeightPx
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            } else if (dragOffsetY < -threshold && currIdx > 0) {
-                                onReorderQueue(currIdx, currIdx - 1)
-                                draggingIndex = currIdx - 1
-                                dragOffsetY += rowHeightPx
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                        },
-                        onDragEnd = {
-                            draggingIndex = null
-                            dragOffsetY = 0f
+                    sections.current?.let { current ->
+                        item(key = KEY_NOW_PLAYING_HEADER) { QueueSectionHeader(title = "Now playing") }
+                        item(key = current.key) {
+                            QueueSongItemRow(
+                                song = current.song,
+                                dragKey = current.key,
+                                isCurrent = true,
+                                isPlaying = isPlaying,
+                                isHistory = false,
+                                isDragging = false,
+                                dragOffsetY = { 0f },
+                                onClick = onTogglePlayPause,
+                                onRemove = null,
+                                onPlayNext = null,
+                                onAddToPlaylist = { pid -> onAddToPlaylist(current.song, pid) },
+                                playlists = state.playlists,
+                                onDragStart = null,
+                                onDrag = {},
+                                onDragEnd = {},
+                                modifier = Modifier.animateItem()
+                            )
                         }
-                    )
+                    }
+
+                    upcomingRows.forEachIndexed { localIndex, row ->
+                        if (localIndex == 0 && fromYouCount > 0) {
+                            item(key = KEY_FROM_YOU_HEADER) { QueueSectionHeader(title = "Next from you") }
+                        }
+                        if (localIndex == fromYouCount) {
+                            item(key = KEY_NEXT_UP_HEADER) {
+                                QueueSectionHeader(title = if (state.playlistQueueActive) "Next from playlist" else "Next up")
+                            }
+                        }
+                        item(key = row.key) {
+                            UpcomingRow(
+                                row = row,
+                                wasUserQueued = localIndex < fromYouCount,
+                                isDragging = dragSession?.key == row.key,
+                                dragOffsetY = { if (dragSession?.key == row.key) dragOffsetY else 0f },
+                                playlists = state.playlists,
+                                onSongClick = onSongClick,
+                                onRemove = removeWithUndo,
+                                onPlayNext = onPlayNext,
+                                onAddToPlaylist = onAddToPlaylist,
+                                onDragStart = {
+                                    dragSession = DragSession(row.key, latestSections.upcoming, latestSections.upcoming.map { it.key })
+                                    dragOffsetY = 0f
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                },
+                                onDrag = { delta ->
+                                    dragOffsetY += delta
+                                    trySwap()
+                                },
+                                onDragEnd = endDrag
+                            )
+                        }
+                    }
+
+                    item(key = KEY_CURATING) {
+                        AnimatedVisibility(
+                            visible = state.isFetchingUpNext,
+                            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+                            exit = fadeOut(tween(300)) + shrinkVertically(tween(250))
+                        ) {
+                            BreathingCuratingLine(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                        }
+                    }
                 }
             }
         }
-    }
-}
 
-/**
- * 🔘 Sleek Frosted Quick Action Pill (Shuffle, Repeat, Radio).
- */
-@Composable
-private fun QueueActionPill(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    isActive: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colors = LocalDreaminColors.current
-    val animBg by animateColorAsState(
-        targetValue = if (isActive) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.08f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "pill_bg"
-    )
-    val animBorder by animateColorAsState(
-        targetValue = if (isActive) colors.primary.copy(alpha = 0.55f) else Color.Transparent,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "pill_border"
-    )
-    val animContentColor by animateColorAsState(
-        targetValue = if (isActive) colors.primary else Color.White.copy(alpha = 0.9f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "pill_content"
-    )
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = animBg,
-        border = BorderStroke(1.dp, animBorder)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = animContentColor,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = label,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = animContentColor
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp)
+        ) { data ->
+            Snackbar(
+                snackbarData = data,
+                containerColor = colors.surfaceContainer,
+                contentColor = Color.White,
+                actionColor = colors.primary
             )
         }
     }
 }
 
-/**
- * 🎵 Queue Song Item Row matching Screenshot 2.
- */
 @Composable
-private fun QueueSongItemRow(
-    song: Song,
-    isCurrent: Boolean,
+private fun LazyItemScope.UpcomingRow(
+    row: QueueRow,
+    wasUserQueued: Boolean,
     isDragging: Boolean,
-    dragOffsetY: Float,
-    onClick: () -> Unit,
-    onRemove: () -> Unit,
-    onPlayNext: () -> Unit,
-    onAddToPlaylist: (Long) -> Unit,
+    dragOffsetY: () -> Float,
     playlists: List<com.shyan.dreamin.data.local.Playlist>,
+    onSongClick: (Int, Song) -> Unit,
+    onRemove: (QueueRow, Boolean, Boolean) -> Unit,
+    onPlayNext: (Song) -> Unit,
+    onAddToPlaylist: (Song, Long) -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Float) -> Unit,
-    onDragEnd: () -> Unit,
-    modifier: Modifier = Modifier
+    onDragEnd: () -> Unit
+) {
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    DisposableEffect(isDragging) {
+        onDispose { if (isDragging) currentOnDragEnd() }
+    }
+    val placement = if (isDragging) Modifier else Modifier.animateItem(
+        fadeInSpec = tween(220, easing = LinearOutSlowInEasing),
+        fadeOutSpec = tween(180, easing = FastOutLinearInEasing),
+        placementSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+    )
+    QueueSongItemRow(
+        song = row.song,
+        dragKey = row.key,
+        isCurrent = false,
+        isPlaying = false,
+        isHistory = false,
+        isDragging = isDragging,
+        dragOffsetY = dragOffsetY,
+        onClick = { onSongClick(row.index, row.song) },
+        onRemove = { onRemove(row, wasUserQueued, true) },
+        onPlayNext = { onPlayNext(row.song) },
+        onAddToPlaylist = { pid -> onAddToPlaylist(row.song, pid) },
+        playlists = playlists,
+        onDragStart = onDragStart,
+        onDrag = onDrag,
+        onDragEnd = onDragEnd,
+        modifier = placement
+    )
+}
+
+private fun swapAcrossNeighbor(
+    session: DragSession,
+    dragOffsetY: Float,
+    listState: LazyListState,
+    fromYouCount: Int
+): Pair<DragSession, Float>? {
+    val index = session.rows.indexOfFirst { it.key == session.key }
+    if (index < 0) return null
+    val sectionRange = if (index < fromYouCount) 0 until fromYouCount else fromYouCount..session.rows.lastIndex
+    val visible = listState.layoutInfo.visibleItemsInfo
+    val dragged = visible.firstOrNull { it.key == session.key } ?: return null
+    val draggedCenter = dragged.offset + dragged.size / 2f + dragOffsetY
+    val targetIndex = when {
+        dragOffsetY > 0f && index + 1 in sectionRange -> index + 1
+        dragOffsetY < 0f && index - 1 in sectionRange -> index - 1
+        else -> return null
+    }
+    val neighbor = visible.firstOrNull { it.key == session.rows[targetIndex].key } ?: return null
+    val neighborCenter = neighbor.offset + neighbor.size / 2f
+    val crossed = if (targetIndex > index) draggedCenter > neighborCenter else draggedCenter < neighborCenter
+    if (!crossed) return null
+    val newTop = if (targetIndex > index) neighbor.offset + neighbor.size - dragged.size else neighbor.offset
+    val reordered = session.rows.toMutableList().apply { add(targetIndex, removeAt(index)) }.toList()
+    return session.copy(rows = reordered) to (dragOffsetY - (newTop - dragged.offset))
+}
+
+@Composable
+private fun EdgeAutoScroll(
+    draggingKey: String?,
+    listState: LazyListState,
+    dragOffsetY: () -> Float,
+    onScrolled: (Float) -> Unit
+) {
+    val density = LocalDensity.current
+    val edgePx = with(density) { 64.dp.toPx() }
+    val maxStepPx = with(density) { 14.dp.toPx() }
+    LaunchedEffect(draggingKey) {
+        val key = draggingKey ?: return@LaunchedEffect
+        while (true) {
+            withFrameNanos { }
+            val info = listState.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: continue
+            val top = item.offset + dragOffsetY()
+            val bottom = top + item.size
+            val step = when {
+                top < info.viewportStartOffset + edgePx ->
+                    -maxStepPx * ((info.viewportStartOffset + edgePx - top) / edgePx).coerceIn(0f, 1f)
+                bottom > info.viewportEndOffset - edgePx ->
+                    maxStepPx * ((bottom - (info.viewportEndOffset - edgePx)) / edgePx).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            if (step == 0f) continue
+            val consumed = listState.scrollBy(step)
+            if (consumed != 0f) onScrolled(consumed)
+        }
+    }
+}
+
+@Composable
+private fun QueueTopHandle(onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
+        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) {
+            Icon(Icons.Default.KeyboardArrowDown, "Back to Now Playing", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(28.dp))
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
+                .padding(horizontal = 32.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.40f)))
+        }
+    }
+}
+
+@Composable
+private fun QueueNowPlayingBar(
+    state: PlayerUiState,
+    hasUpcoming: Boolean,
+    onBack: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onSaveQueue: () -> Unit,
+    onClearUpcoming: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val heartScale = remember { Animatable(1f) }
     var showMenu by remember { mutableStateOf(false) }
-    var showPlaylistPicker by remember { mutableStateOf(false) }
-
-    val currentOnDragStart by rememberUpdatedState(onDragStart)
-    val currentOnDrag by rememberUpdatedState(onDrag)
-    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
-
-    val dragScale by animateFloatAsState(
-        targetValue = if (isDragging) 1.025f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "drag_scale"
-    )
-
-    val dragElevation by animateFloatAsState(
-        targetValue = if (isDragging) 14f else 0f,
+    val currentSong = state.currentSong
+    val isFav = state.currentSongIsFavorite
+    val favBgColor by animateColorAsState(
+        targetValue = if (isFav) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.10f),
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "drag_elevation"
+        label = "queue_fav_bg_color"
+    )
+    val favIconColor by animateColorAsState(
+        targetValue = if (isFav) colors.primary else Color.White,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "queue_fav_icon_color"
     )
 
-    val rowBgColor by animateColorAsState(
-        targetValue = if (isDragging) colors.surfaceHighest.copy(alpha = 0.55f) else Color.Transparent,
-        animationSpec = tween(160),
-        label = "drag_bg"
-    )
-
-    val formattedDuration = remember(song.duration) {
-        val sec = if (song.duration > 10_000L) song.duration / 1000L else song.duration
-        if (sec > 0) {
-            val mins = sec / 60
-            val secs = sec % 60
-            String.format("%d:%02d", mins, secs)
-        } else ""
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .zIndex(if (isDragging) 2f else 0f)
-            .graphicsLayer {
-                translationY = dragOffsetY
-                scaleX = dragScale
-                scaleY = dragScale
-                shadowElevation = dragElevation
-            }
-            .clip(RoundedCornerShape(14.dp))
-            .background(rowBgColor)
-            .clickable(enabled = !isDragging, onClick = onClick)
-            .padding(horizontal = 16.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        AsyncImage(
+            model = currentSong?.displayArtworkUrl,
+            contentDescription = currentSong?.title,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() },
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
         ) {
-            // Thumbnail with optional Play indicator overlay
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = song.displayArtworkUrl,
-                    contentDescription = song.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-
-                if (isCurrent) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.45f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = "Playing",
-                            tint = colors.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+            Text(currentSong?.title ?: "No Track Playing", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(currentSong?.artist ?: "Dreamin", fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                scope.launch {
+                    heartScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
+                    heartScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
+                    heartScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
                 }
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            // Track details (Title, Artist, Duration)
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp)
-            ) {
-                Text(
-                    text = song.title,
-                    fontSize = 15.sp,
-                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                    color = if (isCurrent) colors.primary else Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                val subtitle = if (formattedDuration.isNotBlank()) "${song.artist} • $formattedDuration" else song.artist
-                Text(
-                    text = subtitle,
-                    fontSize = 13.sp,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Three dots menu button
-            Box {
-                IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "More options",
-                        tint = colors.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    containerColor = colors.surfaceContainer
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next", color = Color.White) },
-                        onClick = {
-                            showMenu = false
-                            onPlayNext()
-                        },
-                        leadingIcon = { Icon(Icons.Filled.SkipNext, null, tint = colors.primary) }
-                    )
-                    if (playlists.isNotEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text("Add to Playlist", color = Color.White) },
-                            onClick = {
-                                showMenu = false
-                                showPlaylistPicker = true
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null, tint = colors.primary) }
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("Remove from Queue", color = colors.error) },
-                        onClick = {
-                            showMenu = false
-                            onRemove()
-                        },
-                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = colors.error) }
-                    )
-                }
-            }
-
-            // Drag handle (`=`)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .pointerInput(song.id) {
-                        try {
-                            detectVerticalDragGestures(
-                                onDragStart = { currentOnDragStart() },
-                                onVerticalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    currentOnDrag(dragAmount)
-                                },
-                                onDragEnd = { currentOnDragEnd() },
-                                onDragCancel = { currentOnDragEnd() }
-                            )
-                        } finally {
-                            currentOnDragEnd()
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                val dragHandleScale by animateFloatAsState(
-                    targetValue = if (isDragging) 1.15f else 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "drag_handle_scale"
-                )
+                onToggleFavorite()
+            },
+            modifier = Modifier
+                .size(44.dp)
+                .graphicsLayer { scaleX = heartScale.value; scaleY = heartScale.value }
+                .clip(CircleShape)
+                .background(favBgColor)
+        ) {
+            AnimatedContent(
+                targetState = isFav,
+                transitionSpec = {
+                    (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
+                        .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                },
+                label = "queue_fav_icon_morph"
+            ) { fav ->
                 Icon(
-                    imageVector = Icons.Default.DragHandle,
-                    contentDescription = "Reorder",
-                    tint = if (isDragging) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.65f),
-                    modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer {
-                            scaleX = dragHandleScale
-                            scaleY = dragHandleScale
-                        }
+                    imageVector = if (fav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
+                    tint = favIconColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Box {
+            IconButton(onClick = { showMenu = true }, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Filled.MoreVert, "Queue options", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(22.dp))
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, containerColor = colors.surfaceContainer) {
+                DropdownMenuItem(
+                    text = { Text("Save queue as playlist", color = Color.White) },
+                    onClick = { showMenu = false; onSaveQueue() },
+                    enabled = state.queue.isNotEmpty(),
+                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null, tint = colors.primary) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Clear upcoming", color = if (hasUpcoming) colors.error else colors.onSurfaceVariant) },
+                    onClick = { showMenu = false; onClearUpcoming() },
+                    enabled = hasUpcoming,
+                    leadingIcon = { Icon(Icons.Filled.ClearAll, null, tint = if (hasUpcoming) colors.error else colors.onSurfaceVariant) }
                 )
             }
         }
     }
+}
 
-    if (showPlaylistPicker) {
-        AlertDialog(
-            onDismissRequest = { showPlaylistPicker = false },
-            title = { Text("Add to Playlist", color = Color.White) },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    playlists.forEach { pl ->
-                        Text(
-                            text = pl.name,
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onAddToPlaylist(pl.id)
-                                    showPlaylistPicker = false
-                                }
-                                .padding(vertical = 12.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPlaylistPicker = false }) {
-                    Text("Cancel", color = colors.primary)
-                }
-            },
-            containerColor = colors.surfaceContainer
+@Composable
+private fun QueueModePills(state: PlayerUiState, onToggleShuffle: () -> Unit, onToggleRepeat: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        QueueActionPill(Icons.Filled.Shuffle, "Shuffle", state.isShuffle, onToggleShuffle, Modifier.weight(1f))
+        QueueActionPill(
+            icon = if (state.repeatMode == TrackRepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+            label = "Repeat",
+            isActive = state.repeatMode != TrackRepeatMode.OFF,
+            onClick = onToggleRepeat,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun QueueSummaryHeader(sections: QueueSections, progressFlow: StateFlow<PlaybackProgress>) {
+    val colors = LocalDreaminColors.current
+    val progress by progressFlow.collectAsStateWithLifecycle()
+    val upcomingMs = remember(sections) { QueueSections.upcomingDurationMs(sections) }
+    val currentMs = remember(sections) { sections.current?.let { QueueSections.normalizedDurationMs(it.song.duration) } ?: 0L }
+    val remainingMs = upcomingMs + (currentMs - progress.currentPositionMs).coerceAtLeast(0L)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text("Up next", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(
+            text = "${QueueSections.songCountLabel(sections.upcoming.size)} · ${formatDuration(remainingMs)} left",
+            fontSize = 13.sp,
+            color = colors.onSurfaceVariant
         )
     }
 }

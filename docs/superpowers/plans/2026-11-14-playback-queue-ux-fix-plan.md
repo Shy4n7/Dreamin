@@ -125,16 +125,18 @@ Larger refactor; makes background playback independent of the Activity.
 
 **Files:** `…/ui/screens/QueueScreen.kt`, `NowPlayingScreen.kt`, `MusicPlayerScreen.kt`
 
-- [ ] **#16 Sections.** Render "History" (collapsed, dimmed), a pinned "Now Playing" row, "Next from you" (user-queued), and "Next up" (playlist / radio). Auto-scroll to Now Playing on open.
-- [ ] **#15 Header math.** Count and total from `QueueOps.upcoming()` and `remainingDurationMs(position)`; use `formatDuration`; pluralize ("1 song").
-- [ ] **#17** Tapping the current row toggles play/pause instead of restarting.
-- [ ] **#18 Wire existing features:** Save queue as playlist (menu entry → `SaveQueueDialog`), Clear upcoming, undo snackbar on remove (`onRestoreToQueue`). Delete the Lock/Radio stub parameters.
-- [ ] Disallow "Remove from queue" on the current row.
-- [ ] **#19 Reorder.** Commit reorder to the ViewModel only on drag end (local list state during drag); add edge auto-scroll while dragging; keys = `QueueEntry.uid`.
-- [ ] **#20 Pull-to-close.** Remove the custom `onBack` nested-scroll trigger; let the `VerticalPager` follow the finger (overscroll at list top passes to pager).
-- [ ] **#21** Highlight by uid, not song id.
+- [x] **#16 Sections.** Render "History" (collapsed, dimmed), a pinned "Now Playing" row, "Next from you" (user-queued), and "Next up" (playlist / radio). Auto-scroll to Now Playing on open.
+- [x] **#15 Header math.** Count and total from `QueueOps.upcoming()` and `remainingDurationMs(position)`; use `formatDuration`; pluralize ("1 song").
+- [x] **#17** Tapping the current row toggles play/pause instead of restarting.
+- [x] **#18 Wire existing features:** Save queue as playlist (menu entry → `SaveQueueDialog`), Clear upcoming, undo snackbar on remove (`onRestoreToQueue`). Delete the Lock/Radio stub parameters.
+- [x] Disallow "Remove from queue" on the current row.
+- [x] **#19 Reorder.** Commit reorder to the ViewModel only on drag end (local list state during drag); add edge auto-scroll while dragging; keys = `QueueEntry.uid`.
+- [x] **#20 Pull-to-close.** Remove the custom `onBack` nested-scroll trigger; let the `VerticalPager` follow the finger (overscroll at list top passes to pager).
+- [x] **#21** Highlight by uid, not song id.
 
 **Verify:** queue of 30 with current at #20 opens scrolled to it; drag a row across 8 positions → one ViewModel update, smooth edge scroll.
+
+> **Status (2026-11-15):** Phase 4 done; build + 184 unit tests green; drags stay within their section and remove/undo/tap act on the exact row (duplicates safe); not verified on a device. Sections come from `data/queue/QueueSections` (unit tested; "Next from you" is the contiguous user-queued run after the current song, so display order always equals play order). There is no `QueueEntry.uid`; rows are keyed by song id + occurrence and the current row is identified by index. Row/pill/header composables moved to `ui/screens/QueueRows.kt`. Also fixed: the queue's "Play next" was a no-op and "Add to playlist" added the current song instead of the tapped one. "Clear upcoming" now keeps history.
 
 ---
 
