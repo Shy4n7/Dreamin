@@ -78,7 +78,10 @@ fun MusicPlayerScreen(vm: MusicPlayerViewModel = viewModel()) {
 
     val colors = SonicNocturneColors
 
-    CompositionLocalProvider(LocalDreaminColors provides colors) {
+    CompositionLocalProvider(
+        LocalDreaminColors provides colors,
+        com.shyan.dreamin.ui.components.LocalPlaybackActive provides (state.playbackState is PlaybackState.Playing)
+    ) {
         DreaminRippleTheme {
             when {
                 state.userName == null -> Box(Modifier.fillMaxSize().background(colors.background))

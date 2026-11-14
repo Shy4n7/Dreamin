@@ -418,12 +418,7 @@ private fun AlbumSongRow(
             contentAlignment = Alignment.Center
         ) {
             if (isPlaying) {
-                Icon(
-                    Icons.Filled.Equalizer,
-                    contentDescription = "Playing",
-                    tint = colors.secondary,
-                    modifier = Modifier.size(18.dp)
-                )
+                com.shyan.dreamin.ui.components.NowPlayingIndicator()
             } else {
                 Text(
                     text = String.format("%02d", index),

@@ -300,12 +300,7 @@ fun ArtistDetailScreen(
                         }
 
                         if (isPlaying) {
-                            Icon(
-                                Icons.Filled.VolumeUp,
-                                contentDescription = "Playing",
-                                tint = colors.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            com.shyan.dreamin.ui.components.NowPlayingIndicator()
                         }
                     }
                 }

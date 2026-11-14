@@ -1,5 +1,7 @@
 package com.shyan.dreamin.ui.screens
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.shyan.dreamin.ui.theme.LocalDreaminColors
 import com.shyan.dreamin.ui.theme.DreaminMotion
 import com.shyan.dreamin.ui.theme.DreaminShapes
@@ -233,11 +235,10 @@ internal fun QueueSongItemRow(
                         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Playing, tap to pause" else "Paused, tap to play",
-                            tint = colors.primary,
-                            modifier = Modifier.size(24.dp)
+                        com.shyan.dreamin.ui.components.NowPlayingIndicator(
+                            modifier = Modifier.semantics {
+                                contentDescription = if (isPlaying) "Playing, tap to pause" else "Paused, tap to play"
+                            }
                         )
                     }
                 }

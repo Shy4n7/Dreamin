@@ -2139,7 +2139,7 @@ fun PlaylistSongRow(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isPlaying) {
-                        MiniEqualizerIndicator(color = colors.primary)
+                        com.shyan.dreamin.ui.components.NowPlayingIndicator()
                     } else {
                         Text(
                             text = String.format("%02d", index),
@@ -2290,7 +2290,7 @@ fun ArtworkBox(
                     .background(Color.Black.copy(alpha = 0.50f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+                com.shyan.dreamin.ui.components.NowPlayingIndicator()
             }
         }
     }

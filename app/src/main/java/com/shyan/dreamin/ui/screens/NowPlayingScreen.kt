@@ -1121,7 +1121,7 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.FastRewind,
+                                imageVector = Icons.Filled.SkipPrevious,
                                 contentDescription = "Previous",
                                 tint = Color.White,
                                 modifier = Modifier.size(36.dp)
@@ -1199,7 +1199,7 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.FastForward,
+                                imageVector = Icons.Filled.SkipNext,
                                 contentDescription = "Next",
                                 tint = Color.White,
                                 modifier = Modifier.size(36.dp)

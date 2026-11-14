@@ -813,12 +813,7 @@ fun SongRow(
                             .background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = "Playing",
-                            tint = colors.primary,
-                            modifier = Modifier.size(22.dp)
-                        )
+                        com.shyan.dreamin.ui.components.NowPlayingIndicator()
                     }
                 }
             }
@@ -1796,56 +1791,6 @@ fun SaveQueueDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
         containerColor = colors.surfaceHigh,
         titleContentColor = colors.onSurface
     )
-}
-
-@Composable
-fun MiniEqualizerIndicator(
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    val transition = rememberInfiniteTransition(label = "mini_eq")
-    val h1 by transition.animateFloat(
-        initialValue = 0.25f, targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq1"
-    )
-    val h2 by transition.animateFloat(
-        initialValue = 0.9f, targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq2"
-    )
-    val h3 by transition.animateFloat(
-        initialValue = 0.35f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(510, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq3"
-    )
-    val h4 by transition.animateFloat(
-        initialValue = 0.75f, targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq4"
-    )
-
-    androidx.compose.foundation.Canvas(
-        modifier = modifier.size(width = 20.dp, height = 16.dp)
-    ) {
-        val barWidth = 3.5.dp.toPx()
-        val spacing = 2.dp.toPx()
-        val corner = 1.5.dp.toPx()
-        val totalH = size.height
-
-        val heights = floatArrayOf(h1, h2, h3, h4)
-        for (i in 0 until 4) {
-            val barH = (totalH * heights[i]).coerceAtLeast(barWidth)
-            val left = i * (barWidth + spacing)
-            val top = totalH - barH
-            drawRoundRect(
-                color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(left, top),
-                size = androidx.compose.ui.geometry.Size(barWidth, barH),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
-            )
-        }
-    }
 }
 
 @Composable
