@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -154,9 +157,9 @@ fun AlbumDetailScreen(
                         Box(
                             modifier = Modifier
                                 .size(118.dp)
-                                .shadow(14.dp, RoundedCornerShape(18.dp))
-                                .clip(RoundedCornerShape(18.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                                .shadow(14.dp, DreaminShapes.large)
+                                .clip(DreaminShapes.large)
+                                .border(1.dp, Color.White.copy(alpha = 0.18f), DreaminShapes.large)
                                 .background(colors.surfaceHighest)
                         ) {
                             AsyncImage(
@@ -176,14 +179,14 @@ fun AlbumDetailScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(DreaminShapes.small)
                                     .background(colors.primary.copy(alpha = 0.85f))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     "MOVIE ALBUM",
                                     color = Color.White,
-                                    fontSize = 10.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp
                                 )
@@ -194,7 +197,7 @@ fun AlbumDetailScreen(
                             Text(
                                 text = album.title,
                                 color = Color.White,
-                                fontSize = 20.sp,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -205,7 +208,7 @@ fun AlbumDetailScreen(
                             Text(
                                 text = if (album.artist.isNotBlank()) album.artist else "Original Soundtrack",
                                 color = Color.White.copy(alpha = 0.80f),
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -216,7 +219,7 @@ fun AlbumDetailScreen(
                             Text(
                                 text = "${if (album.year.isNotBlank()) "${album.year} • " else ""}${if (album.songs.isNotEmpty()) "${album.songs.size} tracks" else "${album.songCount} tracks"}",
                                 color = colors.secondary,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -238,7 +241,7 @@ fun AlbumDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = DreaminShapes.medium,
                         colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                     ) {
                         Icon(
@@ -252,7 +255,7 @@ fun AlbumDetailScreen(
                             "Play All",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
 
@@ -261,7 +264,7 @@ fun AlbumDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = DreaminShapes.medium,
                         border = BorderStroke(1.dp, colors.outlineVariant),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = colors.surfaceHighest.copy(alpha = 0.40f)
@@ -278,7 +281,7 @@ fun AlbumDetailScreen(
                             "Shuffle",
                             color = colors.onSurface,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
@@ -289,7 +292,7 @@ fun AlbumDetailScreen(
                 Text(
                     text = "Tracklist",
                     color = colors.onSurface,
-                    fontSize = 17.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
                 )
@@ -318,7 +321,7 @@ fun AlbumDetailScreen(
                         Text(
                             "No songs available in this album",
                             color = colors.onSurfaceVariant,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
@@ -366,7 +369,7 @@ private fun AlbumSongRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(DreaminShapes.large)
             .border(
                 width = 1.dp,
                 brush = if (isPlaying) {
@@ -385,7 +388,7 @@ private fun AlbumSongRow(
                         )
                     )
                 },
-                shape = RoundedCornerShape(18.dp)
+                shape = DreaminShapes.large
             )
             .background(
                 if (isPlaying) {
@@ -424,7 +427,7 @@ private fun AlbumSongRow(
             } else {
                 Text(
                     text = String.format("%02d", index),
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = colors.onSurfaceVariant.copy(alpha = 0.70f)
                 )
@@ -437,8 +440,8 @@ private fun AlbumSongRow(
         Box(
             modifier = Modifier
                 .size(50.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                .clip(DreaminShapes.medium)
+                .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -458,7 +461,7 @@ private fun AlbumSongRow(
             Text(
                 text = song.displayTitle,
                 color = if (isPlaying) colors.primary else colors.onSurface,
-                fontSize = 14.5.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -469,7 +472,7 @@ private fun AlbumSongRow(
             Text(
                 text = song.artist,
                 color = colors.onSurfaceVariant,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

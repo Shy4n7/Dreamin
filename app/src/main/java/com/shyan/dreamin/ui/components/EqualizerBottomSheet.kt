@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shyan.dreamin.service.AudioFxManager
 import com.shyan.dreamin.service.EqualizerUiState
-import com.shyan.dreamin.ui.screens.LocalDreaminColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +39,7 @@ fun EqualizerBottomSheet(
 ) {
     val eqState by AudioFxManager.uiState.collectAsStateWithLifecycle()
     val colors = LocalDreaminColors.current
-    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetShape = DreaminShapes.sheet
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -98,13 +100,13 @@ fun EqualizerBottomSheet(
                     Column {
                         Text(
                             "Studio Equalizer",
-                            fontSize = 20.sp,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
                         )
                         Text(
                             if (eqState.isEnabled) "32-bit DSP Active" else "Bypassed",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = if (eqState.isEnabled) colors.primary else colors.onSurfaceVariant
                         )
                     }
@@ -135,7 +137,7 @@ fun EqualizerBottomSheet(
             ) {
                 Text(
                     "AUTOEQ CALIBRATION",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = colors.onSurfaceVariant,
                     letterSpacing = 1.sp
@@ -143,14 +145,14 @@ fun EqualizerBottomSheet(
                 if (activeAutoEq != null) {
                     Text(
                         "Calibrated (${activeAutoEq.target})",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.primary
                     )
                 } else if (!connectedDevice.isNullOrBlank()) {
                     Text(
                         "🎧 $connectedDevice",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant
                     )
                 }
@@ -168,7 +170,7 @@ fun EqualizerBottomSheet(
                     val isSelected = activeAutoEq?.id == profile.id
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(DreaminShapes.medium)
                             .background(if (isSelected) colors.primary else colors.surfaceHighest)
                             .clickable {
                                 if (isSelected) {
@@ -182,7 +184,7 @@ fun EqualizerBottomSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "🎧 ${profile.displayName}",
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) Color.White else colors.onSurface
                             )
@@ -196,7 +198,7 @@ fun EqualizerBottomSheet(
             // Presets Horizontal Row
             Text(
                 "PRESETS",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurfaceVariant,
                 letterSpacing = 1.sp
@@ -213,7 +215,7 @@ fun EqualizerBottomSheet(
                     val isSelected = eqState.selectedPresetName == preset && activeAutoEq == null
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(DreaminShapes.medium)
                             .background(if (isSelected) colors.primary else colors.surfaceHighest)
                             .clickable {
                                 com.shyan.dreamin.service.AutoEqManager.clearProfile()
@@ -223,7 +225,7 @@ fun EqualizerBottomSheet(
                     ) {
                         Text(
                             text = preset,
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSelected) Color.White else colors.onSurface
                         )
@@ -242,9 +244,9 @@ fun EqualizerBottomSheet(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
+                        .clip(DreaminShapes.large)
                         .background(colors.surfaceHighest.copy(alpha = 0.6f))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), DreaminShapes.large)
                         .padding(14.dp)
                 ) {
                     Column {
@@ -256,9 +258,9 @@ fun EqualizerBottomSheet(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bass Boost", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text("Bass Boost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
                             }
-                            Text("${eqState.bassBoostStrength}%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                            Text("${eqState.bassBoostStrength}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.primary)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Slider(
@@ -279,9 +281,9 @@ fun EqualizerBottomSheet(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
+                        .clip(DreaminShapes.large)
                         .background(colors.surfaceHighest.copy(alpha = 0.6f))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), DreaminShapes.large)
                         .padding(14.dp)
                 ) {
                     Column {
@@ -293,9 +295,9 @@ fun EqualizerBottomSheet(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.SurroundSound, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("3D Spatial", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text("3D Spatial", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
                             }
-                            Text("${eqState.virtualizerStrength}%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                            Text("${eqState.virtualizerStrength}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.primary)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Slider(
@@ -319,9 +321,9 @@ fun EqualizerBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(DreaminShapes.large)
                     .background(colors.surfaceHighest.copy(alpha = 0.6f))
-                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), DreaminShapes.large)
                     .padding(14.dp)
             ) {
                 Column {
@@ -344,13 +346,13 @@ fun EqualizerBottomSheet(
                             Column {
                                 Text(
                                     "Loudness Normalization",
-                                    fontSize = 13.5.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.White
                                 )
                                 Text(
                                     "Auto-level track volumes across sources",
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = colors.onSurfaceVariant
                                 )
                             }
@@ -376,13 +378,13 @@ fun EqualizerBottomSheet(
                         ) {
                             Text(
                                 "Target Gain Level",
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant
                             )
                             val gainDb = eqState.loudnessGainMb / 100f
                             Text(
                                 String.format(java.util.Locale.US, "+%.1f dB", gainDb),
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = colors.primary
                             )
@@ -407,7 +409,7 @@ fun EqualizerBottomSheet(
             // 5-Band Graphic Equalizer Faders
             Text(
                 "5-BAND FREQUENCY SPECTRUM",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurfaceVariant,
                 letterSpacing = 1.sp
@@ -418,9 +420,9 @@ fun EqualizerBottomSheet(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(DreaminShapes.large)
                         .background(colors.surfaceHighest.copy(alpha = 0.45f))
-                        .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.06f), DreaminShapes.large)
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
@@ -438,7 +440,7 @@ fun EqualizerBottomSheet(
                         ) {
                             Text(
                                 text = freqText,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium,
                                 color = colors.onSurface,
                                 modifier = Modifier.width(60.dp)
@@ -459,7 +461,7 @@ fun EqualizerBottomSheet(
 
                             Text(
                                 text = if (gainDb > 0) "+${gainDb}dB" else "${gainDb}dB",
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (gainDb != 0) colors.primary else colors.onSurfaceVariant,
                                 modifier = Modifier.width(52.dp),
@@ -473,11 +475,11 @@ fun EqualizerBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(100.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(DreaminShapes.medium)
                         .background(colors.surfaceHighest.copy(alpha = 0.5f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Equalizer active with playback", color = colors.onSurfaceVariant, fontSize = 13.sp)
+                    Text("Equalizer active with playback", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
             }
 

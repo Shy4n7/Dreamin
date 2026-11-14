@@ -2,6 +2,13 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+import com.shyan.dreamin.ui.theme.SonicNocturneTypography
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -39,7 +46,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -50,7 +56,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,7 +104,7 @@ fun NowPlayingProgressSlider(
     secondaryColor: Color = LocalDreaminColors.current.secondary
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val currentOnSeek by rememberUpdatedState(onSeek)
     val playbackProgress by progressFlow.collectAsStateWithLifecycle()
     val currentPositionMs = playbackProgress.currentPositionMs
@@ -158,7 +163,7 @@ fun NowPlayingProgressSlider(
                     detectTapGestures { offset ->
                         val newProgress = (offset.x / size.width).coerceIn(0f, 1f)
                         seekProgress = newProgress
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.tick()
                         commitSeek(newProgress)
                     }
                 }
@@ -167,12 +172,12 @@ fun NowPlayingProgressSlider(
                         onDragStart = { offset ->
                             isSeeking = true
                             seekProgress = (offset.x / size.width).coerceIn(0f, 1f)
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.tick()
                         },
                         onDragEnd = {
                             commitSeek(seekProgress)
                             isSeeking = false
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.tick()
                         },
                         onDragCancel = {
                             isSeeking = false
@@ -283,14 +288,14 @@ fun NowPlayingProgressSlider(
             RollingTimeText(
                 timeMs = currentSecondMs,
                 color = Color.White.copy(alpha = 0.70f),
-                fontSize = 12.sp,
+                fontSize = SonicNocturneTypography.bodySmall.fontSize,
                 fontWeight = FontWeight.Medium
             )
 
             RollingTimeText(
                 timeMs = durationMs,
                 color = Color.White.copy(alpha = 0.70f),
-                fontSize = 12.sp,
+                fontSize = SonicNocturneTypography.bodySmall.fontSize,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -405,7 +410,7 @@ fun NowPlayingScreen(
             scope.launch {
                 pagerState.animateScrollToPage(
                     page = 0,
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                    animationSpec = DreaminMotion.standard()
                 )
             }
         } else {
@@ -415,17 +420,17 @@ fun NowPlayingScreen(
 
     val animatedDominant by animateColorAsState(
         targetValue = Color(state.dominantColor),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "mesh_dominant"
     )
     val animatedSecondary by animateColorAsState(
         targetValue = Color(state.secondaryColor),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "mesh_secondary"
     )
     val animatedAccent by animateColorAsState(
         targetValue = Color(state.accentColor),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "mesh_accent"
     )
 
@@ -436,24 +441,24 @@ fun NowPlayingScreen(
     var showHeartBurst by remember { mutableStateOf(false) }
     val heartScale = remember { Animatable(0f) }
     val heartButtonScale = remember { Animatable(1f) }
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
 
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
             heartScale.snapTo(0.6f)
-            heartScale.animateTo(1.12f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-            heartScale.animateTo(0f, tween(180))
+            heartScale.animateTo(1.12f, DreaminMotion.standard())
+            heartScale.animateTo(0f, tween(DreaminMotion.DurationMedium))
             showHeartBurst = false
         }
     }
 
     val triggerFavoriteWithAnim = remember(onToggleFavorite) {
         {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptic.confirm()
             artworkScope.launch {
-                heartButtonScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
-                heartButtonScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-                heartButtonScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+                heartButtonScale.animateTo(0.92f, tween(DreaminMotion.DurationInstant, easing = FastOutLinearInEasing))
+                heartButtonScale.animateTo(1.10f, DreaminMotion.standard())
+                heartButtonScale.animateTo(1.0f, DreaminMotion.quick())
             }
             onToggleFavorite()
         }
@@ -468,7 +473,7 @@ fun NowPlayingScreen(
             val songBeforeSkip = latestSongId
             artworkScope.launch {
                 if (!event.changedTrack) {
-                    artworkOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+                    artworkOffsetX.animateTo(0f, DreaminMotion.quick())
                     return@launch
                 }
                 val direction = if (event.direction == com.shyan.dreamin.data.queue.SkipDirection.NEXT) -1f else 1f
@@ -477,7 +482,7 @@ fun NowPlayingScreen(
                     snapshotFlow { latestSongId }.first { it != songBeforeSkip }
                 }
                 artworkOffsetX.snapTo(-direction * skipTravelPx * SKIP_RETURN_FRACTION)
-                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
+                artworkOffsetX.animateTo(0f, DreaminMotion.standard())
             }
         }
     }
@@ -515,7 +520,7 @@ fun NowPlayingScreen(
                     handleDismiss()
                     return available
                 } else if (swipeOffsetY.value > 0f) {
-                    swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                    swipeOffsetY.animateTo(0f, DreaminMotion.standard())
                     return available
                 }
                 return Velocity.Zero
@@ -604,13 +609,13 @@ fun NowPlayingScreen(
                                                 handleDismiss()
                                             } else {
                                                 scope.launch {
-                                                    swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                                    swipeOffsetY.animateTo(0f, DreaminMotion.smooth())
                                                 }
                                             }
                                         },
                                         onDragCancel = {
                                             scope.launch {
-                                                swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                                swipeOffsetY.animateTo(0f, DreaminMotion.smooth())
                                             }
                                         },
                                         onVerticalDrag = { change, dragAmount ->
@@ -635,7 +640,7 @@ fun NowPlayingScreen(
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = song?.title ?: "Dreamin",
-                                fontSize = 15.sp,
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -685,7 +690,7 @@ fun NowPlayingScreen(
                                 timerText?.let { label ->
                                     Text(
                                         text = label,
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.primary
                                     )
@@ -706,7 +711,7 @@ fun NowPlayingScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .fillMaxHeight(0.92f)
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .clip(DreaminShapes.xl)
                             ) {
                                 SyncedLyricsView(
                                     lyricsState = state.lyricsState,
@@ -758,7 +763,7 @@ fun NowPlayingScreen(
                                         )
                                 )
 
-                                val artworkShape = remember { RoundedCornerShape(26.dp) }
+                                val artworkShape = remember { DreaminShapes.xl }
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -793,7 +798,7 @@ fun NowPlayingScreen(
                                                             artworkScope.launch {
                                                                 artworkOffsetX.animateTo(
                                                                     0f,
-                                                                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                                                    DreaminMotion.quick()
                                                                 )
                                                             }
                                                         }
@@ -802,14 +807,14 @@ fun NowPlayingScreen(
                                                             handleDismiss()
                                                         } else {
                                                             scope.launch {
-                                                                swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                                                                swipeOffsetY.animateTo(0f, DreaminMotion.standard())
                                                             }
                                                         }
                                                     } else if (dragMode == 3 && accumulatedY < -queueOpenDistancePx) {
                                                         scope.launch {
                                                             pagerState.animateScrollToPage(
                                                                 page = 1,
-                                                                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                                                                animationSpec = DreaminMotion.standard()
                                                             )
                                                         }
                                                     }
@@ -817,10 +822,10 @@ fun NowPlayingScreen(
                                                 },
                                                 onDragCancel = {
                                                     artworkScope.launch {
-                                                        artworkOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+                                                        artworkOffsetX.animateTo(0f, DreaminMotion.quick())
                                                     }
                                                     scope.launch {
-                                                        swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
+                                                        swipeOffsetY.animateTo(0f, DreaminMotion.standard())
                                                     }
                                                     dragMode = 0
                                                 },
@@ -901,9 +906,9 @@ fun NowPlayingScreen(
                                                     brush = Brush.linearGradient(
                                                         colors = listOf(
                                                             Color.Transparent,
-                                                            Color(0xFFFF80BF).copy(alpha = sheenAlpha * 0.32f),
+                                                            colors.sheenWarm.copy(alpha = sheenAlpha * 0.32f),
                                                             Color.White.copy(alpha = sheenAlpha * 0.65f),
-                                                            Color(0xFF80D8FF).copy(alpha = sheenAlpha * 0.32f),
+                                                            colors.sheenCool.copy(alpha = sheenAlpha * 0.32f),
                                                             Color.Transparent
                                                         ),
                                                         start = Offset(sheenOffset - 100f, -50f),
@@ -921,7 +926,7 @@ fun NowPlayingScreen(
                                             },
                                             onDoubleClick = {
                                                 if (!state.currentSongIsFavorite) triggerFavoriteWithAnim()
-                                                else haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                else haptic.confirm()
                                                 showHeartBurst = true
                                             }
                                         ),
@@ -930,7 +935,7 @@ fun NowPlayingScreen(
                                     AnimatedContent(
                                         targetState = "${song?.id}_${song?.displayArtworkUrl}",
                                         transitionSpec = {
-                                            fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(160))
+                                            fadeIn(animationSpec = tween(DreaminMotion.DurationMedium)) togetherWith fadeOut(animationSpec = tween(DreaminMotion.DurationShort))
                                         },
                                         label = "artwork_cinematic_transition"
                                     ) { _ ->
@@ -971,7 +976,7 @@ fun NowPlayingScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = song?.title ?: "No Track Playing",
-                                fontSize = 23.sp,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -980,7 +985,7 @@ fun NowPlayingScreen(
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = song?.artist ?: "Dreamin",
-                                fontSize = 15.sp,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = Color.White.copy(alpha = 0.65f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1050,12 +1055,12 @@ fun NowPlayingScreen(
                         val isFav = state.currentSongIsFavorite
                         val favBgColor by animateColorAsState(
                             targetValue = if (isFav) colors.primary.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f),
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            animationSpec = DreaminMotion.smooth(),
                             label = "fav_bg_color"
                         )
                         val favIconColor by animateColorAsState(
                             targetValue = if (isFav) colors.primary else Color.White,
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            animationSpec = DreaminMotion.smooth(),
                             label = "fav_icon_color"
                         )
 
@@ -1073,8 +1078,8 @@ fun NowPlayingScreen(
                             AnimatedContent(
                                 targetState = isFav,
                                 transitionSpec = {
-                                    (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
-                                        .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                                    (scaleIn(DreaminMotion.smooth()) + fadeIn(tween(DreaminMotion.DurationShort)))
+                                        .togetherWith(scaleOut(tween(DreaminMotion.DurationInstant)) + fadeOut(tween(DreaminMotion.DurationInstant)))
                                 },
                                 label = "fav_icon_morph"
                             ) { fav ->
@@ -1128,10 +1133,7 @@ fun NowPlayingScreen(
                         val isPlayPressed by playInteraction.collectIsPressedAsState()
                         val playScale by animateFloatAsState(
                             targetValue = if (isPlayPressed) 0.94f else if (isPlaying) 1.02f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
+                            animationSpec = DreaminMotion.smooth(),
                             label = "hero_play_scale"
                         )
                         Box(
@@ -1176,8 +1178,8 @@ fun NowPlayingScreen(
                                 AnimatedContent(
                                     targetState = isPlaying || isLoading,
                                     transitionSpec = {
-                                        (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
-                                            .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                                        (scaleIn(DreaminMotion.smooth()) + fadeIn(tween(DreaminMotion.DurationShort)))
+                                            .togetherWith(scaleOut(tween(DreaminMotion.DurationInstant)) + fadeOut(tween(DreaminMotion.DurationInstant)))
                                     },
                                     label = "play_pause_morph"
                                 ) { playing ->
@@ -1219,7 +1221,7 @@ fun NowPlayingScreen(
                                 scope.launch {
                                     pagerState.animateScrollToPage(
                                         page = 1,
-                                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                                        animationSpec = DreaminMotion.standard()
                                     )
                                 }
                             },
@@ -1269,7 +1271,7 @@ fun NowPlayingScreen(
                         scope.launch {
                             pagerState.animateScrollToPage(
                                 page = 0,
-                                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                                animationSpec = DreaminMotion.standard()
                             )
                         }
                     },
@@ -1331,7 +1333,7 @@ fun NowPlayingScreen(
                         Text(
                             text = pl.name,
                             color = Color.White,
-                            fontSize = 15.sp,
+                            style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -1365,7 +1367,12 @@ private fun SleepTimerPointSlider(
     pointCount: Int = 20, // 5 min interval per point: 5m, 10m, ..., 100m
     isEndOfSong: Boolean = false
 ) {
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
+    val colors = LocalDreaminColors.current
+    val accentColor = colors.primary
+    val trackColor = colors.surfaceBright
+    val activeDotColor = colors.background
+    val thumbColor = colors.onSurface
     val density = LocalDensity.current
     var trackWidthPx by remember { mutableFloatStateOf(0f) }
 
@@ -1380,7 +1387,7 @@ private fun SleepTimerPointSlider(
         val index = (fraction * (pointCount - 1)).roundToInt().coerceIn(0, pointCount - 1)
         val mins = (index + 1) * 5
         if (mins != selectedMinutes) {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            haptic.tick()
             onMinutesChanged(mins)
         }
     }
@@ -1426,7 +1433,7 @@ private fun SleepTimerPointSlider(
 
             // 1. Inactive dark background track
             drawRoundRect(
-                color = Color(0xFF262C36),
+                color = trackColor,
                 topLeft = Offset(0f, trackTop),
                 size = Size(width, trackHeight),
                 cornerRadius = cornerRadius
@@ -1436,7 +1443,7 @@ private fun SleepTimerPointSlider(
             for (i in 0 until pointCount) {
                 val dotX = startPaddingPx + i * stepX
                 drawCircle(
-                    color = Color(0xFFA8C7FA).copy(alpha = 0.65f),
+                    color = accentColor.copy(alpha = 0.65f),
                     radius = 2.dp.toPx(),
                     center = Offset(dotX, centerY)
                 )
@@ -1446,7 +1453,7 @@ private fun SleepTimerPointSlider(
             if (!isEndOfSong) {
                 val activeWidth = (thumbX + 6.dp.toPx()).coerceAtMost(width)
                 drawRoundRect(
-                    color = Color(0xFFA8C7FA),
+                    color = accentColor,
                     topLeft = Offset(0f, trackTop),
                     size = Size(activeWidth, trackHeight),
                     cornerRadius = cornerRadius
@@ -1456,7 +1463,7 @@ private fun SleepTimerPointSlider(
                 for (i in 0..selectedIndex) {
                     val dotX = startPaddingPx + i * stepX
                     drawCircle(
-                        color = Color(0xFF131B26),
+                        color = activeDotColor,
                         radius = 2.dp.toPx(),
                         center = Offset(dotX, centerY)
                     )
@@ -1467,7 +1474,7 @@ private fun SleepTimerPointSlider(
                 val thumbHeight = 32.dp.toPx()
                 val thumbTop = (height - thumbHeight) / 2f
                 drawRoundRect(
-                    color = Color(0xFFD3E3FD),
+                    color = thumbColor,
                     topLeft = Offset(thumbX - thumbWidth / 2f, thumbTop),
                     size = Size(thumbWidth, thumbHeight),
                     cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
@@ -1493,7 +1500,9 @@ private fun SleepTimerDialog(
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
+    val colors = LocalDreaminColors.current
+    val accentColor = colors.primary
 
     val initialMins = remember(currentEndMs) {
         if (currentEndMs != null) {
@@ -1509,8 +1518,8 @@ private fun SleepTimerDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = Color(0xFF1E222A),
+            shape = DreaminShapes.xl,
+            color = colors.surfaceHighest,
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1526,7 +1535,7 @@ private fun SleepTimerDialog(
                 Text(
                     text = "Sleep timer",
                     color = Color.White,
-                    fontSize = 22.sp,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
@@ -1537,7 +1546,7 @@ private fun SleepTimerDialog(
                 Text(
                     text = if (isEndOfSong) "End of song" else "$selectedMinutes minutes",
                     color = Color.White.copy(alpha = 0.88f),
-                    fontSize = 16.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Normal,
                     textAlign = TextAlign.Center
                 )
@@ -1562,13 +1571,13 @@ private fun SleepTimerDialog(
                 Surface(
                     onClick = {
                         isEndOfSong = !isEndOfSong
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.toggle(isEndOfSong)
                     },
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isEndOfSong) Color(0xFFA8C7FA).copy(alpha = 0.22f) else Color.Transparent,
+                    shape = DreaminShapes.large,
+                    color = if (isEndOfSong) accentColor.copy(alpha = 0.22f) else Color.Transparent,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (isEndOfSong) Color(0xFFA8C7FA) else Color.White.copy(alpha = 0.25f)
+                        color = if (isEndOfSong) accentColor else Color.White.copy(alpha = 0.25f)
                     ),
                     modifier = Modifier.height(42.dp)
                 ) {
@@ -1578,9 +1587,9 @@ private fun SleepTimerDialog(
                     ) {
                         Text(
                             text = "End of song",
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (isEndOfSong) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isEndOfSong) Color(0xFFA8C7FA) else Color.White.copy(alpha = 0.90f)
+                            color = if (isEndOfSong) accentColor else Color.White.copy(alpha = 0.90f)
                         )
                     }
                 }
@@ -1602,7 +1611,7 @@ private fun SleepTimerDialog(
                         Text(
                             text = "Reset",
                             color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -1612,7 +1621,7 @@ private fun SleepTimerDialog(
                             Text(
                                 text = "Cancel",
                                 color = Color.White.copy(alpha = 0.75f),
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -1629,8 +1638,8 @@ private fun SleepTimerDialog(
                         ) {
                             Text(
                                 text = "OK",
-                                color = Color(0xFFA8C7FA),
-                                fontSize = 14.sp,
+                                color = accentColor,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }

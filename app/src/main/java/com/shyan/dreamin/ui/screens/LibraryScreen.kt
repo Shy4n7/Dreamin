@@ -2,6 +2,10 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.*
@@ -158,7 +162,7 @@ fun LibraryScreen(
 
     val playlistAlpha by animateFloatAsState(
         targetValue = 1f,
-        animationSpec = spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.standard(),
         label = "library_playlist_alpha"
     )
 
@@ -174,7 +178,7 @@ fun LibraryScreen(
 
             Text(
                 "Library",
-                fontSize = 32.sp,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
@@ -280,7 +284,7 @@ fun LibraryScreen(
                 .padding(bottom = (bottomPadding + 8.dp).coerceAtLeast(16.dp), start = 16.dp, end = 16.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = DreaminShapes.medium,
                 color = colors.surfaceHigh,
                 tonalElevation = 6.dp,
                 border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
@@ -307,8 +311,8 @@ fun LibraryScreen(
                         Icon(Icons.Filled.MusicNote, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Spotify Playlist Detected", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("Tap to import into your library", color = colors.onSurfaceVariant, fontSize = 11.sp)
+                        Text("Spotify Playlist Detected", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Tap to import into your library", color = colors.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                     }
                     IconButton(
                         onClick = onDismissDetectedSpotifyLink,
@@ -346,11 +350,11 @@ fun DownloadsTab(
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("No offline downloads yet", fontSize = 18.sp, color = colors.onSurface, fontWeight = FontWeight.SemiBold)
+                Text("No offline downloads yet", style = MaterialTheme.typography.titleMedium, color = colors.onSurface, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Tap the download icon on any song to listen without internet",
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
@@ -373,7 +377,7 @@ fun DownloadsTab(
                     Text(
                         "${downloadedSongs.size} offline tracks",
                         color = colors.onSurfaceVariant,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -387,7 +391,7 @@ fun DownloadsTab(
                         Text(
                             "Ready Offline",
                             color = colors.primary,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -436,11 +440,11 @@ fun FavoritesTab(
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("No favorites yet", fontSize = 18.sp, color = colors.onSurface, fontWeight = FontWeight.SemiBold)
+                Text("No favorites yet", style = MaterialTheme.typography.titleMedium, color = colors.onSurface, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Tap \u2665 on any song to save it here",
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant
                 )
             }
@@ -515,13 +519,13 @@ fun PlaylistsTab(
         ) {
             Text(
                 "${playlists.size} playlists",
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.onSurfaceVariant
             )
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(DreaminShapes.large)
                     .background(colors.primary.copy(alpha = 0.15f))
                     .clickable { showCreateDialog = true }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -529,7 +533,7 @@ fun PlaylistsTab(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
-                Text("New", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("New", color = colors.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -602,7 +606,7 @@ fun PlaylistCoverArt(
     artworkUrls: List<String>,
     coverUrl: String? = null,
     size: androidx.compose.ui.unit.Dp = 48.dp,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
+    shape: androidx.compose.ui.graphics.Shape = DreaminShapes.medium,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalDreaminColors.current
@@ -700,7 +704,7 @@ fun CreatePlaylistCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(DreaminShapes.large)
             .border(
                 1.5.dp,
                 Brush.linearGradient(
@@ -710,7 +714,7 @@ fun CreatePlaylistCard(
                         Color.Transparent
                     )
                 ),
-                RoundedCornerShape(22.dp)
+                DreaminShapes.large
             )
             .background(colors.surfaceHigh.copy(alpha = 0.45f))
             .clickable(
@@ -723,7 +727,7 @@ fun CreatePlaylistCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(DreaminShapes.large)
                 .background(colors.surfaceHighest.copy(alpha = 0.4f)),
             contentAlignment = Alignment.Center
         ) {
@@ -749,7 +753,7 @@ fun CreatePlaylistCard(
                     "New Playlist",
                     color = colors.primary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
@@ -760,13 +764,13 @@ fun CreatePlaylistCard(
             text = "Create or Import",
             color = colors.onSurface,
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1
         )
         Text(
             text = "Spotify & Local",
             color = colors.onSurfaceVariant,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1
         )
     }
@@ -786,7 +790,7 @@ fun PlaylistGridCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(DreaminShapes.large)
             .background(colors.surfaceHigh.copy(alpha = 0.65f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -798,12 +802,12 @@ fun PlaylistGridCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(DreaminShapes.large)
         ) {
             PlaylistCoverArt(
                 artworkUrls = artworkUrls,
                 coverUrl = playlist.coverUrl,
-                shape = RoundedCornerShape(18.dp),
+                shape = DreaminShapes.large,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -842,7 +846,7 @@ fun PlaylistGridCard(
                     text = playlist.name,
                     color = colors.onSurface,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.5.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -854,7 +858,7 @@ fun PlaylistGridCard(
                         else -> "0 tracks"
                     },
                     color = colors.onSurfaceVariant,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1
                 )
             }
@@ -875,7 +879,7 @@ fun PlaylistGridCard(
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(colors.surfaceHighest, RoundedCornerShape(14.dp))
+                    modifier = Modifier.background(colors.surfaceHighest, DreaminShapes.medium)
                 ) {
                     DropdownMenuItem(
                         text = { Text("Play", color = colors.onSurface) },
@@ -908,7 +912,7 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item(key = "stats_this_week_header", contentType = "StatsHeader") {
-            Text("This week", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+            Text("This week", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
         }
         item(key = "stats_cards_row", contentType = "StatsCardsRow") {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -925,49 +929,49 @@ fun StatsTab(stats: com.shyan.dreamin.data.model.ListeningStats) {
             }
         }
         stats.topSongThisWeek?.let { song ->
-            item(key = "stats_top_song_header", contentType = "StatsSubHeader") { Text("Top song", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
+            item(key = "stats_top_song_header", contentType = "StatsSubHeader") { Text("Top song", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
             item(key = "stats_top_song_card", contentType = "StatsTopSongCard") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surfaceHigh, RoundedCornerShape(16.dp))
+                        .background(colors.surfaceHigh, DreaminShapes.medium)
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AsyncImage(
                         model = song.displayArtworkUrl,
                         contentDescription = null,
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)),
+                        modifier = Modifier.size(48.dp).clip(DreaminShapes.small),
                         contentScale = ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(song.displayTitle, color = colors.onSurface, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(song.artist, color = colors.onSurfaceVariant, fontSize = 13.sp, maxLines = 1)
+                        Text(song.artist, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                     }
                 }
             }
         }
         stats.topArtistThisWeek?.let { artist ->
-            item(key = "stats_top_artist_header", contentType = "StatsSubHeader") { Text("Top artist", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
+            item(key = "stats_top_artist_header", contentType = "StatsSubHeader") { Text("Top artist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = colors.onSurface) }
             item(key = "stats_top_artist_card", contentType = "StatsTopArtistCard") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surfaceHigh, RoundedCornerShape(16.dp))
+                        .background(colors.surfaceHigh, DreaminShapes.medium)
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Filled.Person, contentDescription = null, tint = colors.primary, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(artist, color = colors.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(artist, color = colors.onSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
         if (stats.songsThisWeek == 0) {
             item(key = "stats_empty_card", contentType = "StatsEmptyCard") {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
-                    Text("Play some songs to see your stats here", color = colors.onSurfaceVariant, fontSize = 14.sp)
+                    Text("Play some songs to see your stats here", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -980,13 +984,13 @@ fun StatsCard(modifier: Modifier = Modifier, label: String, value: String) {
     val colors = LocalDreaminColors.current
     Column(
         modifier = modifier
-            .background(colors.surfaceHigh, RoundedCornerShape(16.dp))
+            .background(colors.surfaceHigh, DreaminShapes.medium)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(value, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = colors.primary)
+        Text(value, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = colors.primary)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(label, fontSize = 12.sp, color = colors.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
 
@@ -1003,7 +1007,7 @@ fun SpotifySyncAlertBanner(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = DreaminShapes.medium,
         color = colors.surfaceHigh,
         border = BorderStroke(1.dp, if (alert.isUnavailable) colors.surfaceHighest else colors.primary.copy(alpha = 0.35f))
     ) {
@@ -1017,7 +1021,7 @@ fun SpotifySyncAlertBanner(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(DreaminShapes.small)
                     .background(if (alert.isUnavailable) colors.surfaceHigh else colors.primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -1037,7 +1041,7 @@ fun SpotifySyncAlertBanner(
                         "${alert.newTrackCount} new ${if (alert.newTrackCount == 1) "song" else "songs"} in ${alert.playlistName}"
                     },
                     color = colors.onSurface,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1045,7 +1049,7 @@ fun SpotifySyncAlertBanner(
                 Text(
                     text = if (alert.isUnavailable) "Spotify playlist is no longer public" else "Spotify playlist updated — tap to sync",
                     color = colors.onSurfaceVariant,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1059,10 +1063,10 @@ fun SpotifySyncAlertBanner(
                         contentColor = colors.onSurface
                     ),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = DreaminShapes.small,
                     modifier = Modifier.height(30.dp)
                 ) {
-                    Text("Keep Local", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Keep Local", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                 }
             } else {
                 Button(
@@ -1073,7 +1077,7 @@ fun SpotifySyncAlertBanner(
                         contentColor = colors.onPrimary
                     ),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = DreaminShapes.small,
                     modifier = Modifier.height(30.dp)
                 ) {
                     if (isSyncing) {
@@ -1083,7 +1087,7 @@ fun SpotifySyncAlertBanner(
                             strokeWidth = 1.5.dp
                         )
                     } else {
-                        Text("Sync Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Sync Now", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }

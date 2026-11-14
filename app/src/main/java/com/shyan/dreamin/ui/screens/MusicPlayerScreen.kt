@@ -1,5 +1,9 @@
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.SonicNocturneColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -171,7 +175,7 @@ private fun MainAppScaffold(
             bottomBar = {
                 val footerAura by animateColorAsState(
                     targetValue = Color(state.dominantColor),
-                    animationSpec = tween(900, easing = FastOutSlowInEasing),
+                    animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
                     label = "footer_aura_color"
                 )
 
@@ -190,8 +194,8 @@ private fun MainAppScaffold(
                 ) {
                     AnimatedVisibility(
                         visible = !isNowPlayingOpen && state.currentSong != null,
-                        enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(180)),
-                        exit = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(140))
+                        enter = slideInVertically(DreaminMotion.standard()) { it } + fadeIn(tween(DreaminMotion.DurationMedium)),
+                        exit = slideOutVertically(DreaminMotion.standard()) { it } + fadeOut(tween(DreaminMotion.DurationShort))
                     ) {
                         CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalArtworkVisibilityScope provides this) {
                         MiniPlayer(
@@ -209,8 +213,8 @@ private fun MainAppScaffold(
                     }
                     AnimatedVisibility(
                         visible = !isRecognizeMusicOpen,
-                        enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(160)),
-                        exit = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(140))
+                        enter = slideInVertically(DreaminMotion.standard()) { it } + fadeIn(tween(DreaminMotion.DurationShort)),
+                        exit = slideOutVertically(DreaminMotion.standard()) { it } + fadeOut(tween(DreaminMotion.DurationShort))
                     ) {
                         BottomNavBar(
                             currentScreen  = currentScreen,
@@ -244,29 +248,23 @@ private fun MainAppScaffold(
 
             val homeAlpha by animateFloatAsState(
                 targetValue = if (isHome) 1f else 0f,
-                animationSpec = tween(durationMillis = 140),
+                animationSpec = tween(durationMillis = DreaminMotion.DurationShort),
                 label = "home_tab_alpha"
             )
             val libraryAlpha by animateFloatAsState(
                 targetValue = if (isLibrary) 1f else 0f,
-                animationSpec = tween(durationMillis = 140),
+                animationSpec = tween(durationMillis = DreaminMotion.DurationShort),
                 label = "library_tab_alpha"
             )
 
             val homeParallaxX by animateFloatAsState(
                 targetValue = if (isPlaylistOpen && isHome) -0.22f else 0f,
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = Spring.StiffnessMediumLow
-                ),
+                animationSpec = DreaminMotion.standard(),
                 label = "home_playlist_parallax"
             )
             val libraryParallaxX by animateFloatAsState(
                 targetValue = if (isPlaylistOpen && isLibrary) -0.22f else 0f,
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = Spring.StiffnessMediumLow
-                ),
+                animationSpec = DreaminMotion.standard(),
                 label = "library_playlist_parallax"
             )
 
@@ -398,18 +396,12 @@ private fun MainAppScaffold(
                     visible = isPlaylistOpen,
                     enter = slideInHorizontally(
                         initialOffsetX = { it },
-                        animationSpec = spring(
-                            dampingRatio = 0.84f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) + fadeIn(tween(220)),
+                        animationSpec = DreaminMotion.standard()
+                    ) + fadeIn(tween(DreaminMotion.DurationMedium)),
                     exit = slideOutHorizontally(
                         targetOffsetX = { it },
-                        animationSpec = spring(
-                            dampingRatio = 0.84f,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) + fadeOut(tween(180)),
+                        animationSpec = DreaminMotion.standard()
+                    ) + fadeOut(tween(DreaminMotion.DurationMedium)),
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(2f)
@@ -461,12 +453,12 @@ private fun MainAppScaffold(
                     visible = isRecognizeMusicOpen,
                     enter = slideInHorizontally(
                         initialOffsetX = { it },
-                        animationSpec = spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(tween(200)),
+                        animationSpec = DreaminMotion.standard()
+                    ) + fadeIn(tween(DreaminMotion.DurationMedium)),
                     exit = slideOutHorizontally(
                         targetOffsetX = { it },
-                        animationSpec = spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeOut(tween(180)),
+                        animationSpec = DreaminMotion.standard()
+                    ) + fadeOut(tween(DreaminMotion.DurationMedium)),
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(2.5f)
@@ -489,8 +481,8 @@ private fun MainAppScaffold(
 
         AnimatedVisibility(
             visible  = isNowPlayingOpen,
-            enter    = fadeIn(tween(200)),
-            exit     = fadeOut(tween(160)),
+            enter    = fadeIn(tween(DreaminMotion.DurationMedium)),
+            exit     = fadeOut(tween(DreaminMotion.DurationShort)),
             modifier = Modifier.fillMaxSize()
         ) {
             Box(
@@ -508,17 +500,11 @@ private fun MainAppScaffold(
         AnimatedVisibility(
             visible = state.selectedAlbum != null,
             enter = slideInVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) { it } + fadeIn(tween(200)),
+                animationSpec = DreaminMotion.standard()
+            ) { it } + fadeIn(tween(DreaminMotion.DurationMedium)),
             exit = slideOutVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) { it } + fadeOut(tween(180)),
+                animationSpec = DreaminMotion.standard()
+            ) { it } + fadeOut(tween(DreaminMotion.DurationMedium)),
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(3f)
@@ -547,28 +533,16 @@ private fun MainAppScaffold(
             visible = state.selectedArtistProfile != null,
             enter = scaleIn(
                 initialScale = 0.93f,
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
+                animationSpec = DreaminMotion.emphasized()
             ) + slideInVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) { 70 } + fadeIn(tween(200)),
+                animationSpec = DreaminMotion.emphasized()
+            ) { 70 } + fadeIn(tween(DreaminMotion.DurationMedium)),
             exit = scaleOut(
                 targetScale = 0.93f,
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
+                animationSpec = DreaminMotion.emphasized()
             ) + slideOutVertically(
-                animationSpec = spring(
-                    dampingRatio = 0.76f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            ) { 70 } + fadeOut(tween(180)),
+                animationSpec = DreaminMotion.emphasized()
+            ) { 70 } + fadeOut(tween(DreaminMotion.DurationMedium)),
             modifier = Modifier.fillMaxSize().zIndex(3.5f)
         ) {
             val profile = state.selectedArtistProfile
@@ -591,8 +565,8 @@ private fun MainAppScaffold(
         // NowPlaying full-screen sheet overlay (Topmost in stack)
         AnimatedVisibility(
             visible  = isNowPlayingOpen,
-            enter    = slideInVertically(DreaminMotion.FluidSlide) { it },
-            exit     = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(180, easing = FastOutLinearInEasing)),
+            enter    = slideInVertically(DreaminMotion.standard()) { it },
+            exit     = slideOutVertically(DreaminMotion.standard()) { it } + fadeOut(tween(DreaminMotion.DurationMedium, easing = FastOutLinearInEasing)),
             modifier = Modifier.fillMaxSize().zIndex(4f)
         ) {
             CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalArtworkVisibilityScope provides this) {

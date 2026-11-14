@@ -1,5 +1,9 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+
+import com.shyan.dreamin.ui.theme.DreaminMotion
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -37,35 +41,36 @@ fun AmbientSoundwaveHeader(
     scrollOffsetProvider: () -> Float = { 0f },
     isPlaying: Boolean = false,
     dynamicColor: Color? = null,
-    primaryGlow: Color = Color(0xFF8B5CF6),
-    midPurple: Color = Color(0xFF6D28D9),
-    deepIndigo: Color = Color(0xFF2E1065)
+    primaryGlow: Color = LocalDreaminColors.current.primary,
+    midPurple: Color = LocalDreaminColors.current.primaryDim,
+    deepIndigo: Color = LocalDreaminColors.current.primaryDeep
 ) {
+    val scrim = LocalDreaminColors.current.scrim
     // 1. Smooth Energy & Speed Interpolation (Inertial, no state resets)
     val targetSpeed = if (isPlaying) 1.25f else 0.72f
     val animatedSpeed by animateFloatAsState(
         targetValue = targetSpeed,
-        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "aurora_speed"
     )
 
     val targetEnergy = if (isPlaying) 1.20f else 0.80f
     val energyMultiplier by animateFloatAsState(
         targetValue = targetEnergy,
-        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "aurora_energy"
     )
 
     val targetPrimary = dynamicColor ?: primaryGlow
     val animatedPrimary by animateColorAsState(
         targetValue = targetPrimary,
-        animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "aurora_primary"
     )
 
     val animatedMid by animateColorAsState(
         targetValue = dynamicColor?.copy(alpha = 0.85f) ?: midPurple,
-        animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "aurora_mid"
     )
 
@@ -320,8 +325,8 @@ fun AmbientSoundwaveHeader(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xB3080511),
-                                Color(0x80080511),
+                                scrim.copy(alpha = 0.70f),
+                                scrim.copy(alpha = 0.50f),
                                 Color.Transparent
                             )
                         )

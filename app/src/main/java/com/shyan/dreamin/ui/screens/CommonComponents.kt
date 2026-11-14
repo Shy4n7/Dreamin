@@ -2,6 +2,12 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.*
@@ -87,9 +93,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -121,7 +125,7 @@ fun GlassmorphismCard(
     content: @Composable () -> Unit
 ) {
     val colors = LocalDreaminColors.current
-    val cardShape = RoundedCornerShape(20.dp)
+    val cardShape = DreaminShapes.large
     Box(
         modifier = modifier
             .clip(cardShape)
@@ -169,7 +173,7 @@ fun BottomNavBar(
     val dynamicDominant = dominantColor ?: colors.primary
     val animatedDominant by animateColorAsState(
         targetValue = dynamicDominant,
-        animationSpec = tween(900, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "nav_dominant_color"
     )
 
@@ -180,7 +184,7 @@ fun BottomNavBar(
         )
     } else Modifier
 
-    val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    val navShape = DreaminShapes.sheet
     Surface(
         color = if (hazeState != null) colors.surfaceContainer.copy(alpha = 0.55f) else colors.surfaceContainer,
         tonalElevation = 0.dp,
@@ -226,10 +230,7 @@ fun BottomNavBar(
 
             val animatedPillOffset by animateDpAsState(
                 targetValue = tabWidth * selectedIndex + (tabWidth - pillWidth) / 2,
-                animationSpec = spring(
-                    dampingRatio = 0.82f,
-                    stiffness = Spring.StiffnessMediumLow
-                ),
+                animationSpec = DreaminMotion.standard(),
                 label = "nav_pill_slide"
             )
 
@@ -239,7 +240,7 @@ fun BottomNavBar(
                     .offset(x = animatedPillOffset)
                     .width(pillWidth)
                     .height(42.dp)
-                    .clip(RoundedCornerShape(21.dp))
+                    .clip(DreaminShapes.large)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -256,7 +257,7 @@ fun BottomNavBar(
                                 animatedDominant.copy(alpha = 0.12f)
                             )
                         ),
-                        shape = RoundedCornerShape(21.dp)
+                        shape = DreaminShapes.large
                     )
             )
 
@@ -269,15 +270,12 @@ fun BottomNavBar(
                     val isSelected = screen == currentScreen
                     val tint by animateColorAsState(
                         targetValue   = if (isSelected) animatedDominant else colors.onSurfaceVariant,
-                        animationSpec = tween(200),
+                        animationSpec = tween(DreaminMotion.DurationMedium),
                         label         = "nav_tint_${screen.name}"
                     )
                     val iconScale by animateFloatAsState(
                         targetValue   = if (isSelected) 1.15f else 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
+                        animationSpec = DreaminMotion.bouncy(),
                         label         = "nav_scale_${screen.name}"
                     )
 
@@ -364,7 +362,7 @@ fun MiniPlayer(
     val dynamicAura = dominantColor ?: colors.primary
     val animatedAura by animateColorAsState(
         targetValue = dynamicAura,
-        animationSpec = tween(900, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "mini_aura_color"
     )
     val isPlaying = playbackState is PlaybackState.Playing
@@ -374,17 +372,17 @@ fun MiniPlayer(
     val isPressed by expandInteraction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = DreaminMotion.TactileBouncy,
+        animationSpec = DreaminMotion.standard(),
         label = "mini_press_scale"
     )
 
     val gleamIntensity by animateFloatAsState(
         targetValue = if (isPlaying) 1.0f else 0.0f,
-        animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "mini_shimmer_gleam_intensity"
     )
 
-    val cardShape = RoundedCornerShape(20.dp)
+    val cardShape = DreaminShapes.large
 
     Box(
         modifier = Modifier
@@ -514,7 +512,7 @@ fun MiniPlayer(
                         modifier = Modifier
                             .sharedArtwork(s.id)
                             .size(48.dp)
-                            .clip(RoundedCornerShape(10.dp)),
+                            .clip(DreaminShapes.small),
                         contentScale = ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -525,7 +523,7 @@ fun MiniPlayer(
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
                             when {
@@ -533,7 +531,7 @@ fun MiniPlayer(
                                 else -> s.artist
                             },
                             color = if (playbackState is PlaybackState.Error) colors.error else colors.onSurfaceVariant,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -596,7 +594,7 @@ fun SectionTitle(title: String) {
     val colors = LocalDreaminColors.current
     Text(
         text = title,
-        fontSize = 18.sp,
+        style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
         color = colors.onSurface,
         modifier = Modifier.padding(vertical = 8.dp)
@@ -630,7 +628,7 @@ fun SongRow(
     var showCreatePlaylist by remember { mutableStateOf(false) }
     val createPlaylistWithSong = LocalCreatePlaylistWithSong.current
     val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
 
     val onAddToQueueRef = rememberUpdatedState(onAddToQueue)
     var showQuickActions by remember { mutableStateOf(false) }
@@ -642,7 +640,7 @@ fun SongRow(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(DreaminShapes.large)
                     .background(
                         Brush.horizontalGradient(
                             listOf(
@@ -682,7 +680,7 @@ fun SongRow(
                         Text(
                             "ADD TO QUEUE",
                             color = Color.White,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
                         )
@@ -695,7 +693,7 @@ fun SongRow(
         val isPressed by rowInteraction.collectIsPressedAsState()
         val pressScale by animateFloatAsState(
             targetValue = if (isPressed) 0.97f else 1f,
-            animationSpec = DreaminMotion.TactileBouncy,
+            animationSpec = DreaminMotion.standard(),
             label = "row_press_scale"
         )
 
@@ -706,14 +704,14 @@ fun SongRow(
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             val captured = swipeOffset.value
-                            scope.launch { swipeOffset.animateTo(0f, DreaminMotion.FluidGlide) }
+                            scope.launch { swipeOffset.animateTo(0f, DreaminMotion.standard()) }
                             if (captured > swipeThreshold) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptic.confirm()
                                 onAddToQueueRef.value()
                             }
                         },
                         onDragCancel = {
-                            scope.launch { swipeOffset.animateTo(0f, DreaminMotion.FluidGlide) }
+                            scope.launch { swipeOffset.animateTo(0f, DreaminMotion.standard()) }
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             if (dragAmount > 0f || swipeOffset.value > 0f) {
@@ -731,7 +729,7 @@ fun SongRow(
                     scaleX = pressScale
                     scaleY = pressScale
                 }
-                .clip(RoundedCornerShape(18.dp))
+                .clip(DreaminShapes.large)
                 .border(
                     width = 1.dp,
                     brush = if (isPlaying) {
@@ -750,7 +748,7 @@ fun SongRow(
                             )
                         )
                     },
-                    shape = RoundedCornerShape(18.dp)
+                    shape = DreaminShapes.large
                 )
                 .background(
                     if (isPlaying) {
@@ -775,7 +773,7 @@ fun SongRow(
                     indication = ripple(bounded = true, color = colors.primary),
                     onClick = onClick,
                     onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.longPress()
                         showQuickActions = true
                     }
                 )
@@ -786,7 +784,7 @@ fun SongRow(
                 Text(
                     text = String.format("%02d", rank),
                     color = if (rank <= 3) colors.secondary else colors.onSurfaceVariant.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.width(28.dp)
                 )
@@ -795,8 +793,8 @@ fun SongRow(
             Box(
                 modifier = Modifier
                     .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                    .clip(DreaminShapes.medium)
+                    .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -834,13 +832,13 @@ fun SongRow(
                     fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 14.sp
+                    style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     song.artist,
                     color = colors.onSurfaceVariant,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -879,8 +877,8 @@ fun SongRow(
                             expanded = showOverflowMenu,
                             onDismissRequest = { showOverflowMenu = false },
                             modifier = Modifier
-                                .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
-                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                .background(colors.surfaceHighest, DreaminShapes.medium)
+                                .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
                                 .width(210.dp)
                         ) {
                             // 1. Add to playlist
@@ -889,7 +887,7 @@ fun SongRow(
                                     Text(
                                         "Add to playlist",
                                         color = colors.onSurface,
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                 },
@@ -913,7 +911,7 @@ fun SongRow(
                                     Text(
                                         "Add to queue",
                                         color = colors.onSurface,
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                 },
@@ -938,7 +936,7 @@ fun SongRow(
                                         Text(
                                             "Go to album",
                                             color = colors.onSurface,
-                                            fontSize = 14.sp,
+                                            style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium
                                         )
                                     },
@@ -964,7 +962,7 @@ fun SongRow(
                                         Text(
                                             if (isDownloaded) "Delete download" else if (isDownloading) "Downloading..." else "Download",
                                             color = if (isDownloaded) colors.error else colors.onSurface,
-                                            fontSize = 14.sp,
+                                            style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Medium
                                         )
                                     },
@@ -1052,7 +1050,7 @@ fun SongQuickActionsBottomSheet(
 ) {
     val colors = LocalDreaminColors.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    val sheetShape = DreaminShapes.sheet
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1089,14 +1087,14 @@ fun SongQuickActionsBottomSheet(
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(DreaminShapes.medium),
                     contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         song.displayTitle,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1,
@@ -1104,7 +1102,7 @@ fun SongQuickActionsBottomSheet(
                     )
                     Text(
                         song.artist,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1120,7 +1118,7 @@ fun SongQuickActionsBottomSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(DreaminShapes.medium)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true, color = colors.primary)
@@ -1131,15 +1129,15 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Play Next", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Text("Insert right after current song", fontSize = 12.sp, color = colors.onSurfaceVariant)
+                    Text("Play Next", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("Insert right after current song", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(DreaminShapes.medium)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true, color = colors.primary)
@@ -1150,8 +1148,8 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Add to queue", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Text("Plays after your other queued songs", fontSize = 12.sp, color = colors.onSurfaceVariant)
+                    Text("Add to queue", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("Plays after your other queued songs", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
 
@@ -1159,7 +1157,7 @@ fun SongQuickActionsBottomSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(DreaminShapes.medium)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true, color = colors.primary)
@@ -1170,8 +1168,8 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.Outlined.FolderSpecial, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Add to Playlist", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = colors.onSurface)
-                    Text("Save to your personalized library", fontSize = 12.sp, color = colors.onSurfaceVariant)
+                    Text("Add to Playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = colors.onSurface)
+                    Text("Save to your personalized library", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
 
@@ -1190,7 +1188,7 @@ fun AddToPlaylistDialog(
     val colors = LocalDreaminColors.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add to Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text("Add to Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
@@ -1205,7 +1203,7 @@ fun AddToPlaylistDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(18.dp))
-                        Text("Create new playlist", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Create new playlist", color = colors.secondary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 playlists.forEach { playlist ->
@@ -1213,7 +1211,7 @@ fun AddToPlaylistDialog(
                         onClick = { onSelect(playlist.id) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(playlist.name, color = colors.primary, fontSize = 15.sp, modifier = Modifier.fillMaxWidth())
+                        Text(playlist.name, color = colors.primary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -1262,20 +1260,20 @@ fun CreatePlaylistDialog(
                     "New Playlist",
                     color = colors.onSurface,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 19.sp
+                    style = MaterialTheme.typography.titleMedium
                 )
                 // 2-Tab Switcher
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(DreaminShapes.medium)
                         .background(colors.surfaceHighest)
                         .padding(3.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(DreaminShapes.small)
                             .background(if (selectedTab == 0) colors.primary else Color.Transparent)
                             .clickable { selectedTab = 0 }
                             .padding(vertical = 8.dp),
@@ -1284,14 +1282,14 @@ fun CreatePlaylistDialog(
                         Text(
                             "Manual",
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = if (selectedTab == 0) Color.White else colors.onSurfaceVariant
                         )
                     }
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(DreaminShapes.small)
                             .background(if (selectedTab == 1) colors.primary else Color.Transparent)
                             .clickable { selectedTab = 1 }
                             .padding(vertical = 8.dp),
@@ -1304,7 +1302,7 @@ fun CreatePlaylistDialog(
                             Text(
                                 "Spotify Import",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = if (selectedTab == 1) Color.White else colors.onSurfaceVariant
                             )
                         }
@@ -1319,7 +1317,7 @@ fun CreatePlaylistDialog(
                     Box(
                         modifier = Modifier
                             .size(72.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(DreaminShapes.medium)
                             .background(colors.surfaceHighest)
                             .clickable {
                                 photoPickerLauncher.launch(
@@ -1352,7 +1350,7 @@ fun CreatePlaylistDialog(
                                     tint = colors.primary,
                                     modifier = Modifier.size(24.dp)
                                 )
-                                Text("Cover", fontSize = 10.sp, color = colors.onSurfaceVariant)
+                                Text("Cover", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                             }
                         }
                     }
@@ -1362,7 +1360,7 @@ fun CreatePlaylistDialog(
                         onValueChange = { name = it },
                         label = { Text("Playlist Name") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = DreaminShapes.medium,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colors.primary,
                             unfocusedBorderColor = colors.surfaceHigh,
@@ -1389,7 +1387,7 @@ fun CreatePlaylistDialog(
                                     },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text("Paste", fontSize = 11.sp, color = colors.primary, fontWeight = FontWeight.Bold)
+                                    Text("Paste", style = MaterialTheme.typography.labelSmall, color = colors.primary, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 IconButton(onClick = { spotifyUrl = "" }) {
@@ -1397,7 +1395,7 @@ fun CreatePlaylistDialog(
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = DreaminShapes.medium,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colors.primary,
                             unfocusedBorderColor = colors.surfaceHigh,
@@ -1415,7 +1413,7 @@ fun CreatePlaylistDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(DreaminShapes.medium)
                                     .background(colors.surfaceHighest)
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1426,7 +1424,7 @@ fun CreatePlaylistDialog(
                                     color = colors.primary,
                                     strokeWidth = 2.5.dp
                                 )
-                                Text("Connecting to Spotify...", color = colors.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Connecting to Spotify...", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             }
                         }
                         is SpotifyImportState.MatchingTracks -> {
@@ -1445,7 +1443,7 @@ fun CreatePlaylistDialog(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(DreaminShapes.medium)
                                     .background(colors.surfaceHighest)
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1459,8 +1457,8 @@ fun CreatePlaylistDialog(
                                     Box(
                                         modifier = Modifier
                                             .size(52.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .border(2.dp, colors.primary.copy(alpha = pulseAlpha), RoundedCornerShape(10.dp))
+                                            .clip(DreaminShapes.small)
+                                            .border(2.dp, colors.primary.copy(alpha = pulseAlpha), DreaminShapes.small)
                                     ) {
                                         if (displayArt.isNotBlank()) {
                                             AsyncImage(
@@ -1491,7 +1489,7 @@ fun CreatePlaylistDialog(
                                             Text(
                                                 st.playlistTitle,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 color = colors.onSurface,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
@@ -1499,7 +1497,7 @@ fun CreatePlaylistDialog(
                                             )
                                             Text(
                                                 "${st.currentTrackIndex}/${st.totalTracks}",
-                                                fontSize = 12.sp,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = colors.primary,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1516,7 +1514,7 @@ fun CreatePlaylistDialog(
                                         Text(
                                             "Matching: ${st.currentTrackName}",
                                             color = colors.onSurface,
-                                            fontSize = 11.sp,
+                                            style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -1525,7 +1523,7 @@ fun CreatePlaylistDialog(
                                             Text(
                                                 st.currentTrackArtist,
                                                 color = colors.onSurfaceVariant,
-                                                fontSize = 10.sp,
+                                                style = MaterialTheme.typography.labelSmall,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -1544,11 +1542,11 @@ fun CreatePlaylistDialog(
                             ) {
                                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = colors.primary, modifier = Modifier.size(34.dp))
 
-                                Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Import Complete!", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     "Imported ${st.matchedCount} of ${st.totalTracks} songs",
                                     color = colors.onSurfaceVariant,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     textAlign = TextAlign.Center
                                 )
 
@@ -1556,7 +1554,7 @@ fun CreatePlaylistDialog(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .clip(DreaminShapes.medium)
                                             .background(colors.surfaceHighest)
                                             .padding(10.dp),
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1564,7 +1562,7 @@ fun CreatePlaylistDialog(
                                         Text(
                                             "${st.unmatchedTracks.size} songs not found",
                                             color = colors.secondary,
-                                            fontSize = 11.5.sp,
+                                            style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold
                                         )
 
@@ -1583,7 +1581,7 @@ fun CreatePlaylistDialog(
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clip(DreaminShapes.small)
                                                         .background(colors.surfaceHigh)
                                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1597,7 +1595,7 @@ fun CreatePlaylistDialog(
                                                             Text(
                                                                 track.title,
                                                                 color = colors.onSurface,
-                                                                fontSize = 11.sp,
+                                                                style = MaterialTheme.typography.labelSmall,
                                                                 fontWeight = FontWeight.Medium,
                                                                 maxLines = 1,
                                                                 overflow = TextOverflow.Ellipsis
@@ -1605,7 +1603,7 @@ fun CreatePlaylistDialog(
                                                             Text(
                                                                 track.artist,
                                                                 color = colors.onSurfaceVariant,
-                                                                fontSize = 10.sp,
+                                                                style = MaterialTheme.typography.labelSmall,
                                                                 maxLines = 1,
                                                                 overflow = TextOverflow.Ellipsis
                                                             )
@@ -1636,7 +1634,7 @@ fun CreatePlaylistDialog(
                                                         Row(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .clip(RoundedCornerShape(6.dp))
+                                                                .clip(DreaminShapes.small)
                                                                 .background(colors.surfaceHighest)
                                                                 .padding(horizontal = 6.dp, vertical = 3.dp),
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -1645,19 +1643,19 @@ fun CreatePlaylistDialog(
                                                             Text(
                                                                 "Match: ${track.suggestedCandidate.title}",
                                                                 color = colors.primary,
-                                                                fontSize = 9.5.sp,
+                                                                style = MaterialTheme.typography.labelSmall,
                                                                 fontWeight = FontWeight.Medium,
                                                                 maxLines = 1,
                                                                 overflow = TextOverflow.Ellipsis,
                                                                 modifier = Modifier.weight(1f)
                                                             )
                                                             if (isAdded) {
-                                                                Text("Added", color = colors.primary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                                                Text("Added", color = colors.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                                             } else {
                                                                 Text(
                                                                     "+ Add",
                                                                     color = colors.primary,
-                                                                    fontSize = 9.5.sp,
+                                                                    style = MaterialTheme.typography.labelSmall,
                                                                     fontWeight = FontWeight.Bold,
                                                                     modifier = Modifier
                                                                         .clip(RoundedCornerShape(4.dp))
@@ -1681,7 +1679,7 @@ fun CreatePlaylistDialog(
                             Text(
                                 st.message,
                                 color = colors.error,
-                                fontSize = 12.5.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -1766,7 +1764,7 @@ fun SaveQueueDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save Queue as Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text("Save Queue as Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -1808,12 +1806,12 @@ fun MiniEqualizerIndicator(
     val transition = rememberInfiniteTransition(label = "mini_eq")
     val h1 by transition.animateFloat(
         initialValue = 0.25f, targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq1"
     )
     val h2 by transition.animateFloat(
         initialValue = 0.9f, targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(tween(340, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq2"
     )
     val h3 by transition.animateFloat(
@@ -1823,7 +1821,7 @@ fun MiniEqualizerIndicator(
     )
     val h4 by transition.animateFloat(
         initialValue = 0.75f, targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(DreaminMotion.DurationLong, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "eq4"
     )
 
@@ -1856,7 +1854,7 @@ fun EditNameDialog(currentName: String, onDismiss: () -> Unit, onSave: (String) 
     var name by remember { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Change Name", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text("Change Name", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -1898,7 +1896,7 @@ fun DreaminInfoSheet(onDismiss: () -> Unit) {
         containerColor = colors.surfaceHigh,
         titleContentColor = colors.onSurface,
         title = {
-            Text("Tips & Tricks", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = colors.onSurface)
+            Text("Tips & Tricks", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1919,7 +1917,7 @@ fun DreaminInfoSheet(onDismiss: () -> Unit) {
             ) {
                 Text(
                     "DREAMIN · made by Shyan",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant.copy(alpha = 0.5f),
                     letterSpacing = 0.5.sp
                 )
@@ -1937,8 +1935,8 @@ fun InfoFeatureRow(icon: ImageVector, title: String, description: String) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp).padding(top = 2.dp))
         Column {
-            Text(title, color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(description, color = colors.onSurfaceVariant, fontSize = 12.sp)
+            Text(title, color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(description, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

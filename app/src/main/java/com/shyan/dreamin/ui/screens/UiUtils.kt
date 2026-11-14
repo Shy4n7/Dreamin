@@ -2,6 +2,9 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.*
@@ -113,61 +116,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 
 
 
-val Background = Color(0xFF07070A)
-val SurfaceContainer = Color(0xFF0F0F16)
-val SurfaceHigh = Color(0xFF14141E)
-val SurfaceHighest = Color(0xFF1C1C2A)
-val SurfaceBright = Color(0xFF242436)
-val Primary = Color(0xFF8B5CF6)
-val PrimaryDim = Color(0xFF6D28D9)
-val Secondary = Color(0xFF06B6D4)
-val OnSurface = Color.White.copy(alpha = 0.96f)
-val OnSurfaceVariant = Color.White.copy(alpha = 0.65f)
-val OutlineVariant = Color.White.copy(alpha = 0.08f)
-val BlackOverlay50 = Color.Black.copy(alpha = 0.50f)
-val BlackOverlay35 = Color.Black.copy(alpha = 0.35f)
-
-
-
-
-
-
-
-
-@androidx.compose.runtime.Immutable
-data class DreaminColors(
-    val background: Color,
-    val surfaceContainer: Color,
-    val surfaceHigh: Color,
-    val surfaceHighest: Color,
-    val surfaceBright: Color,
-    val primary: Color,
-    val primaryDim: Color,
-    val secondary: Color,
-    val onSurface: Color,
-    val onSurfaceVariant: Color,
-    val outlineVariant: Color,
-    val error: Color = Color(0xFFF43F5E),
-    val onPrimary: Color = Color.White
-)
-
-val SonicNocturneColors = DreaminColors(
-    background = Background,
-    surfaceContainer = SurfaceContainer,
-    surfaceHigh = SurfaceHigh,
-    surfaceHighest = SurfaceHighest,
-    surfaceBright = SurfaceBright,
-    primary = Primary,
-    primaryDim = PrimaryDim,
-    secondary = Secondary,
-    onSurface = OnSurface,
-    onSurfaceVariant = OnSurfaceVariant,
-    outlineVariant = OutlineVariant,
-    error = Color(0xFFF43F5E),
-    onPrimary = Color.White
-)
-
-val LocalDreaminColors = compositionLocalOf { SonicNocturneColors }
 val LocalPlaylists = staticCompositionLocalOf<List<com.shyan.dreamin.data.local.Playlist>> { emptyList() }
 val LocalCreatePlaylistWithSong = staticCompositionLocalOf<(String, android.net.Uri?, com.shyan.dreamin.data.model.Song) -> Unit> { { _, _, _ -> } }
 
@@ -179,30 +127,6 @@ fun blendDominantTint(base: Color, tint: Color, alpha: Float): Color = Color(
 )
 
 
-
-// Unified Motion System for subtle, silky 120 FPS animations & transitions
-object DreaminMotion {
-    val FluidGlide: SpringSpec<Float> = spring(
-        dampingRatio = 0.88f,
-        stiffness = 320f
-    )
-    val FluidSlide: SpringSpec<IntOffset> = spring(
-        dampingRatio = 0.88f,
-        stiffness = Spring.StiffnessMediumLow
-    )
-    val TactileBouncy: SpringSpec<Float> = spring(
-        dampingRatio = 0.88f,
-        stiffness = 380f
-    )
-    val SnappySnap: SpringSpec<Float> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 450f
-    )
-    val SmoothTween: TweenSpec<Float> = tween(
-        durationMillis = 280,
-        easing = FastOutSlowInEasing
-    )
-}
 
 @Composable
 fun DreaminRippleTheme(
@@ -232,10 +156,7 @@ fun Modifier.staggeredEntry(index: Int, baseDelayMs: Int = 22, maxStaggerItems: 
         if (staggerDelay > 0L) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = 0.82f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            animationSpec = DreaminMotion.standard()
         )
     }
     return this.graphicsLayer {
@@ -255,10 +176,7 @@ fun Modifier.staggeredHorizontalEntry(index: Int, baseDelayMs: Int = 20, maxStag
         if (staggerDelay > 0) delay(staggerDelay)
         animState.animateTo(
             targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = 0.8f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            animationSpec = DreaminMotion.standard()
         )
     }
     return this.graphicsLayer {
@@ -298,10 +216,7 @@ fun Modifier.pressRecoil(
     val isPressed by interactionSource.collectIsPressedAsState()
     val animatedScale by animateFloatAsState(
         targetValue = if (isPressed) targetScale else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = DreaminMotion.bouncy(),
         label = "press_recoil_scale"
     )
     return this.graphicsLayer {

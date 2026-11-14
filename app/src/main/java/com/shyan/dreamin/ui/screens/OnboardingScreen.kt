@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.AnimatedVisibility
@@ -71,7 +74,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
             ) {
                 Text(
                     "DREAMIN'",
-                    fontSize = 44.sp,
+                    style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.ExtraBold,
                     color = colors.onSurface,
                     letterSpacing = 4.sp
@@ -79,7 +82,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
 
                 Text(
                     "sound, uninterrupted",
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = colors.secondary,
                     letterSpacing = 1.sp
                 )
@@ -88,7 +91,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
 
                 Text(
                     "What should we call you?",
-                    fontSize = 17.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     color = colors.onSurface
                 )
@@ -103,7 +106,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                         Text("Your name", color = colors.onSurfaceVariant)
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = DreaminShapes.large,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = colors.surfaceContainer,
                         unfocusedContainerColor = colors.surfaceContainer,
@@ -131,7 +134,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = DreaminShapes.medium,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.primary,
                         contentColor = Color.White,
@@ -142,7 +145,7 @@ fun OnboardingScreen(onNameSubmit: (String) -> Unit) {
                 ) {
                     Text(
                         "Start listening",
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                 }

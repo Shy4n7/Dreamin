@@ -2,6 +2,12 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -31,10 +37,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,7 +76,7 @@ fun RecognizeMusicScreen(
 ) {
     val context = LocalContext.current
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val scope = rememberCoroutineScope()
 
     val recognitionState by MusicRecognitionService.recognitionState.collectAsStateWithLifecycle()
@@ -103,7 +107,7 @@ fun RecognizeMusicScreen(
     }
 
     fun startListening() {
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        haptic.confirm()
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.RECORD_AUDIO
@@ -153,7 +157,7 @@ fun RecognizeMusicScreen(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Recognize Music",
-                        fontSize = 20.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -217,7 +221,7 @@ fun RecognizeMusicScreen(
 
                         val buttonScale by animateFloatAsState(
                             targetValue = if (isListening) 1.08f + (liveAmplitude * 0.15f) else 1.0f,
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            animationSpec = DreaminMotion.smooth(),
                             label = "button_scale"
                         )
 
@@ -289,7 +293,7 @@ fun RecognizeMusicScreen(
                                 isError -> (curState as MusicRecognitionService.RecognitionState.Error).message
                                 else -> "Tap to recognize"
                             },
-                            fontSize = 20.sp,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White,
                             textAlign = TextAlign.Center
@@ -305,7 +309,7 @@ fun RecognizeMusicScreen(
                                 isError -> "Tap to try again."
                                 else -> "Identify songs playing around you instantly"
                             },
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = colors.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
@@ -315,7 +319,7 @@ fun RecognizeMusicScreen(
                             Button(
                                 onClick = { startListening() },
                                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                                shape = RoundedCornerShape(22.dp)
+                                shape = DreaminShapes.large
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -333,7 +337,7 @@ fun RecognizeMusicScreen(
         ModalBottomSheet(
             onDismissRequest = { showHistorySheet = false },
             containerColor = colors.surfaceContainer,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            shape = DreaminShapes.sheet
         ) {
             Column(
                 modifier = Modifier
@@ -347,7 +351,7 @@ fun RecognizeMusicScreen(
                 ) {
                     Text(
                         text = "Recognition History",
-                        fontSize = 19.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -361,7 +365,7 @@ fun RecognizeMusicScreen(
                                 }
                             }
                         ) {
-                            Text("Clear All", color = colors.error, fontSize = 13.sp)
+                            Text("Clear All", color = colors.error, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -378,7 +382,7 @@ fun RecognizeMusicScreen(
                         Text(
                             text = "No recognized songs yet.",
                             color = colors.onSurfaceVariant,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 } else {
@@ -412,14 +416,14 @@ fun RecognizeMusicScreen(
                                     contentDescription = item.title,
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .clip(RoundedCornerShape(8.dp)),
+                                        .clip(DreaminShapes.small),
                                     contentScale = ContentScale.Crop
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = item.title,
-                                        fontSize = 15.sp,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color.White,
                                         maxLines = 1,
@@ -427,7 +431,7 @@ fun RecognizeMusicScreen(
                                     )
                                     Text(
                                         text = item.artist,
-                                        fontSize = 13.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = colors.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -478,9 +482,9 @@ private fun RecognizedMatchCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(DreaminShapes.xl)
             .background(colors.surfaceContainer.copy(alpha = 0.75f))
-            .border(1.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+            .border(1.dp, colors.primary.copy(alpha = 0.35f), DreaminShapes.xl)
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -490,7 +494,7 @@ private fun RecognizedMatchCard(
             contentDescription = song.title,
             modifier = Modifier
                 .size(160.dp)
-                .clip(RoundedCornerShape(16.dp)),
+                .clip(DreaminShapes.medium),
             contentScale = ContentScale.Crop
         )
 
@@ -499,7 +503,7 @@ private fun RecognizedMatchCard(
         // Title
         Text(
             text = song.title,
-            fontSize = 20.sp,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
             textAlign = TextAlign.Center,
@@ -513,7 +517,7 @@ private fun RecognizedMatchCard(
         val subtitle = if (album.isNotBlank()) "${song.artist} • $album" else song.artist
         Text(
             text = subtitle,
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -532,7 +536,7 @@ private fun RecognizedMatchCard(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp),
-                shape = RoundedCornerShape(22.dp),
+                shape = DreaminShapes.large,
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -545,7 +549,7 @@ private fun RecognizedMatchCard(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp),
-                shape = RoundedCornerShape(22.dp),
+                shape = DreaminShapes.large,
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
             ) {
                 Text("Scan Again", color = Color.White)

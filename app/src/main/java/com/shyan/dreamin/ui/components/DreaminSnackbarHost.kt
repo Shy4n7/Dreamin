@@ -1,5 +1,7 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -9,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.shyan.dreamin.ui.screens.LocalDreaminColors
 import com.shyan.dreamin.viewmodel.UiMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch

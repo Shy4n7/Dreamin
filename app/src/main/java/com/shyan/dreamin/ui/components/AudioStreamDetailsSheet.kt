@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +37,6 @@ import coil.compose.AsyncImage
 import com.shyan.dreamin.data.model.PlayerUiState
 import com.shyan.dreamin.data.model.Song
 import com.shyan.dreamin.service.AudioFxManager
-import com.shyan.dreamin.ui.screens.LocalDreaminColors
 
 /**
  * 🎧 SpotiFLAC-Grade Live Audio Stream & Decoder Inspector Sheet.
@@ -53,14 +55,14 @@ fun AudioStreamDetailsSheet(
 ) {
     val colors = LocalDreaminColors.current
     val eqState by AudioFxManager.uiState.collectAsStateWithLifecycle()
-    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetShape = DreaminShapes.sheet
 
     val fmt = state.currentAudioFormat
     val isYt = state.currentSongStreamSource == "youtube" || song?.id?.startsWith("yt_") == true
     val isLossless = fmt?.isLossless == true
     val primaryAccent = when {
-        isLossless -> Color(0xFF00E676)
-        isYt -> Color(0xFFFF5252)
+        isLossless -> colors.success
+        isYt -> colors.error
         else -> colors.primary
     }
 
@@ -106,9 +108,9 @@ fun AudioStreamDetailsSheet(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(DreaminShapes.medium)
                         .background(primaryAccent.copy(alpha = 0.16f))
-                        .border(1.dp, primaryAccent.copy(alpha = 0.35f), RoundedCornerShape(14.dp)),
+                        .border(1.dp, primaryAccent.copy(alpha = 0.35f), DreaminShapes.medium),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -122,13 +124,13 @@ fun AudioStreamDetailsSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Audio Stream Specs",
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
                         text = if (isYt) "YouTube Music InnerTube Source" else "JioSaavn 320kbps Master Stream",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant
                     )
                 }
@@ -139,7 +141,7 @@ fun AudioStreamDetailsSheet(
             // Track summary card
             if (song != null) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = DreaminShapes.medium,
                     color = colors.surfaceHighest.copy(alpha = 0.5f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                     modifier = Modifier.fillMaxWidth()
@@ -153,13 +155,13 @@ fun AudioStreamDetailsSheet(
                             contentDescription = null,
                             modifier = Modifier
                                 .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(DreaminShapes.small)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = song.displayTitle,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -168,7 +170,7 @@ fun AudioStreamDetailsSheet(
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = song.artist,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -182,7 +184,7 @@ fun AudioStreamDetailsSheet(
             // Technical Grid
             Text(
                 text = "STREAM PROPERTIES",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurfaceVariant,
                 letterSpacing = 1.sp
@@ -192,9 +194,9 @@ fun AudioStreamDetailsSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(DreaminShapes.large)
                     .background(colors.surfaceHighest.copy(alpha = 0.45f))
-                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), DreaminShapes.large)
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -230,7 +232,7 @@ fun AudioStreamDetailsSheet(
             // Loudness Normalization Control
             Text(
                 text = "VOLUME HARMONIZATION",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurfaceVariant,
                 letterSpacing = 1.sp
@@ -238,7 +240,7 @@ fun AudioStreamDetailsSheet(
             Spacer(modifier = Modifier.height(10.dp))
 
             Surface(
-                shape = RoundedCornerShape(18.dp),
+                shape = DreaminShapes.large,
                 color = colors.surfaceHighest.copy(alpha = 0.55f),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                 modifier = Modifier.fillMaxWidth()
@@ -263,13 +265,13 @@ fun AudioStreamDetailsSheet(
                             Column {
                                 Text(
                                     "Loudness Normalizer",
-                                    fontSize = 13.5.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.White
                                 )
                                 Text(
                                     "Auto-levels unmastered tracks",
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = colors.onSurfaceVariant
                                 )
                             }
@@ -295,13 +297,13 @@ fun AudioStreamDetailsSheet(
                         ) {
                             Text(
                                 "Target Level",
-                                fontSize = 11.5.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant
                             )
                             val gainDb = eqState.loudnessGainMb / 100f
                             Text(
                                 String.format(java.util.Locale.US, "+%.1f dB", gainDb),
-                                fontSize = 11.5.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = primaryAccent
                             )
@@ -347,13 +349,13 @@ private fun StreamSpecRow(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = label,
-                fontSize = 12.5.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant
             )
         }
         Text(
             text = value,
-            fontSize = 12.5.sp,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = Color.White
         )

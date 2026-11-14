@@ -2,6 +2,13 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.*
@@ -87,9 +94,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,7 +185,7 @@ fun PlaylistDetailScreen(
 ) {
     val colors = LocalDreaminColors.current
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     var showRenameDialog by remember { mutableStateOf(false) }
     var showAddSongsSheet by remember { mutableStateOf(false) }
     var selectedSongForPosterPicker by remember { mutableStateOf<Song?>(null) }
@@ -281,17 +286,17 @@ fun PlaylistDetailScreen(
     }
     val animatedDominant by animateColorAsState(
         targetValue = Color(extractedTriad.dominant),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "playlist_ambient_dominant"
     )
     val animatedSecondary by animateColorAsState(
         targetValue = Color(extractedTriad.secondary),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "playlist_ambient_secondary"
     )
     val animatedAccent by animateColorAsState(
         targetValue = Color(extractedTriad.accent),
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing),
         label = "playlist_ambient_accent"
     )
 
@@ -387,7 +392,7 @@ fun PlaylistDetailScreen(
                         }
                         Text(
                             text = "${selectedSongIds.size} selected",
-                            fontSize = 17.sp,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = colors.onSurface,
                             modifier = Modifier.weight(1f).padding(start = 8.dp)
@@ -406,7 +411,7 @@ fun PlaylistDetailScreen(
                                 if (selectedSongIds.size == filteredSongs.size) "Deselect" else "Select All",
                                 color = animatedDominant,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
@@ -414,7 +419,7 @@ fun PlaylistDetailScreen(
                     AnimatedContent(
                         targetState = isSearchActive,
                         transitionSpec = {
-                            fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                            fadeIn(tween(DreaminMotion.DurationMedium)) togetherWith fadeOut(tween(DreaminMotion.DurationShort))
                         },
                         label = "playlist_search_bar"
                     ) { searchActive ->
@@ -439,9 +444,9 @@ fun PlaylistDetailScreen(
                                 OutlinedTextField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
-                                    placeholder = { Text("Filter tracks in playlist...", color = colors.onSurfaceVariant, fontSize = 13.5.sp) },
+                                    placeholder = { Text("Filter tracks in playlist...", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = DreaminShapes.medium,
                                     trailingIcon = {
                                         if (searchQuery.isNotEmpty()) {
                                             IconButton(onClick = { searchQuery = "" }) {
@@ -488,13 +493,13 @@ fun PlaylistDetailScreen(
                                             contentDescription = null,
                                             modifier = Modifier
                                                 .size(34.dp)
-                                                .clip(RoundedCornerShape(8.dp)),
+                                                .clip(DreaminShapes.small),
                                             contentScale = ContentScale.Crop
                                         )
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 playlist.name,
-                                                fontSize = 15.sp,
+                                                style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 color = colors.onSurface,
                                                 maxLines = 1,
@@ -502,7 +507,7 @@ fun PlaylistDetailScreen(
                                             )
                                             Text(
                                                 "$songCount ${if (songCount == 1) "track" else "tracks"}",
-                                                fontSize = 11.5.sp,
+                                                style = MaterialTheme.typography.labelSmall,
                                                 color = colors.onSurfaceVariant,
                                                 maxLines = 1
                                             )
@@ -555,7 +560,7 @@ fun PlaylistDetailScreen(
                                     }
                                     Text(
                                         playlist.name,
-                                        fontSize = 18.sp,
+                                        style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.onSurface,
                                         maxLines = 1,
@@ -657,7 +662,7 @@ fun PlaylistDetailScreen(
                                         artworkUrls = headerArtworks,
                                         coverUrl = playlist.coverUrl,
                                         size = 164.dp,
-                                        shape = RoundedCornerShape(22.dp)
+                                        shape = DreaminShapes.large
                                     )
                                 }
 
@@ -665,7 +670,7 @@ fun PlaylistDetailScreen(
 
                                 Text(
                                     text = playlist.name,
-                                    fontSize = 24.sp,
+                                    style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = colors.onSurface,
                                     textAlign = TextAlign.Center,
@@ -676,7 +681,7 @@ fun PlaylistDetailScreen(
 
                                 Text(
                                     text = "$songCount ${if (songCount == 1) "track" else "tracks"}${if (durationLabel.isNotBlank()) " • $durationLabel" else ""}",
-                                    fontSize = 13.5.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = colors.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
@@ -695,13 +700,13 @@ fun PlaylistDetailScreen(
                                                 containerColor = animatedDominant,
                                                 contentColor = playAllContentColor
                                             ),
-                                            shape = RoundedCornerShape(22.dp),
+                                            shape = DreaminShapes.large,
                                             modifier = Modifier.weight(1f).height(46.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
                                             Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Play All", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text("Play All", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                         }
 
                                         Button(
@@ -710,7 +715,7 @@ fun PlaylistDetailScreen(
                                                 containerColor = colors.surfaceHigh.copy(alpha = 0.85f),
                                                 contentColor = colors.onSurface
                                             ),
-                                            shape = RoundedCornerShape(22.dp),
+                                            shape = DreaminShapes.large,
                                             modifier = Modifier.weight(1f).height(46.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
@@ -721,14 +726,14 @@ fun PlaylistDetailScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Shuffle", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                            Text("Shuffle", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
                                         }
 
                                         IconButton(
                                             onClick = { showAddSongsSheet = true },
                                             modifier = Modifier
                                                 .size(46.dp)
-                                                .clip(RoundedCornerShape(22.dp))
+                                                .clip(DreaminShapes.large)
                                                 .background(colors.surfaceHigh.copy(alpha = 0.85f))
                                         ) {
                                             Icon(
@@ -753,7 +758,7 @@ fun PlaylistDetailScreen(
                                             },
                                             modifier = Modifier
                                                 .size(46.dp)
-                                                .clip(RoundedCornerShape(22.dp))
+                                                .clip(DreaminShapes.large)
                                                 .background(
                                                     if (allDownloaded) colors.secondary.copy(alpha = 0.2f)
                                                     else colors.surfaceHigh.copy(alpha = 0.85f)
@@ -780,13 +785,13 @@ fun PlaylistDetailScreen(
                                                 containerColor = animatedDominant,
                                                 contentColor = Color.White
                                             ),
-                                            shape = RoundedCornerShape(22.dp),
+                                            shape = DreaminShapes.large,
                                             modifier = Modifier.weight(1.2f).height(48.dp),
                                             contentPadding = PaddingValues(horizontal = 14.dp)
                                         ) {
                                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Add Songs", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text("Add Songs", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                         }
 
                                         OutlinedButton(
@@ -797,7 +802,7 @@ fun PlaylistDetailScreen(
                                                     )
                                                 )
                                             },
-                                            shape = RoundedCornerShape(22.dp),
+                                            shape = DreaminShapes.large,
                                             border = BorderStroke(1.dp, colors.onSurfaceVariant.copy(alpha = 0.35f)),
                                             modifier = Modifier.weight(1f).height(48.dp),
                                             contentPadding = PaddingValues(horizontal = 10.dp)
@@ -809,7 +814,7 @@ fun PlaylistDetailScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Edit Cover", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
+                                            Text("Edit Cover", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                                         }
                                     }
                                 }
@@ -832,7 +837,7 @@ fun PlaylistDetailScreen(
                                 Box {
                                     Surface(
                                         onClick = { showSortDropdown = true },
-                                        shape = RoundedCornerShape(14.dp),
+                                        shape = DreaminShapes.medium,
                                         color = colors.surfaceHigh.copy(alpha = 0.65f),
                                         border = BorderStroke(
                                             1.dp,
@@ -853,7 +858,7 @@ fun PlaylistDetailScreen(
                                             )
                                             Text(
                                                 text = "${sortOrder.label} ${if (sortOrder != PlaylistSortOrder.Custom) (if (sortAscending) "↑" else "↓") else ""}".trim(),
-                                                fontSize = 12.5.sp,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = if (sortOrder != PlaylistSortOrder.Custom) colors.onSurface else colors.onSurfaceVariant
                                             )
@@ -864,8 +869,8 @@ fun PlaylistDetailScreen(
                                         expanded = showSortDropdown,
                                         onDismissRequest = { showSortDropdown = false },
                                         modifier = Modifier
-                                            .background(colors.surfaceHighest, RoundedCornerShape(14.dp))
-                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                                            .background(colors.surfaceHighest, DreaminShapes.medium)
+                                            .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
                                             .width(180.dp)
                                     ) {
                                         PlaylistSortOrder.values().forEach { order ->
@@ -881,10 +886,10 @@ fun PlaylistDetailScreen(
                                                             order.label,
                                                             color = if (isSelected) animatedDominant else colors.onSurface,
                                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                            fontSize = 13.5.sp
+                                                            style = MaterialTheme.typography.bodyMedium
                                                         )
                                                         if (isSelected && order != PlaylistSortOrder.Custom) {
-                                                            Text(if (sortAscending) "Asc" else "Desc", fontSize = 11.sp, color = animatedDominant)
+                                                            Text(if (sortAscending) "Asc" else "Desc", style = MaterialTheme.typography.labelSmall, color = animatedDominant)
                                                         }
                                                     }
                                                 },
@@ -952,7 +957,7 @@ fun PlaylistDetailScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(14.dp))
+                                            .clip(DreaminShapes.medium)
                                             .background(colors.surfaceHighest.copy(alpha = 0.45f))
                                             .padding(horizontal = 14.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -961,7 +966,7 @@ fun PlaylistDetailScreen(
                                         Box(
                                             modifier = Modifier
                                                 .size(52.dp)
-                                                .clip(RoundedCornerShape(12.dp))
+                                                .clip(DreaminShapes.medium)
                                                 .background(colors.surfaceHigh)
                                         )
                                         Column(
@@ -972,14 +977,14 @@ fun PlaylistDetailScreen(
                                                 modifier = Modifier
                                                     .fillMaxWidth(0.62f)
                                                     .height(14.dp)
-                                                    .clip(RoundedCornerShape(7.dp))
+                                                    .clip(DreaminShapes.small)
                                                     .background(colors.surfaceHigh)
                                             )
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth(0.40f)
                                                     .height(11.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .clip(DreaminShapes.small)
                                                     .background(colors.surfaceHigh.copy(alpha = 0.6f))
                                             )
                                         }
@@ -992,7 +997,7 @@ fun PlaylistDetailScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(DreaminShapes.medium)
                                     .background(colors.surfaceHighest.copy(alpha = 0.55f))
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1005,11 +1010,11 @@ fun PlaylistDetailScreen(
                                     Text(
                                         "Quick Add Recommendations",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = colors.onSurface
                                     )
                                     TextButton(onClick = { showAddSongsSheet = true }) {
-                                        Text("Search all", color = animatedDominant, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text("Search all", color = animatedDominant, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
 
@@ -1023,7 +1028,7 @@ fun PlaylistDetailScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
+                                                .clip(DreaminShapes.medium)
                                                 .background(colors.surfaceHigh.copy(alpha = 0.4f))
                                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
@@ -1034,7 +1039,7 @@ fun PlaylistDetailScreen(
                                                 contentDescription = null,
                                                 modifier = Modifier
                                                     .size(44.dp)
-                                                    .clip(RoundedCornerShape(8.dp)),
+                                                    .clip(DreaminShapes.small),
                                                 contentScale = ContentScale.Crop
                                             )
                                             Column(modifier = Modifier.weight(1f)) {
@@ -1042,14 +1047,14 @@ fun PlaylistDetailScreen(
                                                     s.displayTitle,
                                                     color = colors.onSurface,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 13.5.sp,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
                                                     s.artist,
                                                     color = colors.onSurfaceVariant,
-                                                    fontSize = 11.5.sp,
+                                                    style = MaterialTheme.typography.labelSmall,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -1080,14 +1085,14 @@ fun PlaylistDetailScreen(
                                 } else {
                                     Text(
                                         "No songs in playlist yet. Tap below to search and add tracks from the catalog.",
-                                        fontSize = 13.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = colors.onSurfaceVariant
                                     )
                                     Button(
                                         onClick = { showAddSongsSheet = true },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = DreaminShapes.medium
                                     ) {
                                         Text("Search Songs to Add", fontWeight = FontWeight.Bold)
                                     }
@@ -1104,7 +1109,7 @@ fun PlaylistDetailScreen(
                                 Text(
                                     "No tracks found for \"$searchQuery\"",
                                     color = colors.onSurface,
-                                    fontSize = 16.sp,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center
                                 )
@@ -1142,7 +1147,7 @@ fun PlaylistDetailScreen(
                                 },
                                 onLongClick = {
                                     if (!isMultiSelectMode) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        haptic.longPress()
                                         isMultiSelectMode = true
                                         selectedSongIds.add(song.id)
                                     }
@@ -1158,7 +1163,7 @@ fun PlaylistDetailScreen(
                                 onDragStart = {
                                     draggingIndex = idx
                                     dragOffsetY = 0f
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.longPress()
                                 },
                                 onDrag = { delta ->
                                     dragOffsetY += delta
@@ -1168,7 +1173,7 @@ fun PlaylistDetailScreen(
                                         onReorderSong(idx, targetIdx)
                                         dragOffsetY -= (targetIdx - idx) * itemHeightPx.floatValue
                                         draggingIndex = targetIdx
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.tick()
                                     }
                                 },
                                 onDragEnd = {
@@ -1178,7 +1183,7 @@ fun PlaylistDetailScreen(
                                 onHeightMeasured = { h -> itemHeightPx.floatValue = h },
                                 onSwipeAddToQueue = {
                                     onAddToQueue(song)
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.confirm()
                                     scope.launch {
                                         snackbarHostState.showSnackbar("Added \"${song.displayTitle}\" to queue", duration = SnackbarDuration.Short)
                                     }
@@ -1187,7 +1192,7 @@ fun PlaylistDetailScreen(
                                     val removedSong = song
                                     val title = removedSong.displayTitle
                                     onRemoveSong(removedSong.id)
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.confirm()
                                     scope.launch {
                                         snackbarHostState.currentSnackbarData?.dismiss()
                                         val result = snackbarHostState.showSnackbar(
@@ -1238,7 +1243,7 @@ fun PlaylistDetailScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(top = 12.dp, bottom = 6.dp)
-                                            .clip(RoundedCornerShape(14.dp))
+                                            .clip(DreaminShapes.medium)
                                             .background(colors.surfaceHighest.copy(alpha = 0.45f))
                                             .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1251,14 +1256,14 @@ fun PlaylistDetailScreen(
                                             Text(
                                                 "Recommended for this playlist",
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 color = colors.onSurface
                                             )
                                             TextButton(
                                                 onClick = { showAddSongsSheet = true },
                                                 contentPadding = PaddingValues(0.dp)
                                             ) {
-                                                Text("More", color = animatedDominant, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                                Text("More", color = animatedDominant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                                             }
                                         }
 
@@ -1266,7 +1271,7 @@ fun PlaylistDetailScreen(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clip(DreaminShapes.medium)
                                                     .background(colors.surfaceHigh.copy(alpha = 0.35f))
                                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -1277,17 +1282,17 @@ fun PlaylistDetailScreen(
                                                     contentDescription = null,
                                                     modifier = Modifier
                                                         .size(42.dp)
-                                                        .clip(RoundedCornerShape(8.dp)),
+                                                        .clip(DreaminShapes.small),
                                                     contentScale = ContentScale.Crop
                                                 )
                                                 Column(modifier = Modifier.weight(1f)) {
-                                                    Text(s.displayTitle, color = colors.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text(s.artist, color = colors.onSurfaceVariant, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(s.displayTitle, color = colors.onSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(s.artist, color = colors.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 }
                                                 IconButton(
                                                     onClick = {
                                                         onAddSong(s)
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        haptic.confirm()
                                                         scope.launch {
                                                             snackbarHostState.showSnackbar("Added \"${s.displayTitle}\"", duration = SnackbarDuration.Short)
                                                         }
@@ -1306,7 +1311,7 @@ fun PlaylistDetailScreen(
                         item {
                             OutlinedButton(
                                 onClick = { showAddSongsSheet = true },
-                                shape = RoundedCornerShape(14.dp),
+                                shape = DreaminShapes.medium,
                                 border = BorderStroke(1.dp, animatedDominant.copy(alpha = 0.4f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1315,7 +1320,7 @@ fun PlaylistDetailScreen(
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Add More Songs", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Add More Songs", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
 
@@ -1343,15 +1348,15 @@ fun PlaylistDetailScreen(
         // Multi-select floating bottom action bar
         AnimatedVisibility(
             visible = isMultiSelectMode,
-            enter = slideInVertically { it } + fadeIn(tween(180)),
-            exit = slideOutVertically { it } + fadeOut(tween(140)),
+            enter = slideInVertically { it } + fadeIn(tween(DreaminMotion.DurationMedium)),
+            exit = slideOutVertically { it } + fadeOut(tween(DreaminMotion.DurationShort)),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = if (bottomPadding > 0.dp) bottomPadding + 12.dp else (if (currentSong != null) 78.dp else 16.dp), start = 16.dp, end = 16.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(22.dp),
+                shape = DreaminShapes.large,
                 color = colors.surfaceHighest.copy(alpha = 0.96f),
                 border = BorderStroke(1.dp, animatedDominant.copy(alpha = 0.5f)),
                 shadowElevation = 18.dp,
@@ -1367,13 +1372,13 @@ fun PlaylistDetailScreen(
                     Column {
                         Text(
                             text = "${selectedSongIds.size} selected",
-                            fontSize = 14.5.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = colors.onSurface
                         )
                         Text(
                             text = if (selectedSongIds.size == filteredSongs.size) "All tracks" else "of ${filteredSongs.size} tracks",
-                            fontSize = 11.5.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = colors.onSurfaceVariant
                         )
                     }
@@ -1467,8 +1472,8 @@ fun PlaylistDetailScreen(
         // MiniPlayer floating inside playlist screen at the bottom
         AnimatedVisibility(
             visible = currentSong != null,
-            enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(180)),
-            exit = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(140)),
+            enter = slideInVertically(DreaminMotion.standard()) { it } + fadeIn(tween(DreaminMotion.DurationMedium)),
+            exit = slideOutVertically(DreaminMotion.standard()) { it } + fadeOut(tween(DreaminMotion.DurationShort)),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -1509,7 +1514,7 @@ fun PlaylistDetailScreen(
                 containerColor = colors.surfaceHighest,
                 contentColor = colors.onSurface,
                 actionColor = colors.primary,
-                shape = RoundedCornerShape(14.dp)
+                shape = DreaminShapes.medium
             )
         }
     }
@@ -1518,7 +1523,7 @@ fun PlaylistDetailScreen(
         var newTitle by remember { mutableStateOf(playlist.name) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("Edit Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("Edit Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -1533,7 +1538,7 @@ fun PlaylistDetailScreen(
                             artworkUrls = songs.map { it.displayArtworkUrl },
                             coverUrl = playlist.coverUrl,
                             size = 110.dp,
-                            shape = RoundedCornerShape(18.dp)
+                            shape = DreaminShapes.large
                         )
                     }
 
@@ -1551,24 +1556,24 @@ fun PlaylistDetailScreen(
                                 )
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
-                            shape = RoundedCornerShape(22.dp),
+                            shape = DreaminShapes.large,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                             modifier = Modifier.height(38.dp)
                         ) {
                             Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Change Photo", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Change Photo", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
                         if (playlist.coverUrl != null) {
                             Spacer(modifier = Modifier.width(8.dp))
                             OutlinedButton(
                                 onClick = { onUpdateCover(null) },
-                                shape = RoundedCornerShape(22.dp),
+                                shape = DreaminShapes.large,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 modifier = Modifier.height(38.dp)
                             ) {
-                                Text("Remove", fontSize = 13.sp, color = colors.onSurfaceVariant)
+                                Text("Remove", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                             }
                         }
                     }
@@ -1585,7 +1590,7 @@ fun PlaylistDetailScreen(
                             focusedLabelColor = animatedDominant,
                             cursorColor = animatedDominant
                         ),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = DreaminShapes.medium,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1599,7 +1604,7 @@ fun PlaylistDetailScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = animatedDominant),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = DreaminShapes.large
                 ) {
                     Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -1610,7 +1615,7 @@ fun PlaylistDetailScreen(
                 }
             },
             containerColor = colors.surfaceHighest,
-            shape = RoundedCornerShape(22.dp)
+            shape = DreaminShapes.large
         )
     }
 
@@ -1694,7 +1699,7 @@ fun AddSongsToPlaylistDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.85f)
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .clip(DreaminShapes.sheet)
                     .background(colors.surfaceHighest)
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -1723,13 +1728,13 @@ fun AddSongsToPlaylistDialog(
                     Column {
                         Text(
                             "Add Songs",
-                            fontSize = 20.sp,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = colors.onSurface
                         )
                         Text(
                             "To \"$playlistName\"",
-                            fontSize = 12.5.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = colors.onSurfaceVariant
                         )
                     }
@@ -1744,7 +1749,7 @@ fun AddSongsToPlaylistDialog(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Search songs, artists, albums...", color = colors.onSurfaceVariant, fontSize = 13.5.sp) },
+                    placeholder = { Text("Search songs, artists, albums...", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) },
                     singleLine = true,
                     leadingIcon = {
                         Icon(Icons.Outlined.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -1763,7 +1768,7 @@ fun AddSongsToPlaylistDialog(
                         unfocusedContainerColor = colors.surfaceHigh,
                         cursorColor = accentColor
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = DreaminShapes.medium,
                     modifier = Modifier.fillMaxWidth().height(52.dp)
                 )
 
@@ -1778,7 +1783,7 @@ fun AddSongsToPlaylistDialog(
                 if (query.isBlank()) {
                     Text(
                         "Suggestions from Favorites & Trending",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 6.dp)
@@ -1799,7 +1804,7 @@ fun AddSongsToPlaylistDialog(
                                 Text(
                                     if (query.isNotBlank()) "No songs found for \"$query\"" else "No suggestions available",
                                     color = colors.onSurfaceVariant,
-                                    fontSize = 14.sp
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                             }
                         }
@@ -1815,7 +1820,7 @@ fun AddSongsToPlaylistDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(DreaminShapes.medium)
                                 .background(colors.surfaceHigh.copy(alpha = 0.6f))
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1826,7 +1831,7 @@ fun AddSongsToPlaylistDialog(
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(46.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .clip(DreaminShapes.small),
                                 contentScale = ContentScale.Crop
                             )
 
@@ -1835,14 +1840,14 @@ fun AddSongsToPlaylistDialog(
                                     text = song.displayTitle,
                                     color = colors.onSurface,
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize = 14.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = song.artist,
                                     color = colors.onSurfaceVariant,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1853,7 +1858,7 @@ fun AddSongsToPlaylistDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(DreaminShapes.small)
                                         .background(colors.secondary.copy(alpha = 0.2f))
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
@@ -1867,7 +1872,7 @@ fun AddSongsToPlaylistDialog(
                                         "Added",
                                         color = colors.secondary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
+                                        style = MaterialTheme.typography.bodySmall
                                     )
                                 }
                             } else {
@@ -1877,13 +1882,13 @@ fun AddSongsToPlaylistDialog(
                                         onAddSong(song)
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = DreaminShapes.medium,
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                     modifier = Modifier.height(34.dp)
                                 ) {
                                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Add", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                                    Text("Add", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1923,19 +1928,19 @@ fun PlaylistSongRow(
     onRemove: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val coroutineScope = rememberCoroutineScope()
     val rowInteractionSource = remember { MutableInteractionSource() }
     val isPressed by rowInteractionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
+        animationSpec = DreaminMotion.emphasized(),
         label = "playlist_row_press"
     )
 
     val animatedBgAlpha by animateFloatAsState(
         targetValue = if (isPlaying) 0.14f else 0f,
-        animationSpec = tween(300),
+        animationSpec = tween(DreaminMotion.DurationLong),
         label = "playlist_row_bg"
     )
     val bgColor = if (animatedBgAlpha > 0f) colors.primary.copy(alpha = animatedBgAlpha) else Color.Transparent
@@ -1959,14 +1964,14 @@ fun PlaylistSongRow(
                 shadowElevation = if (isDragging) 24f else 0f
             }
             .zIndex(if (isDragging) 10f else 0f)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(DreaminShapes.large)
     ) {
         // Swipe action background indicators
         if (swipeOffsetX.value > swipeRevealPx) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(DreaminShapes.large)
                     .background(colors.primary.copy(alpha = 0.22f))
                     .padding(start = 18.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1981,14 +1986,14 @@ fun PlaylistSongRow(
                         tint = colors.primary,
                         modifier = Modifier.size(20.dp)
                     )
-                    Text("Queue", color = colors.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Queue", color = colors.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                 }
             }
         } else if (swipeOffsetX.value < -swipeRevealPx) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(DreaminShapes.large)
                     .background(colors.error.copy(alpha = 0.22f))
                     .padding(end = 18.dp),
                 contentAlignment = Alignment.CenterEnd
@@ -1997,7 +2002,7 @@ fun PlaylistSongRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text("Remove", color = colors.error, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Remove", color = colors.error, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                     Icon(
                         Icons.Filled.DeleteOutline,
                         contentDescription = null,
@@ -2015,7 +2020,7 @@ fun PlaylistSongRow(
                 .graphicsLayer {
                     translationX = swipeOffsetX.value
                 }
-                .clip(RoundedCornerShape(18.dp))
+                .clip(DreaminShapes.large)
                 .border(
                     width = 1.dp,
                     brush = if (isPlaying) {
@@ -2034,7 +2039,7 @@ fun PlaylistSongRow(
                             )
                         )
                     },
-                    shape = RoundedCornerShape(18.dp)
+                    shape = DreaminShapes.large
                 )
                 .background(
                     if (isSelected) {
@@ -2074,7 +2079,7 @@ fun PlaylistSongRow(
                                     }
                                     swipeOffsetX.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
+                                        DreaminMotion.emphasized()
                                     )
                                 }
                             },
@@ -2082,7 +2087,7 @@ fun PlaylistSongRow(
                                 coroutineScope.launch {
                                     swipeOffsetX.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
+                                        DreaminMotion.emphasized()
                                     )
                                 }
                             },
@@ -2138,7 +2143,7 @@ fun PlaylistSongRow(
                     } else {
                         Text(
                             text = String.format("%02d", index),
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = colors.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -2160,13 +2165,13 @@ fun PlaylistSongRow(
                     fontWeight = textWeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 14.5.sp
+                    style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = song.artist,
                     color = colors.onSurfaceVariant,
-                    fontSize = 12.5.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2220,33 +2225,33 @@ fun PlaylistSongRow(
                     expanded = showOptionsSheet,
                     onDismissRequest = { showOptionsSheet = false },
                     modifier = Modifier
-                        .background(colors.surfaceHighest, RoundedCornerShape(16.dp))
-                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                        .background(colors.surfaceHighest, DreaminShapes.medium)
+                        .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
                         .width(210.dp)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Play next", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        text = { Text("Play next", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
                         leadingIcon = { Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
                         onClick = { showOptionsSheet = false; onPlayNext() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Add to queue", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        text = { Text("Add to queue", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
                         onClick = { showOptionsSheet = false; onAddToQueue() }
                     )
                     DropdownMenuItem(
-                        text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
                         leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) colors.error else colors.onSurface, modifier = Modifier.size(20.dp)) },
                         onClick = { showOptionsSheet = false; onDownload() }
                     )
                     DropdownMenuItem(
-                        text = { Text("Change Poster", color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        text = { Text("Change Poster", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
                         leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
                         onClick = { showOptionsSheet = false; onChangePoster() }
                     )
                     HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
                     DropdownMenuItem(
-                        text = { Text("Remove from playlist", color = colors.error, fontSize = 14.sp, fontWeight = FontWeight.Medium) },
+                        text = { Text("Remove from playlist", color = colors.error, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
                         leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = colors.error, modifier = Modifier.size(20.dp)) },
                         onClick = { showOptionsSheet = false; onRemove() }
                     )
@@ -2265,8 +2270,8 @@ fun ArtworkBox(
     Box(
         modifier = Modifier
             .size(52.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+            .clip(DreaminShapes.medium)
+            .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
     ) {
         AsyncImage(
             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
@@ -2282,7 +2287,7 @@ fun ArtworkBox(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(BlackOverlay50),
+                    .background(Color.Black.copy(alpha = 0.50f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
@@ -2421,9 +2426,9 @@ fun PlaylistFastScroller(
                         translationY = availableH * scrollFraction
                         translationX = -120f
                     }
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(DreaminShapes.medium)
                     .background(colors.surfaceHighest.copy(alpha = 0.95f))
-                    .border(1.dp, dominantColor.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                    .border(1.dp, dominantColor.copy(alpha = 0.6f), DreaminShapes.medium)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -2437,14 +2442,14 @@ fun PlaylistFastScroller(
                 ) {
                     Text(
                         text = "${currentTargetIndex + 1}",
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = dominantColor
                     )
                 }
                 Text(
                     text = currentSongSnippet?.displayTitle ?: "Track ${currentTargetIndex + 1}",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.onSurface,
                     maxLines = 1,

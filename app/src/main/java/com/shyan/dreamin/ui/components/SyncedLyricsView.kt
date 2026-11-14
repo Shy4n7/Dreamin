@@ -1,5 +1,11 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,8 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shyan.dreamin.data.model.LyricsState
 import com.shyan.dreamin.data.model.PlaybackProgress
-import com.shyan.dreamin.ui.screens.LocalDreaminColors
 import kotlinx.coroutines.flow.StateFlow
 
 private val ACTIVE_LINE_OFFSET = 32.dp
@@ -56,15 +59,15 @@ fun SyncedLyricsView(
     modifier: Modifier = Modifier
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(26.dp))
-            .background(Color(0xFF060609)),
+            .clip(DreaminShapes.xl)
+            .background(LocalDreaminColors.current.background),
         contentAlignment = Alignment.Center
     ) {
         when (lyricsState) {
@@ -83,7 +86,7 @@ fun SyncedLyricsView(
                     Text(
                         "Syncing lyrics with music...",
                         color = colors.onSurfaceVariant,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -105,20 +108,20 @@ fun SyncedLyricsView(
                     Text(
                         "No synced lyrics found",
                         color = Color.White,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Tap retry to search across multi-source databases",
                         color = colors.onSurfaceVariant,
-                        fontSize = 12.5.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     TextButton(
                         onClick = onRetry,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = DreaminShapes.medium,
                         colors = ButtonDefaults.textButtonColors(
                             containerColor = colors.surfaceHighest.copy(alpha = 0.65f)
                         )
@@ -130,7 +133,7 @@ fun SyncedLyricsView(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Search Again", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Search Again", color = colors.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -155,7 +158,7 @@ fun SyncedLyricsView(
                         Text(
                             text = line,
                             color = Color.White.copy(alpha = 0.88f),
-                            fontSize = 18.sp,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             lineHeight = 28.sp
@@ -234,16 +237,13 @@ fun SyncedLyricsView(
                         val targetAlpha = if (isActive) 1f else if (isPast) 0.38f else 0.30f
                         val animatedAlpha by animateFloatAsState(
                             targetValue = targetAlpha,
-                            animationSpec = tween(350),
+                            animationSpec = tween(DreaminMotion.DurationLong),
                             label = "lyric_alpha"
                         )
 
                         val animatedScale by animateFloatAsState(
                             targetValue = if (isActive) 1.0f else INACTIVE_LINE_SCALE,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
+                            animationSpec = DreaminMotion.bouncy(),
                             label = "lyric_scale"
                         )
 
@@ -255,13 +255,13 @@ fun SyncedLyricsView(
                                     scaleY = animatedScale
                                     alpha = animatedAlpha
                                 }
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(DreaminShapes.medium)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
                                 ) {
                                     // Tap-to-Seek action
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.tap()
                                     if (lyricsState.isSynced) {
                                         onSeek(line.timestampMs)
                                     }
@@ -290,7 +290,7 @@ fun SyncedLyricsView(
                             Text(
                                 text = line.text,
                                 color = if (isActive) Color.White else Color.White.copy(alpha = 0.5f),
-                                fontSize = 22.sp,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center,
                                 lineHeight = 30.sp
@@ -301,8 +301,8 @@ fun SyncedLyricsView(
 
                 AnimatedVisibility(
                     visible = isAutoScrollPaused,
-                    enter = fadeIn(tween(160)) + scaleIn(initialScale = 0.9f),
-                    exit = fadeOut(tween(160)) + scaleOut(targetScale = 0.9f),
+                    enter = fadeIn(tween(DreaminMotion.DurationShort)) + scaleIn(initialScale = 0.9f),
+                    exit = fadeOut(tween(DreaminMotion.DurationShort)) + scaleOut(targetScale = 0.9f),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
                 ) {
                     Surface(
@@ -316,7 +316,7 @@ fun SyncedLyricsView(
                         ) {
                             Icon(Icons.Outlined.Sync, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sync", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Sync", color = Color.Black, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

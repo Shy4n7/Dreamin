@@ -2,6 +2,12 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -28,10 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,13 +63,13 @@ fun BreathingCuratingLine(modifier: Modifier = Modifier) {
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.2f,
         targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(animation = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
         label = "line_alpha"
     )
     val scaleX by infiniteTransition.animateFloat(
         initialValue = 0.55f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(animation = tween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(animation = tween(DreaminMotion.DurationAmbient, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
         label = "line_scale"
     )
     Box(modifier = modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
@@ -106,7 +110,7 @@ fun QueueScreen(
     backgroundColor: Color = Color.Transparent
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val listState = rememberLazyListState()
 
     val sections = remember(state.queue, state.currentQueueIndex, state.userQueuedSongIds) {
@@ -131,7 +135,7 @@ fun QueueScreen(
         val swapped = swapAcrossNeighbor(session, dragOffsetY, listState, latestSections.fromYou.size) ?: return@trySwap
         dragSession = swapped.first
         dragOffsetY = swapped.second
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        haptic.tick()
     }
 
     val endDrag: () -> Unit = endDrag@{
@@ -192,7 +196,7 @@ fun QueueScreen(
 
             if (state.queue.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("Queue is empty. Play a song to get started.", color = colors.onSurfaceVariant, fontSize = 15.sp)
+                    Text("Queue is empty. Play a song to get started.", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 val upcomingRows = dragSession?.rows ?: sections.upcoming
@@ -284,7 +288,7 @@ fun QueueScreen(
                                 onDragStart = {
                                     dragSession = DragSession(row.key, latestSections.upcoming, latestSections.upcoming.map { it.key })
                                     dragOffsetY = 0f
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.longPress()
                                 },
                                 onDrag = { delta ->
                                     dragOffsetY += delta
@@ -298,8 +302,8 @@ fun QueueScreen(
                     item(key = KEY_CURATING) {
                         AnimatedVisibility(
                             visible = state.isFetchingUpNext,
-                            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-                            exit = fadeOut(tween(300)) + shrinkVertically(tween(250))
+                            enter = fadeIn(tween(DreaminMotion.DurationMedium)) + expandVertically(tween(DreaminMotion.DurationMedium)),
+                            exit = fadeOut(tween(DreaminMotion.DurationLong)) + shrinkVertically(tween(DreaminMotion.DurationMedium))
                         ) {
                             BreathingCuratingLine(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                         }
@@ -330,9 +334,9 @@ private fun LazyItemScope.UpcomingRow(
         onDispose { if (isDragging) currentOnDragEnd() }
     }
     val placement = if (isDragging) Modifier else Modifier.animateItem(
-        fadeInSpec = tween(220, easing = LinearOutSlowInEasing),
-        fadeOutSpec = tween(180, easing = FastOutLinearInEasing),
-        placementSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+        fadeInSpec = tween(DreaminMotion.DurationMedium, easing = LinearOutSlowInEasing),
+        fadeOutSpec = tween(DreaminMotion.DurationMedium, easing = FastOutLinearInEasing),
+        placementSpec = DreaminMotion.standard()
     )
     QueueSongItemRow(
         song = row.song,
@@ -440,7 +444,7 @@ private fun QueueNowPlayingBar(
     onClearUpcoming: () -> Unit
 ) {
     val colors = LocalDreaminColors.current
-    val haptic = LocalHapticFeedback.current
+    val haptic = rememberDreaminHaptics()
     val scope = rememberCoroutineScope()
     val heartScale = remember { Animatable(1f) }
     var showMenu by remember { mutableStateOf(false) }
@@ -448,12 +452,12 @@ private fun QueueNowPlayingBar(
     val isFav = state.currentSongIsFavorite
     val favBgColor by animateColorAsState(
         targetValue = if (isFav) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.10f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "queue_fav_bg_color"
     )
     val favIconColor by animateColorAsState(
         targetValue = if (isFav) colors.primary else Color.White,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "queue_fav_icon_color"
     )
 
@@ -466,7 +470,7 @@ private fun QueueNowPlayingBar(
             contentDescription = currentSong?.title,
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(DreaminShapes.small)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() },
             contentScale = ContentScale.Crop
         )
@@ -476,17 +480,17 @@ private fun QueueNowPlayingBar(
                 .weight(1f)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
         ) {
-            Text(currentSong?.title ?: "No Track Playing", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(currentSong?.artist ?: "Dreamin", fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(currentSong?.title ?: "No Track Playing", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(currentSong?.artist ?: "Dreamin", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(modifier = Modifier.width(8.dp))
         IconButton(
             onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                haptic.tap()
                 scope.launch {
-                    heartScale.animateTo(0.92f, tween(70, easing = FastOutLinearInEasing))
-                    heartScale.animateTo(1.10f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-                    heartScale.animateTo(1.0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+                    heartScale.animateTo(0.92f, tween(DreaminMotion.DurationInstant, easing = FastOutLinearInEasing))
+                    heartScale.animateTo(1.10f, DreaminMotion.standard())
+                    heartScale.animateTo(1.0f, DreaminMotion.quick())
                 }
                 onToggleFavorite()
             },
@@ -499,8 +503,8 @@ private fun QueueNowPlayingBar(
             AnimatedContent(
                 targetState = isFav,
                 transitionSpec = {
-                    (scaleIn(spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)) + fadeIn(tween(140)))
-                        .togetherWith(scaleOut(tween(90)) + fadeOut(tween(90)))
+                    (scaleIn(DreaminMotion.smooth()) + fadeIn(tween(DreaminMotion.DurationShort)))
+                        .togetherWith(scaleOut(tween(DreaminMotion.DurationInstant)) + fadeOut(tween(DreaminMotion.DurationInstant)))
                 },
                 label = "queue_fav_icon_morph"
             ) { fav ->
@@ -563,10 +567,10 @@ private fun QueueSummaryHeader(sections: QueueSections, progressFlow: StateFlow<
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text("Up next", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Up next", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
         Text(
             text = "${QueueSections.songCountLabel(sections.upcoming.size)} · ${formatDuration(remainingMs)} left",
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant
         )
     }

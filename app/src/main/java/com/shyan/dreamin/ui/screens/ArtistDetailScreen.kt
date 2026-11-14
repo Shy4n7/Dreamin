@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -127,14 +130,14 @@ fun ArtistDetailScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(DreaminShapes.small)
                                 .background(colors.primary.copy(alpha = 0.8f))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 "ARTIST",
                                 color = Color.White,
-                                fontSize = 10.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.sp
                             )
@@ -143,7 +146,7 @@ fun ArtistDetailScreen(
                         Text(
                             text = profile.name,
                             color = Color.White,
-                            fontSize = 32.sp,
+                            style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -170,7 +173,7 @@ fun ArtistDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = DreaminShapes.medium,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = colors.primary
                         )
@@ -186,7 +189,7 @@ fun ArtistDetailScreen(
                             "Shuffle Play",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
 
@@ -214,7 +217,7 @@ fun ArtistDetailScreen(
                 Text(
                     text = "Popular Releases",
                     color = colors.onSurface,
-                    fontSize = 18.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)
                 )
@@ -236,7 +239,7 @@ fun ArtistDetailScreen(
                     Text(
                         "No songs found for this artist",
                         color = colors.onSurfaceVariant,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(20.dp)
                     )
                 }
@@ -258,7 +261,7 @@ fun ArtistDetailScreen(
                         Text(
                             text = "${index + 1}",
                             color = if (isPlaying) colors.primary else colors.onSurfaceVariant,
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.width(28.dp)
                         )
@@ -272,7 +275,7 @@ fun ArtistDetailScreen(
                             contentDescription = null,
                             modifier = Modifier
                                 .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp)),
+                                .clip(DreaminShapes.small),
                             contentScale = ContentScale.Crop
                         )
 
@@ -282,7 +285,7 @@ fun ArtistDetailScreen(
                             Text(
                                 text = song.displayTitle,
                                 color = if (isPlaying) colors.primary else colors.onSurface,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -290,7 +293,7 @@ fun ArtistDetailScreen(
                             Text(
                                 text = song.artist,
                                 color = colors.onSurfaceVariant,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

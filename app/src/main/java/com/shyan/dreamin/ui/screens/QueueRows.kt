@@ -1,5 +1,10 @@
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+import androidx.compose.material3.MaterialTheme
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -86,13 +91,13 @@ internal fun QueueSectionHeader(
     ) {
         Text(
             text = title,
-            fontSize = 15.sp,
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
             modifier = Modifier.weight(1f)
         )
         if (trailing != null) {
-            Text(text = trailing, fontSize = 13.sp, color = colors.onSurfaceVariant)
+            Text(text = trailing, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
         }
         if (expanded != null) {
             Icon(
@@ -116,24 +121,24 @@ internal fun QueueActionPill(
     val colors = LocalDreaminColors.current
     val animBg by animateColorAsState(
         targetValue = if (isActive) colors.primary.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.08f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "pill_bg"
     )
     val animBorder by animateColorAsState(
         targetValue = if (isActive) colors.primary.copy(alpha = 0.55f) else Color.Transparent,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "pill_border"
     )
     val animContentColor by animateColorAsState(
         targetValue = if (isActive) colors.primary else Color.White.copy(alpha = 0.9f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "pill_content"
     )
 
     Surface(
         onClick = onClick,
         modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = DreaminShapes.medium,
         color = animBg,
         border = BorderStroke(1.dp, animBorder)
     ) {
@@ -144,7 +149,7 @@ internal fun QueueActionPill(
         ) {
             Icon(imageVector = icon, contentDescription = label, tint = animContentColor, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = animContentColor)
+            Text(text = label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = animContentColor)
         }
     }
 }
@@ -174,12 +179,12 @@ internal fun QueueSongItemRow(
 
     val dragScale by animateFloatAsState(
         targetValue = if (isDragging) 1.025f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.bouncy(),
         label = "drag_scale"
     )
     val dragElevation by animateFloatAsState(
         targetValue = if (isDragging) 14f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.smooth(),
         label = "drag_elevation"
     )
     val rowBgColor by animateColorAsState(
@@ -188,7 +193,7 @@ internal fun QueueSongItemRow(
             isCurrent -> Color.White.copy(alpha = 0.06f)
             else -> Color.Transparent
         },
-        animationSpec = tween(160),
+        animationSpec = tween(DreaminMotion.DurationShort),
         label = "row_bg"
     )
     val durationMs = QueueSections.normalizedDurationMs(song.duration)
@@ -206,7 +211,7 @@ internal fun QueueSongItemRow(
                 scaleY = dragScale
                 shadowElevation = dragElevation
             }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(DreaminShapes.medium)
             .background(rowBgColor)
             .clickable(enabled = !isDragging, onClick = onClick)
             .alpha(if (isHistory) HISTORY_ALPHA else 1f)
@@ -214,7 +219,7 @@ internal fun QueueSongItemRow(
     ) {
         Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.size(48.dp).clip(DreaminShapes.small),
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
@@ -243,7 +248,7 @@ internal fun QueueSongItemRow(
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = song.title,
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isCurrent) colors.primary else Color.White,
                     maxLines = 1,
@@ -252,7 +257,7 @@ internal fun QueueSongItemRow(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -323,7 +328,7 @@ private fun DragHandle(
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
     val handleScale by animateFloatAsState(
         targetValue = if (isDragging) 1.15f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = DreaminMotion.bouncy(),
         label = "drag_handle_scale"
     )
     Box(
@@ -363,7 +368,7 @@ private fun PlaylistPickerDialog(playlists: List<Playlist>, onPick: (Long) -> Un
                     Text(
                         text = pl.name,
                         color = Color.White,
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(pl.id) }.padding(vertical = 12.dp)
                     )
                 }

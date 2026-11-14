@@ -1,5 +1,8 @@
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.shyan.dreamin.data.model.Song
 import com.shyan.dreamin.data.service.OfficialArtworkService
-import com.shyan.dreamin.ui.screens.LocalDreaminColors
 import kotlinx.coroutines.launch
 
 /**
@@ -44,7 +46,7 @@ fun PosterPickerBottomSheet(
 ) {
     val colors = LocalDreaminColors.current
     val scope = rememberCoroutineScope()
-    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetShape = DreaminShapes.sheet
 
     var candidatePosters by remember(song.id) { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember(song.id) { mutableStateOf(true) }
@@ -112,13 +114,13 @@ fun PosterPickerBottomSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Choose Theatrical Poster",
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
                         text = "${song.displayTitle} • ${song.artist}",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -147,7 +149,7 @@ fun PosterPickerBottomSheet(
                     Text(
                         text = "No alternate movie posters found for this track.",
                         color = colors.onSurfaceVariant,
-                        fontSize = 13.5.sp
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             } else {
@@ -164,12 +166,12 @@ fun PosterPickerBottomSheet(
                         Box(
                             modifier = Modifier
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(DreaminShapes.medium)
                                 .background(colors.surfaceHighest)
                                 .border(
                                     width = if (isSelected) 2.5.dp else 1.dp,
                                     color = if (isSelected) colors.primary else Color.White.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(16.dp)
+                                    shape = DreaminShapes.medium
                                 )
                                 .clickable {
                                     OfficialArtworkService.putCachedPoster(song, posterUrl)

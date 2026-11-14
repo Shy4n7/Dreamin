@@ -2,6 +2,8 @@
 
 package com.shyan.dreamin.ui.components
 
+import com.shyan.dreamin.ui.theme.DreaminMotion
+
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -93,7 +95,7 @@ fun Modifier.sharedArtwork(songId: String?): Modifier {
         this@sharedArtwork.sharedElement(
             state = rememberSharedContentState(key = "artwork-$songId"),
             animatedVisibilityScope = visibility,
-            boundsTransform = { _, _ -> spring(dampingRatio = 0.86f, stiffness = 380f) }
+            boundsTransform = { _, _ -> DreaminMotion.standard() }
         )
     }
 }

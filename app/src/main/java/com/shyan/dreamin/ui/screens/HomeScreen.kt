@@ -2,6 +2,12 @@
 
 package com.shyan.dreamin.ui.screens
 
+import com.shyan.dreamin.ui.theme.rememberDreaminHaptics
+
+import com.shyan.dreamin.ui.theme.LocalDreaminColors
+import com.shyan.dreamin.ui.theme.DreaminMotion
+import com.shyan.dreamin.ui.theme.DreaminShapes
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.*
@@ -83,9 +89,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,9 +123,9 @@ fun HomeScreen(
     topSongs: List<Song>,
     currentSong: Song?,
     isPlaying: Boolean = false,
-    dominantColor: Color = Color(0xFF6C5CE7),
-    secondaryColor: Color = Color(0xFF8E44AD),
-    accentColor: Color = Color(0xFF4A235A),
+    dominantColor: Color = LocalDreaminColors.current.meshDominant,
+    secondaryColor: Color = LocalDreaminColors.current.meshSecondary,
+    accentColor: Color = LocalDreaminColors.current.meshAccent,
     isSearchActive: Boolean,
     searchQuery: String,
     searchResults: List<Song>,
@@ -256,7 +260,7 @@ fun HomeScreen(
             dynamicColor = dominantColor,
             primaryGlow = dominantColor,
             midPurple = secondaryColor,
-            deepIndigo = Color(0xFF2E1065)
+            deepIndigo = LocalDreaminColors.current.primaryDeep
         )
 
         Column(
@@ -289,7 +293,7 @@ fun HomeScreen(
                     ) {
                         Text(
                             "DREAMIN",
-                            fontSize = 28.sp,
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
                             letterSpacing = 2.5.sp,
@@ -329,7 +333,7 @@ fun HomeScreen(
                     // Greeting
                     Text(
                         "$timeOfDay, $userName",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier
                             .combinedClickable(onClick = {}, onLongClick = { showEditNameDialog = true })
@@ -355,12 +359,12 @@ fun HomeScreen(
             if (detectedYouTubeUrl != null || detectedYouTubeTrack != null) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFFF0000).copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, Color(0xFFFF0000).copy(alpha = 0.40f)),
+                    shape = DreaminShapes.medium,
+                    color = LocalDreaminColors.current.brandYoutube.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, LocalDreaminColors.current.brandYoutube.copy(alpha = 0.40f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(DreaminShapes.medium)
                         .clickable { onPlayDetectedYouTubeTrack() }
                 ) {
                     Row(
@@ -371,13 +375,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFF0000).copy(alpha = 0.22f)),
+                                .background(LocalDreaminColors.current.brandYoutube.copy(alpha = 0.22f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Filled.PlayArrow,
                                 contentDescription = null,
-                                tint = Color(0xFFFF5252),
+                                tint = LocalDreaminColors.current.error,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -385,7 +389,7 @@ fun HomeScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = detectedYouTubeTrack?.displayTitle ?: "YouTube Track Detected",
-                                fontSize = 13.5.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -393,8 +397,8 @@ fun HomeScreen(
                             )
                             Text(
                                 text = if (detectedYouTubeTrack != null) "Tap to stream in 160k Opus" else "Tap to resolve & play",
-                                fontSize = 11.5.sp,
-                                color = Color(0xFFFF8A80),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalDreaminColors.current.onErrorContainer,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -420,8 +424,8 @@ fun HomeScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isSearchActive,
-                    enter = fadeIn(tween(220)) + slideInVertically(spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)) { 50 },
-                    exit = fadeOut(tween(160)) + slideOutVertically(tween(160)) { 50 },
+                    enter = fadeIn(tween(DreaminMotion.DurationMedium)) + slideInVertically(DreaminMotion.standard()) { 50 },
+                    exit = fadeOut(tween(DreaminMotion.DurationShort)) + slideOutVertically(tween(DreaminMotion.DurationShort)) { 50 },
                     modifier = Modifier.fillMaxSize()
                 ) {
                     if (searchQuery.isNotEmpty()) {
@@ -458,8 +462,8 @@ fun HomeScreen(
 
                 androidx.compose.animation.AnimatedVisibility(
                     visible = !isSearchActive,
-                    enter = fadeIn(tween(240)) + scaleIn(initialScale = 0.97f, animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)),
-                    exit = fadeOut(tween(160)) + scaleOut(targetScale = 0.97f, animationSpec = tween(160)),
+                    enter = fadeIn(tween(DreaminMotion.DurationMedium)) + scaleIn(initialScale = 0.97f, animationSpec = DreaminMotion.standard()),
+                    exit = fadeOut(tween(DreaminMotion.DurationShort)) + scaleOut(targetScale = 0.97f, animationSpec = tween(DreaminMotion.DurationShort)),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     val pullRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
@@ -516,7 +520,7 @@ fun HomeScreen(
                     .padding(end = 16.dp, bottom = bottomPadding + 16.dp),
                 containerColor = colors.primary,
                 contentColor = colors.background,
-                shape = RoundedCornerShape(16.dp)
+                shape = DreaminShapes.medium
             ) {
                 Icon(
                     imageVector = Icons.Filled.Shuffle,
@@ -617,7 +621,7 @@ fun DreaminSearchBar(
             interactionSource = interactionSource,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
+                .clip(DreaminShapes.large)
                 .border(
                     width = 1.2.dp,
                     brush = Brush.verticalGradient(
@@ -631,7 +635,7 @@ fun DreaminSearchBar(
                             Color.White.copy(alpha = 0.05f)
                         )
                     ),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = DreaminShapes.large
                 )
                 .focusRequester(focusRequester)
                 .onFocusChanged {
@@ -647,20 +651,20 @@ fun DreaminSearchBar(
                 AnimatedContent(
                     targetState = composerHints[hintIndex],
                     transitionSpec = {
-                        (slideInVertically { height -> height / 2 } + fadeIn(tween(250))) togetherWith
-                                (slideOutVertically { height -> -height / 2 } + fadeOut(tween(200)))
+                        (slideInVertically { height -> height / 2 } + fadeIn(tween(DreaminMotion.DurationMedium))) togetherWith
+                                (slideOutVertically { height -> -height / 2 } + fadeOut(tween(DreaminMotion.DurationMedium)))
                     },
                     label = "search_hint_anim"
                 ) { hint ->
-                    Text(hint, color = colors.onSurfaceVariant.copy(alpha = 0.75f), fontSize = 14.sp)
+                    Text(hint, color = colors.onSurfaceVariant.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
                 }
             },
             leadingIcon = {
                 AnimatedContent(
                     targetState = showBackButton,
                     transitionSpec = {
-                        (fadeIn(tween(200)) + scaleIn(initialScale = 0.75f)) togetherWith
-                        (fadeOut(tween(150)) + scaleOut(targetScale = 0.75f))
+                        (fadeIn(tween(DreaminMotion.DurationMedium)) + scaleIn(initialScale = 0.75f)) togetherWith
+                        (fadeOut(tween(DreaminMotion.DurationShort)) + scaleOut(targetScale = 0.75f))
                     },
                     label = "search_icon_anim"
                 ) { isBack ->
@@ -693,13 +697,13 @@ fun DreaminSearchBar(
             trailingIcon = {
                 AnimatedVisibility(
                     visible = showBackButton || isFocused || query.isNotEmpty(),
-                    enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)) + fadeIn(tween(150)),
-                    exit = scaleOut(tween(120)) + fadeOut(tween(120))
+                    enter = scaleIn(DreaminMotion.bouncy()) + fadeIn(tween(DreaminMotion.DurationShort)),
+                    exit = scaleOut(tween(DreaminMotion.DurationShort)) + fadeOut(tween(DreaminMotion.DurationShort))
                 ) {
-                    val haptic = LocalHapticFeedback.current
+                    val haptic = rememberDreaminHaptics()
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            haptic.tap()
                             isFocused = false
                             keyboard?.hide()
                             focusManager.clearFocus()
@@ -719,7 +723,7 @@ fun DreaminSearchBar(
                 }
             },
             singleLine = true,
-            shape = RoundedCornerShape(22.dp),
+            shape = DreaminShapes.large,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = colors.surfaceContainer.copy(alpha = 0.65f),
                 unfocusedContainerColor = colors.surfaceContainer.copy(alpha = 0.52f),
@@ -746,9 +750,9 @@ fun DreaminSearchBar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Recent", color = colors.onSurfaceVariant, fontSize = 12.sp)
+                    Text("Recent", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = onClearRecentSearches) {
-                        Text("Clear", color = colors.primary, fontSize = 12.sp)
+                        Text("Clear", color = colors.primary, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 recentSearches.forEach { term ->
@@ -764,7 +768,7 @@ fun DreaminSearchBar(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Icon(Icons.Outlined.History, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                        Text(term, color = colors.onSurface, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(term, color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -806,11 +810,11 @@ fun SearchResults(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(errorMessage ?: "No results found", color = colors.onSurfaceVariant, fontSize = 16.sp)
+                Text(errorMessage ?: "No results found", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Surface(
-                        shape = RoundedCornerShape(22.dp),
+                        shape = DreaminShapes.large,
                         color = colors.primary.copy(alpha = 0.15f),
                         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f)),
                         modifier = Modifier
@@ -831,7 +835,7 @@ fun SearchResults(
                             Text(
                                 text = "Retry",
                                 color = colors.primary,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -840,7 +844,7 @@ fun SearchResults(
                 if (!didYouMeanQuery.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
-                        shape = RoundedCornerShape(22.dp),
+                        shape = DreaminShapes.large,
                         color = colors.primary.copy(alpha = 0.15f),
                         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.4f)),
                         modifier = Modifier.clickable { onApplyDidYouMean(didYouMeanQuery) }
@@ -848,7 +852,7 @@ fun SearchResults(
                         Text(
                             text = "Did you mean: $didYouMeanQuery?",
                             color = colors.primary,
-                            fontSize = 13.5.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -882,7 +886,7 @@ fun SearchResults(
         if (!didYouMeanQuery.isNullOrBlank()) {
             item(key = "did_you_mean_chip", contentType = "SuggestionChip") {
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = DreaminShapes.large,
                     color = colors.primary.copy(alpha = 0.12f),
                     border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.35f)),
                     modifier = Modifier
@@ -903,7 +907,7 @@ fun SearchResults(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Did you mean: $didYouMeanQuery?",
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                             color = colors.primary
                         )
@@ -935,14 +939,14 @@ fun SearchResults(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Movie Albums",
-                            fontSize = 15.sp,
+                            style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
                             text = "${albums.size} albums",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = colors.onSurfaceVariant
                         )
                     }
@@ -982,7 +986,7 @@ fun SearchResults(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Songs",
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
@@ -1034,7 +1038,7 @@ fun SearchAlbumCard(
     val isPressed by cardInteraction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.94f else 1f,
-        animationSpec = DreaminMotion.TactileBouncy,
+        animationSpec = DreaminMotion.standard(),
         label = "album_press_scale"
     )
 
@@ -1045,7 +1049,7 @@ fun SearchAlbumCard(
                 scaleX = pressScale
                 scaleY = pressScale
             }
-            .clip(RoundedCornerShape(18.dp))
+            .clip(DreaminShapes.large)
             .clickable(
                 interactionSource = cardInteraction,
                 indication = ripple(bounded = true, color = colors.primary),
@@ -1057,12 +1061,12 @@ fun SearchAlbumCard(
         Box(
             modifier = Modifier
                 .size(135.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(DreaminShapes.large)
                 .background(colors.surfaceHighest)
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.10f),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = DreaminShapes.large
                 )
         ) {
             AsyncImage(
@@ -1091,7 +1095,7 @@ fun SearchAlbumCard(
 
             // Movie Album badge at top left
             Surface(
-                shape = RoundedCornerShape(8.dp),
+                shape = DreaminShapes.small,
                 color = Color.Black.copy(alpha = 0.65f),
                 border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
                 modifier = Modifier
@@ -1111,7 +1115,7 @@ fun SearchAlbumCard(
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = "ALBUM",
-                        fontSize = 9.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
                         letterSpacing = 0.5.sp
@@ -1123,7 +1127,7 @@ fun SearchAlbumCard(
             if (album.songCount > 0) {
                 Text(
                     text = "${album.songCount} songs",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.9f),
                     modifier = Modifier
@@ -1139,7 +1143,7 @@ fun SearchAlbumCard(
         Text(
             text = album.title,
             color = Color.White,
-            fontSize = 13.5.sp,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1160,7 +1164,7 @@ fun SearchAlbumCard(
         Text(
             text = subtitle,
             color = colors.onSurfaceVariant,
-            fontSize = 11.5.sp,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1228,7 +1232,7 @@ fun ShimmerFeedSkeleton() {
                     Box(
                         modifier = Modifier
                             .size(140.dp)
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(DreaminShapes.large)
                             .background(brush)
                     )
                     Box(
@@ -1268,7 +1272,7 @@ fun ShimmerSongRow() {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(DreaminShapes.medium)
                 .background(brush)
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -1309,14 +1313,14 @@ fun ShimmerSongRowWithBrush(brush: Brush) {
         modifier = Modifier.fillMaxWidth().padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(brush))
+        Box(modifier = Modifier.size(56.dp).clip(DreaminShapes.medium).background(brush))
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Box(modifier = Modifier.fillMaxWidth(0.65f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(brush))
             Spacer(modifier = Modifier.height(8.dp))
             Box(modifier = Modifier.fillMaxWidth(0.4f).height(11.dp).clip(RoundedCornerShape(4.dp)).background(brush))
         }
-        Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(brush))
+        Box(modifier = Modifier.size(24.dp).clip(DreaminShapes.medium).background(brush))
     }
 }
 
@@ -1360,7 +1364,7 @@ fun HorizontalSongCard(
     val isPressed by cardInteraction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.94f else 1f,
-        animationSpec = DreaminMotion.TactileBouncy,
+        animationSpec = DreaminMotion.standard(),
         label = "card_press_scale"
     )
 
@@ -1371,7 +1375,7 @@ fun HorizontalSongCard(
                 scaleX = pressScale
                 scaleY = pressScale
             }
-            .clip(RoundedCornerShape(18.dp))
+            .clip(DreaminShapes.large)
             .combinedClickable(
                 interactionSource = cardInteraction,
                 indication = ripple(bounded = true, color = colors.primary),
@@ -1384,11 +1388,11 @@ fun HorizontalSongCard(
         Box(
             modifier = Modifier
                 .size(135.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .clip(DreaminShapes.large)
                 .border(
                     width = if (isPlaying) 1.5.dp else 1.dp,
                     color = if (isPlaying) colors.primary else Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = DreaminShapes.large
                 )
         ) {
             AsyncImage(
@@ -1472,7 +1476,7 @@ fun HorizontalSongCard(
         Text(
             song.displayTitle,
             color = if (isPlaying) colors.primary else colors.onSurface,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1481,7 +1485,7 @@ fun HorizontalSongCard(
         Text(
             song.artist,
             color = Color.White.copy(alpha = 0.72f),
-            fontSize = 11.5.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1524,7 +1528,7 @@ fun FeaturedHeroCarousel(
             val isPressed by heroInteraction.collectIsPressedAsState()
             val pressScale by animateFloatAsState(
                 targetValue = if (isPressed) 0.96f else 1f,
-                animationSpec = DreaminMotion.TactileBouncy,
+                animationSpec = DreaminMotion.standard(),
                 label = "hero_press_scale"
             )
             Box(
@@ -1535,8 +1539,8 @@ fun FeaturedHeroCarousel(
                         scaleX = pressScale
                         scaleY = pressScale
                     }
-                    .clip(RoundedCornerShape(22.dp))
-                    .border(1.dp, if (isPlaying) colors.primary else colors.outlineVariant, RoundedCornerShape(22.dp))
+                    .clip(DreaminShapes.large)
+                    .border(1.dp, if (isPlaying) colors.primary else colors.outlineVariant, DreaminShapes.large)
                     .background(colors.surfaceHighest)
                     .clickable(
                         interactionSource = heroInteraction,
@@ -1580,11 +1584,11 @@ fun FeaturedHeroCarousel(
                     ) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(DreaminShapes.small)
                                 .background(colors.primary.copy(alpha = 0.85f))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            Text("#${index + 1} TOP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("#${index + 1} TOP", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         }
 
                         if (isPlaying) {
@@ -1604,7 +1608,7 @@ fun FeaturedHeroCarousel(
                         Text(
                             song.displayTitle,
                             color = Color.White,
-                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1612,7 +1616,7 @@ fun FeaturedHeroCarousel(
                         Text(
                             song.artist,
                             color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1633,7 +1637,7 @@ fun JumpBackInCard(
         (session.positionMs.toFloat() / session.song.duration).coerceIn(0f, 1f)
     else 0f
 
-    val cardShape = RoundedCornerShape(20.dp)
+    val cardShape = DreaminShapes.large
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1674,14 +1678,14 @@ fun JumpBackInCard(
                 contentDescription = null,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp)),
+                    .clip(DreaminShapes.medium),
                 contentScale = ContentScale.Crop
             )
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(BlackOverlay35),
+                    .clip(DreaminShapes.medium)
+                    .background(Color.Black.copy(alpha = 0.35f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1698,14 +1702,14 @@ fun JumpBackInCard(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 "Jump back in",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = colors.primary,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.5.sp
             )
             Text(
                 session.song.displayTitle,
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.onSurface,
                 maxLines = 1,
@@ -1713,7 +1717,7 @@ fun JumpBackInCard(
             )
             Text(
                 session.song.artist,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1785,7 +1789,7 @@ fun SpotifyPlaylistPill(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = DreaminMotion.TactileBouncy,
+        animationSpec = DreaminMotion.standard(),
         label = "pill_scale"
     )
 
@@ -1796,9 +1800,9 @@ fun SpotifyPlaylistPill(
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(DreaminShapes.small)
             .background(colors.surfaceContainer)
-            .border(0.6.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+            .border(0.6.dp, Color.White.copy(alpha = 0.08f), DreaminShapes.small)
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = true, color = colors.primary),
@@ -1852,7 +1856,7 @@ fun SpotifyPlaylistPill(
         ) {
             Text(
                 text = playlist.name,
-                fontSize = 12.5.sp,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurface,
                 maxLines = 1,
@@ -1861,7 +1865,7 @@ fun SpotifyPlaylistPill(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "${playlist.songCount} songs",
-                fontSize = 10.5.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant.copy(alpha = 0.75f),
                 maxLines = 1
             )
@@ -2023,7 +2027,7 @@ fun HomeFeedOnlyContent(
                             Text(
                                 "Couldn't load songs",
                                 color = colors.onSurfaceVariant,
-                                fontSize = 16.sp
+                                style = MaterialTheme.typography.bodyLarge
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             TextButton(
@@ -2070,7 +2074,7 @@ fun HomeHeader(
         ) {
             Text(
                 "DREAMIN",
-                fontSize = 28.sp,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White,
                 letterSpacing = 2.5.sp,
@@ -2097,7 +2101,7 @@ fun HomeHeader(
         // Greeting (clean text without emojis, long click to edit name)
         Text(
             "$timeOfDay, $userName",
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant,
             modifier = Modifier
                 .graphicsLayer { alpha = (1f - titleProgress() * 2.5f).coerceIn(0f, 1f) }
