@@ -59,34 +59,7 @@ fun FluidMeshGradientBackground(
         label = "mesh_accent"
     )
 
-    // 🪐 Smooth Speed-Multiplied Monotonic Animation Clock
-    // Seamlessly decelerates on pause and sleeps when idle to eliminate background CPU/GPU drain
-    val speedMultiplier by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.0f,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-        label = "mesh_speed"
-    )
-
-    var animationTime by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        var lastFrameNanos = 0L
-        while (true) {
-            if (!isPlaying && speedMultiplier <= 0.001f) {
-                // Sleep and yield when playback is paused and deceleration is finished
-                kotlinx.coroutines.delay(200)
-                lastFrameNanos = 0L
-                continue
-            }
-            withFrameNanos { frameNanos ->
-                if (lastFrameNanos != 0L) {
-                    val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    val clampedDt = dt.coerceIn(0.001f, 0.05f)
-                    animationTime += clampedDt * speedMultiplier
-                }
-                lastFrameNanos = frameNanos
-            }
-        }
-    }
+    val clock = rememberPlaybackClock(isPlaying, rampMillis = 1200)
 
     Box(
         modifier = modifier
@@ -161,7 +134,7 @@ fun FluidMeshGradientBackground(
                 )
 
                 onDrawBehind {
-                    val time = animationTime.toDouble()
+                    val time = clock.seconds.toDouble()
                     val t1 = time * (2.0 * Math.PI / 28.0)
                     val t2 = time * (2.0 * Math.PI / 36.0)
                     val t3 = time * (2.0 * Math.PI / 32.0)

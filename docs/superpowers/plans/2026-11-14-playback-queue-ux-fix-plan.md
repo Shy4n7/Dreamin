@@ -144,18 +144,20 @@ Larger refactor; makes background playback independent of the Activity.
 
 **Files:** `NowPlayingScreen.kt`, `CommonComponents.kt`, `FluidMeshGradientBackground.kt`, `SyncedLyricsView.kt`, `MusicPlayerViewModel.kt`
 
-- [ ] **#9 / #10 Skip animation driven by events.** Artwork animation reacts to `SkipEvent`: slide direction from the event, no slide when `changedTrack == false` (restart / debounced). Remove the `artworkOffsetX == 0f` LaunchedEffect heuristic.
-- [ ] **#22 Seek snap-back.** Poll position while paused too (low rate), and keep showing `seekProgress` until the reported position is within 500 ms of the target.
-- [ ] **#23 Pause/resume continuity.** Replace infinite transitions whose target flips on `isPlaying` (waveform phase, thumb halo, artwork aura, mini glow) with the decelerating-clock pattern already used by the mesh: a phase accumulator scaled by an animated speed 0→1.
-- [ ] **#24 Frame-loop leak.** Read `isPlaying` via `rememberUpdatedState` in `MiniPlayer` and `FluidMeshGradientBackground` loops.
-- [ ] **#25 Dismiss jump.** Do not snap `swipeOffsetY` to 0 before exit; animate from the current offset to full height, then reset after the sheet is gone.
-- [ ] **#26 Swipe physics.** Use `VelocityTracker`: skip when `|offset| > 72.dp` or `|velocity| > 900.dp/s`; follow the finger with rubber-banding past the threshold instead of a hard clamp.
-- [ ] **#27 Single artwork/color update.** Resolve the official poster before committing the transition when it is cached or resolves within ~150 ms; otherwise update once with crossfade. Debounce `extractDominantColor` per song.
-- [ ] **#28 Lyrics.** Keep font size constant; animate only scale + alpha (no layout reflow). Pause autoscroll for 3 s after user scroll, show a "Sync" chip to resume. Load lyrics once per song and only when the lyrics view is open or about to open.
-- [ ] **#29** Convert every raw-pixel threshold/offset in NowPlaying, Queue, PlaylistDetail and Lyrics to `dp`.
-- [ ] Add a shared-element transition (`SharedTransitionLayout`) for mini-player artwork → Now Playing artwork.
+- [x] **#9 / #10 Skip animation driven by events.** Artwork animation reacts to `SkipEvent`: slide direction from the event, no slide when `changedTrack == false` (restart / debounced). Remove the `artworkOffsetX == 0f` LaunchedEffect heuristic.
+- [x] **#22 Seek snap-back.** Poll position while paused too (low rate), and keep showing `seekProgress` until the reported position is within 500 ms of the target.
+- [x] **#23 Pause/resume continuity.** Replace infinite transitions whose target flips on `isPlaying` (waveform phase, thumb halo, artwork aura, mini glow) with the decelerating-clock pattern already used by the mesh: a phase accumulator scaled by an animated speed 0→1.
+- [x] **#24 Frame-loop leak.** Read `isPlaying` via `rememberUpdatedState` in `MiniPlayer` and `FluidMeshGradientBackground` loops.
+- [x] **#25 Dismiss jump.** Do not snap `swipeOffsetY` to 0 before exit; animate from the current offset to full height, then reset after the sheet is gone.
+- [x] **#26 Swipe physics.** Use `VelocityTracker`: skip when `|offset| > 72.dp` or `|velocity| > 900.dp/s`; follow the finger with rubber-banding past the threshold instead of a hard clamp.
+- [x] **#27 Single artwork/color update.** Resolve the official poster before committing the transition when it is cached or resolves within ~150 ms; otherwise update once with crossfade. Debounce `extractDominantColor` per song.
+- [x] **#28 Lyrics.** Keep font size constant; animate only scale + alpha (no layout reflow). Pause autoscroll for 3 s after user scroll, show a "Sync" chip to resume. Load lyrics once per song and only when the lyrics view is open or about to open.
+- [x] **#29** Convert every raw-pixel threshold/offset in NowPlaying, Queue, PlaylistDetail and Lyrics to `dp`.
+- [x] Add a shared-element transition (`SharedTransitionLayout`) for mini-player artwork → Now Playing artwork.
 
 **Verify:** record screen at 120 Hz: pause/resume shows no jumps; flick-skip works with a short fast swipe; dismiss from a 200 dp drag has no upward jump.
+
+> **Status (2026-11-15):** Phase 5 implemented; build + 186 unit tests green; **not verified on a device** (this phase is mostly feel and needs the 120 Hz check above). Shared helpers live in `ui/components/PlaybackMotion.kt` (`rememberPlaybackClock`, `rubberBand`, `sharedArtwork` + `LocalSharedTransitionScope` / `LocalArtworkVisibilityScope`). #29 covers gesture thresholds in NowPlaying, PlaylistDetail rows and Lyrics; PlaylistDetail header scroll-fade constants (220/280/450 px) were left as-is. #25 is solved by not snapping the swipe offset to 0 before close: the exit slide continues from the dragged position, so the shared artwork also starts from where it is.
 
 ---
 

@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,11 +63,27 @@ import com.shyan.dreamin.ui.components.AudioStreamDetailsSheet
 import com.shyan.dreamin.ui.components.FluidMeshGradientBackground
 import com.shyan.dreamin.ui.components.PosterPickerBottomSheet
 import com.shyan.dreamin.ui.components.SyncedLyricsView
+import com.shyan.dreamin.ui.components.sharedArtwork
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+
+private const val SEEK_SETTLE_TOLERANCE_MS = 500L
+private val DISMISS_DISTANCE = 56.dp
+private val DISMISS_VELOCITY = 900.dp
+private val SKIP_DISTANCE = 72.dp
+private val SKIP_VELOCITY = 900.dp
+private val SKIP_TRAVEL = 160.dp
+private val QUEUE_OPEN_DISTANCE = 24.dp
+private val AURA_PULL_RANGE = 520.dp
+private val AURA_FADE_RANGE = 170.dp
+private const val SKIP_SONG_WAIT_MS = 1_500L
+private const val SKIP_OUT_DURATION_MS = 130
+private const val SKIP_RETURN_FRACTION = 0.9f
+private const val SEEK_SETTLE_TIMEOUT_MS = 2_000L
 
 /**
  * 🎚️ Harmonic Acoustic Waveform Slider with live dancing ripple animation when playing.
@@ -89,29 +106,31 @@ fun NowPlayingProgressSlider(
     val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     var isSeeking by remember { mutableStateOf(false) }
     var seekProgress by remember { mutableFloatStateOf(progress) }
-    if (!isSeeking) seekProgress = progress
-    val displayProgress = if (isSeeking) seekProgress else progress
+    var pendingSeekMs by remember(songId) { mutableStateOf<Long?>(null) }
+    val pendingTarget = pendingSeekMs
+    LaunchedEffect(currentPositionMs, pendingTarget) {
+        if (pendingTarget != null && kotlin.math.abs(currentPositionMs - pendingTarget) <= SEEK_SETTLE_TOLERANCE_MS) {
+            pendingSeekMs = null
+        }
+    }
+    LaunchedEffect(pendingTarget) {
+        if (pendingTarget != null) {
+            kotlinx.coroutines.delay(SEEK_SETTLE_TIMEOUT_MS)
+            pendingSeekMs = null
+        }
+    }
+    val displayProgress = when {
+        isSeeking -> seekProgress
+        pendingTarget != null && durationMs > 0 -> (pendingTarget.toFloat() / durationMs).coerceIn(0f, 1f)
+        else -> progress
+    }
+    val commitSeek: (Float) -> Unit = { fraction ->
+        val target = (fraction * durationMs).toLong()
+        pendingSeekMs = target
+        currentOnSeek(target)
+    }
 
-    // Continuous live dancing wave animation when playing
-    val infiniteTransition = rememberInfiniteTransition(label = "waveform_anim")
-    val animPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = if (isPlaying) (2 * Math.PI).toFloat() else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "anim_phase"
-    )
-    val thumbHaloRadius by infiniteTransition.animateFloat(
-        initialValue = 7.5f,
-        targetValue = if (isPlaying) 10.5f else 7.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "thumb_halo"
-    )
+    val clock = com.shyan.dreamin.ui.components.rememberPlaybackClock(isPlaying)
 
     // Generate 48 deterministic acoustic amplitude bars tailored to songId
     val barCount = 48
@@ -139,7 +158,7 @@ fun NowPlayingProgressSlider(
                         val newProgress = (offset.x / size.width).coerceIn(0f, 1f)
                         seekProgress = newProgress
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        currentOnSeek((newProgress * durationMs).toLong())
+                        commitSeek(newProgress)
                     }
                 }
                 .pointerInput(durationMs) {
@@ -150,8 +169,8 @@ fun NowPlayingProgressSlider(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
                         onDragEnd = {
+                            commitSeek(seekProgress)
                             isSeeking = false
-                            currentOnSeek((seekProgress * durationMs).toLong())
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
                         onDragCancel = {
@@ -186,11 +205,13 @@ fun NowPlayingProgressSlider(
                     val waveFactor = ((activeX - (barX - transitionWidth * 0.3f)) / transitionWidth).coerceIn(0f, 1f)
 
                     // Live harmonic audio dancing ripple (animates only the played portion)
-                    val dynamicAmp = if (isPlaying && waveFactor > 0f) {
+                    val intensity = clock.intensity
+                    val dynamicAmp = if (intensity > 0f && waveFactor > 0f) {
+                        val animPhase = clock.phase(periodSeconds = 3.2f)
                         val distFromHead = kotlin.math.abs(i - (displayProgress * barCount))
                         val headBoost = (1f - (distFromHead / 6f).coerceIn(0f, 1f)) * 0.22f
                         val waveOscillation = (sin(animPhase + i * 0.40f) * 0.16f) + (cos(animPhase * 2f + i * 0.25f) * 0.08f)
-                        (baseAmp + waveOscillation + headBoost).coerceIn(0.15f, 1.0f)
+                        (baseAmp + (waveOscillation + headBoost) * intensity).coerceIn(0.15f, 1.0f)
                     } else {
                         baseAmp
                     }
@@ -227,7 +248,7 @@ fun NowPlayingProgressSlider(
                 val thumbY = canvasHeight / 2f
 
                 // Outer ambient halo glow (pulsing when playing)
-                val haloRadiusPx = if (isPlaying) thumbHaloRadius.dp.toPx() else 8.dp.toPx()
+                val haloRadiusPx = (7.5f + 3f * clock.intensity * clock.wave(periodSeconds = 4f)).dp.toPx()
                 drawCircle(
                     color = activeColor.copy(alpha = 0.38f),
                     radius = haloRadiusPx,
@@ -242,10 +263,10 @@ fun NowPlayingProgressSlider(
             }
         }
 
-        val displayedPositionMs = if (isSeeking) {
-            (seekProgress * durationMs).toLong()
-        } else {
-            currentPositionMs
+        val displayedPositionMs = when {
+            isSeeking -> (seekProgress * durationMs).toLong()
+            pendingTarget != null -> pendingTarget
+            else -> currentPositionMs
         }
         val currentSecondMs = (displayedPositionMs.coerceAtLeast(0L) / 1000L) * 1000L
 
@@ -339,6 +360,7 @@ fun NowPlayingScreen(
     onDeleteDownload: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
     onUpdateSongArtwork: ((Song, String) -> Unit)? = null,
+    skipEvents: kotlinx.coroutines.flow.Flow<com.shyan.dreamin.data.queue.SkipEvent> = kotlinx.coroutines.flow.emptyFlow(),
     onBack: () -> Unit = {}
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -352,10 +374,19 @@ fun NowPlayingScreen(
     val colors = LocalDreaminColors.current
     val swipeOffsetY = remember { Animatable(0f) }
 
-    val handleDismiss = remember(onBack) {
-        {
-            scope.launch { swipeOffsetY.snapTo(0f) }
-            onBack()
+    val motionDensity = LocalDensity.current
+    val dismissThresholdPx = with(motionDensity) { DISMISS_DISTANCE.toPx() }
+    val dismissVelocityPx = with(motionDensity) { DISMISS_VELOCITY.toPx() }
+    val skipThresholdPx = with(motionDensity) { SKIP_DISTANCE.toPx() }
+    val skipVelocityPx = with(motionDensity) { SKIP_VELOCITY.toPx() }
+    val skipTravelPx = with(motionDensity) { SKIP_TRAVEL.toPx() }
+    val queueOpenDistancePx = with(motionDensity) { QUEUE_OPEN_DISTANCE.toPx() }
+    val handleDismiss: () -> Unit = remember(onBack) { { onBack() } }
+
+    val sheetTargetState = com.shyan.dreamin.ui.components.LocalArtworkVisibilityScope.current?.transition?.targetState
+    LaunchedEffect(sheetTargetState) {
+        if (sheetTargetState == androidx.compose.animation.EnterExitState.Visible && swipeOffsetY.value != 0f) {
+            swipeOffsetY.snapTo(0f)
         }
     }
 
@@ -425,33 +456,24 @@ fun NowPlayingScreen(
         }
     }
 
-    val currentSongId = state.currentSong?.id
-    var previousSongId by remember { mutableStateOf(currentSongId) }
-    LaunchedEffect(currentSongId) {
-        if (previousSongId != null && currentSongId != null && previousSongId != currentSongId && artworkOffsetX.value == 0f) {
-            artworkOffsetX.snapTo(280f)
-            artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-        }
-        previousSongId = currentSongId
-    }
+    val triggerNextAnimated: () -> Unit = remember(onNext) { { onNext() } }
+    val triggerPreviousAnimated: () -> Unit = remember(onPrevious) { { onPrevious() } }
 
-    val triggerNextAnimated = remember(onNext) {
-        {
+    val latestSongId by rememberUpdatedState(state.currentSong?.id)
+    LaunchedEffect(skipEvents, skipTravelPx) {
+        skipEvents.collect { event ->
+            val songBeforeSkip = latestSongId
             artworkScope.launch {
-                artworkOffsetX.animateTo(-360f, tween(130, easing = FastOutLinearInEasing))
-                onNext()
-                artworkOffsetX.snapTo(320f)
-                artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
-            }
-        }
-    }
-
-    val triggerPreviousAnimated = remember(onPrevious) {
-        {
-            artworkScope.launch {
-                artworkOffsetX.animateTo(360f, tween(130, easing = FastOutLinearInEasing))
-                onPrevious()
-                artworkOffsetX.snapTo(-320f)
+                if (!event.changedTrack) {
+                    artworkOffsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+                    return@launch
+                }
+                val direction = if (event.direction == com.shyan.dreamin.data.queue.SkipDirection.NEXT) -1f else 1f
+                artworkOffsetX.animateTo(direction * skipTravelPx, tween(SKIP_OUT_DURATION_MS, easing = FastOutLinearInEasing))
+                kotlinx.coroutines.withTimeoutOrNull(SKIP_SONG_WAIT_MS) {
+                    snapshotFlow { latestSongId }.first { it != songBeforeSkip }
+                }
+                artworkOffsetX.snapTo(-direction * skipTravelPx * SKIP_RETURN_FRACTION)
                 artworkOffsetX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = Spring.StiffnessMediumLow))
             }
         }
@@ -486,7 +508,7 @@ fun NowPlayingScreen(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (pagerState.currentPage == 0 && (swipeOffsetY.value > 120f || (available.y > 600f && swipeOffsetY.value > 30f))) {
+                if (pagerState.currentPage == 0 && (swipeOffsetY.value > dismissThresholdPx || (available.y > dismissVelocityPx && swipeOffsetY.value > dismissThresholdPx / 4f))) {
                     handleDismiss()
                     return available
                 } else if (swipeOffsetY.value > 0f) {
@@ -575,7 +597,7 @@ fun NowPlayingScreen(
                                 .pointerInput(Unit) {
                                     detectVerticalDragGestures(
                                         onDragEnd = {
-                                            if (swipeOffsetY.value > 120f) {
+                                            if (swipeOffsetY.value > dismissThresholdPx) {
                                                 handleDismiss()
                                             } else {
                                                 scope.launch {
@@ -687,29 +709,15 @@ fun NowPlayingScreen(
                             }
                         } else {
                             // 3D Floating Artwork with Perspective Tilt, Dynamic Sheen & Breathing Aura
-                            val infiniteAura = rememberInfiniteTransition(label = "now_playing_aura")
-                            val isPlayingTrack = state.playbackState is PlaybackState.Playing
-                            val auraScale by infiniteAura.animateFloat(
-                                initialValue = 1.0f,
-                                targetValue = if (isPlayingTrack) 1.06f else 1.0f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(2600, easing = FastOutSlowInEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "aura_scale"
+                            val auraClock = com.shyan.dreamin.ui.components.rememberPlaybackClock(
+                                isPlaying = state.playbackState is PlaybackState.Playing
                             )
-                            val auraAlpha by infiniteAura.animateFloat(
-                                initialValue = 0.35f,
-                                targetValue = if (isPlayingTrack) 0.65f else 0.30f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(2600, easing = FastOutSlowInEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "aura_alpha"
-                            )
+                            val auraPullRangePx = with(motionDensity) { AURA_PULL_RANGE.toPx() }
+                            val auraFadeRangePx = with(motionDensity) { AURA_FADE_RANGE.toPx() }
 
                             Box(
                                 modifier = Modifier
+                                    .sharedArtwork(song?.id)
                                     .fillMaxWidth(0.92f)
                                     .aspectRatio(1f),
                                 contentAlignment = Alignment.Center
@@ -720,10 +728,13 @@ fun NowPlayingScreen(
                                         .fillMaxSize(1.08f)
                                         .graphicsLayer {
                                             val pullY = swipeOffsetY.value
-                                            val auraPullScale = (1f - (pullY / 1400f)).coerceIn(0.7f, 1f)
+                                            val breath = auraClock.wave(periodSeconds = 5.2f)
+                                            val auraScale = 1f + 0.06f * auraClock.intensity * breath
+                                            val auraAlpha = 0.32f + auraClock.intensity * (0.03f + 0.30f * breath)
+                                            val auraPullScale = (1f - (pullY / auraPullRangePx)).coerceIn(0.7f, 1f)
                                             scaleX = auraScale * auraPullScale
                                             scaleY = auraScale * auraPullScale
-                                            alpha = (auraAlpha * (1f - (pullY / 450f))).coerceIn(0f, 1f)
+                                            alpha = (auraAlpha * (1f - (pullY / auraFadeRangePx))).coerceIn(0f, 1f)
                                         }
                                         .background(
                                             Brush.radialGradient(
@@ -742,24 +753,32 @@ fun NowPlayingScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .pointerInput(onNext, onPrevious, onBack) {
-                                            var dragMode: Int = 0 // 0: detecting, 1: horizontal, 2: vertical down, 3: vertical up
+                                        .pointerInput(onNext, onPrevious, onBack, skipThresholdPx) {
+                                            var dragMode: Int = 0
                                             var accumulatedX = 0f
                                             var accumulatedY = 0f
-                                            val slop = 16f
+                                            var rawOffsetX = 0f
+                                            val slop = viewConfiguration.touchSlop
+                                            val velocityTracker = VelocityTracker()
 
                                             detectDragGestures(
                                                 onDragStart = {
                                                     dragMode = 0
                                                     accumulatedX = 0f
                                                     accumulatedY = 0f
+                                                    rawOffsetX = artworkOffsetX.value
+                                                    velocityTracker.resetTracking()
                                                 },
                                                 onDragEnd = {
+                                                    val velocity = velocityTracker.calculateVelocity()
                                                     if (dragMode == 1) {
                                                         val currentOffset = artworkOffsetX.value
-                                                        if (currentOffset < -75f) {
+                                                        val flung = kotlin.math.abs(velocity.x) > skipVelocityPx
+                                                        val direction = if (flung) velocity.x else currentOffset
+                                                        val shouldSkip = flung || kotlin.math.abs(currentOffset) > skipThresholdPx
+                                                        if (shouldSkip && direction < 0f) {
                                                             triggerNextAnimated()
-                                                        } else if (currentOffset > 75f) {
+                                                        } else if (shouldSkip && direction > 0f) {
                                                             triggerPreviousAnimated()
                                                         } else {
                                                             artworkScope.launch {
@@ -770,14 +789,14 @@ fun NowPlayingScreen(
                                                             }
                                                         }
                                                     } else if (dragMode == 2) {
-                                                        if (swipeOffsetY.value > 120f) {
+                                                        if (swipeOffsetY.value > dismissThresholdPx || velocity.y > dismissVelocityPx) {
                                                             handleDismiss()
                                                         } else {
                                                             scope.launch {
                                                                 swipeOffsetY.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow))
                                                             }
                                                         }
-                                                    } else if (dragMode == 3 && accumulatedY < -60f) {
+                                                    } else if (dragMode == 3 && accumulatedY < -queueOpenDistancePx) {
                                                         scope.launch {
                                                             pagerState.animateScrollToPage(
                                                                 page = 1,
@@ -797,6 +816,7 @@ fun NowPlayingScreen(
                                                     dragMode = 0
                                                 },
                                                 onDrag = { change, dragAmount ->
+                                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
                                                     if (dragMode == 0) {
                                                         accumulatedX += dragAmount.x
                                                         accumulatedY += dragAmount.y
@@ -814,10 +834,9 @@ fun NowPlayingScreen(
                                                     when (dragMode) {
                                                         1 -> {
                                                             change.consume()
-                                                            artworkScope.launch {
-                                                                val next = (artworkOffsetX.value + dragAmount.x).coerceIn(-260f, 260f)
-                                                                artworkOffsetX.snapTo(next)
-                                                            }
+                                                            rawOffsetX += dragAmount.x
+                                                            val next = com.shyan.dreamin.ui.components.rubberBand(rawOffsetX, skipThresholdPx)
+                                                            artworkScope.launch { artworkOffsetX.snapTo(next) }
                                                         }
                                                         2 -> {
                                                             if (dragAmount.y > 0f || swipeOffsetY.value > 0f) {

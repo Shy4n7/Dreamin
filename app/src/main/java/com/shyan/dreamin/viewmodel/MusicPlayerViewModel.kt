@@ -58,6 +58,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val MAX_LISTEN_TICK_MS = 3_000L
+        const val PAUSED_POLL_EXTRA_DELAY_MS = 400L
+        const val POSTER_WAIT_MS = 150L
         const val REPLAY_START_WINDOW_MS = 1_000L
         const val REPLAY_MIN_PLAYED_MS = 3_000L
         val YOUTUBE_FORMAT = AudioFormatInfo(codec = "Opus", bitrateKbps = 160, sampleRateHz = 48000, isLossless = false, source = "YouTube Music (160k Opus)")
@@ -92,6 +94,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var searchJob: Job? = null
     private var openPlaylistJob: Job? = null
     private var colorExtractJob: Job? = null
+    private var artworkJob: Job? = null
+    private var artworkSongId: String? = null
+    private var lastColorUrl: String? = null
+    private var lyricsSongId: String? = null
     private var prefetchJob: Job? = null
     private var lyricsJob: Job? = null
     private var artistJob: Job? = null
@@ -1292,19 +1298,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     beginListen(activeSong)
                 }
                 publishStreamSource(activeSong.id)
-                extractDominantColor(activeSong.displayArtworkUrl)
-                loadLyricsForCurrentSong()
+                refreshArtworkAndColor(activeSong)
+                refreshLyricsForCurrentSong()
                 prefetchQueueArtworks(_uiState.value.queue, activeSong.id)
-                if (!activeSong.id.startsWith("yt_")) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(activeSong)
-                            if (!official.isNullOrBlank() && official != activeSong.artworkUrl) {
-                                updateSongArtworkAcrossApp(activeSong.id, official)
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
             }
         }
     }
@@ -1365,6 +1361,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 val c = controller ?: continue
                 if (!c.isPlaying) {
                     lastListenTickMs = 0L
+                    delay(PAUSED_POLL_EXTRA_DELAY_MS)
+                    publishPosition(c)
                     continue
                 }
                 val pos = c.currentPosition.coerceAtLeast(0L)
@@ -1455,8 +1453,45 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun withCachedPoster(song: Song): Song {
+        if (song.id.startsWith("yt_")) return song
+        val cached = com.shyan.dreamin.data.service.OfficialArtworkService.getCachedPoster(song)
+        return if (!cached.isNullOrBlank() && cached != song.artworkUrl) song.copy(artworkUrl = cached) else song
+    }
+
+    private fun refreshArtworkAndColor(song: Song) {
+        if (artworkSongId == song.id) return
+        artworkSongId = song.id
+        artworkJob?.cancel()
+        if (song.id.startsWith("yt_")) {
+            extractDominantColor(song.displayArtworkUrl)
+            return
+        }
+        artworkJob = viewModelScope.launch {
+            val poster = async(Dispatchers.IO) { resolveOfficialPosterOrNull(song) }
+            val quick = kotlinx.coroutines.withTimeoutOrNull(POSTER_WAIT_MS) { poster.await() }
+            if (quick != null) {
+                updateSongArtworkAcrossApp(song.id, quick)
+                return@launch
+            }
+            extractDominantColor(song.displayArtworkUrl)
+            poster.await()?.let { updateSongArtworkAcrossApp(song.id, it) }
+        }
+    }
+
+    private suspend fun resolveOfficialPosterOrNull(song: Song): String? = try {
+        com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
+            ?.takeIf { it.isNotBlank() && it != song.artworkUrl }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
     private fun extractDominantColor(artworkUrl: String) {
-        if (artworkUrl.isBlank()) return
+        if (artworkUrl.isBlank() || artworkUrl == lastColorUrl) return
+        lastColorUrl = artworkUrl
+        colorExtractJob?.cancel()
 
         // 1. Instant 0ms RAM cache hit
         com.shyan.dreamin.data.service.PaletteMemoryCache.getCachedTriad(artworkUrl)?.let { triad ->
@@ -1516,12 +1551,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playSong(
-        song: Song,
+        requestedSong: Song,
         fromPlaylist: Boolean = false,
         preserveQueue: Boolean = false,
         queueIndex: Int? = null,
         startPositionMs: Long = 0L
     ) {
+        val song = withCachedPoster(requestedSong)
         currentPlayJob?.cancel()
         controller?.let { c ->
             if (c.isPlaying || c.playWhenReady) {
@@ -1558,19 +1594,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             )
         }
         _progress.value = PlaybackProgress(0L, 0L)
-        extractDominantColor(song.displayArtworkUrl)
-        loadLyricsForCurrentSong()
-
-        // Resolve official original movie soundtrack artwork
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val official = com.shyan.dreamin.data.service.OfficialArtworkService.resolveOfficialMoviePoster(song)
-                if (!official.isNullOrBlank() && official != song.artworkUrl) {
-                    updateSongArtworkAcrossApp(song.id, official)
-                    extractDominantColor(official)
-                }
-            } catch (_: Exception) {}
-        }
+        refreshArtworkAndColor(song)
+        refreshLyricsForCurrentSong()
 
         currentPlayJob = viewModelScope.launch {
             try {
@@ -1691,13 +1716,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun toggleLyricsView() {
         val willOpen = !_uiState.value.isLyricsViewOpen
         _uiState.update { it.copy(isLyricsViewOpen = willOpen) }
-        if (willOpen && _uiState.value.lyricsState is LyricsState.Idle) {
-            loadLyricsForCurrentSong()
+        if (willOpen) refreshLyricsForCurrentSong()
+    }
+
+    private fun refreshLyricsForCurrentSong() {
+        val song = _uiState.value.currentSong ?: return
+        if (!_uiState.value.isLyricsViewOpen) {
+            if (lyricsSongId != song.id) {
+                lyricsJob?.cancel()
+                lyricsSongId = null
+                _uiState.update { it.copy(lyricsState = LyricsState.Idle) }
+            }
+            return
         }
+        if (lyricsSongId == song.id) return
+        loadLyricsForCurrentSong()
     }
 
     fun loadLyricsForCurrentSong() {
         val song = _uiState.value.currentSong ?: return
+        lyricsSongId = song.id
         lyricsJob?.cancel()
         lyricsJob = viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(lyricsState = LyricsState.Loading) }
@@ -1951,10 +1989,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         controller?.seekTo(positionMs)
     }
 
+    private fun publishPosition(c: MediaController) {
+        val pos = c.currentPosition.coerceAtLeast(0L)
+        val dur = c.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
+        val current = _progress.value
+        if (pos != current.currentPositionMs || dur != current.durationMs) {
+            _progress.value = PlaybackProgress(pos, dur)
+        }
+    }
+
     val skipEvents: kotlinx.coroutines.flow.SharedFlow<com.shyan.dreamin.data.queue.SkipEvent> = PlaybackQueueStore.skipEvents
 
     fun playNext() {
-        controller?.seekToNext() ?: connectToService()
+        val c = controller
+        if (c == null) {
+            PlaybackQueueStore.emitSkip(com.shyan.dreamin.data.queue.SkipEvent(com.shyan.dreamin.data.queue.SkipDirection.NEXT, changedTrack = false))
+            connectToService()
+            return
+        }
+        c.seekToNext()
     }
 
     fun playQueueRow(index: Int, songId: String) {
@@ -1972,7 +2025,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playPrevious() {
-        controller?.seekToPrevious() ?: connectToService()
+        val c = controller
+        if (c == null) {
+            PlaybackQueueStore.emitSkip(com.shyan.dreamin.data.queue.SkipEvent(com.shyan.dreamin.data.queue.SkipDirection.PREVIOUS, changedTrack = false))
+            connectToService()
+            return
+        }
+        c.seekToPrevious()
     }
 
     fun addToQueue(song: Song) {

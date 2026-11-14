@@ -101,6 +101,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.shyan.dreamin.ui.components.AmbientSoundwaveHeader
+import com.shyan.dreamin.ui.components.sharedArtwork
 import com.shyan.dreamin.data.model.*
 import com.shyan.dreamin.ui.components.EqualizerBottomSheet
 import com.shyan.dreamin.ui.components.FluidMeshGradientBackground
@@ -367,44 +368,7 @@ fun MiniPlayer(
         label = "mini_aura_color"
     )
     val isPlaying = playbackState is PlaybackState.Playing
-    val speedMultiplier by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.0f,
-        animationSpec = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
-        label = "mini_shimmer_speed"
-    )
-
-    // Continuous monotonic time clock for seamless deceleration on pause without phase jumps
-    var elapsedTime by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        var lastFrameNanos = 0L
-        while (true) {
-            if (!isPlaying && speedMultiplier <= 0.001f) {
-                // Yield frame loop when paused and speed has decelerated to zero
-                delay(200)
-                lastFrameNanos = 0L
-                continue
-            }
-            withFrameNanos { frameNanos ->
-                if (lastFrameNanos != 0L) {
-                    val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    val clampedDt = dt.coerceIn(0.001f, 0.05f)
-                    elapsedTime += clampedDt * speedMultiplier
-                }
-                lastFrameNanos = frameNanos
-            }
-        }
-    }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "mini_glow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.16f,
-        targetValue = if (isPlaying) 0.34f else 0.16f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "mini_glow_alpha"
-    )
+    val clock = com.shyan.dreamin.ui.components.rememberPlaybackClock(isPlaying, rampMillis = 1100)
 
     val expandInteraction = remember { MutableInteractionSource() }
     val isPressed by expandInteraction.collectIsPressedAsState()
@@ -435,18 +399,26 @@ fun MiniPlayer(
             modifier = Modifier
                 .matchParentSize()
                 .padding(horizontal = 4.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            animatedAura.copy(alpha = glowAlpha * 0.38f),
-                            animatedAura.copy(alpha = glowAlpha * 0.18f),
-                            animatedAura.copy(alpha = glowAlpha * 0.04f),
-                            Color.Transparent
-                        ),
-                        radius = 520f
-                    ),
-                    cardShape
-                )
+                .drawWithCache {
+                    val outline = cardShape.createOutline(size, layoutDirection, this)
+                    val glowRadius = 200.dp.toPx()
+                    onDrawBehind {
+                        val glowAlpha = 0.16f + 0.18f * clock.intensity * clock.wave(periodSeconds = 5.6f)
+                        drawOutline(
+                            outline = outline,
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    animatedAura.copy(alpha = glowAlpha * 0.38f),
+                                    animatedAura.copy(alpha = glowAlpha * 0.18f),
+                                    animatedAura.copy(alpha = glowAlpha * 0.04f),
+                                    Color.Transparent
+                                ),
+                                center = center,
+                                radius = glowRadius
+                            )
+                        )
+                    }
+                }
         )
 
         // 🏝️ Floating Glassmorphic Pill Surface
@@ -484,7 +456,7 @@ fun MiniPlayer(
                             style = Stroke(width = strokeWidth)
                         )
                         // 2. Dynamic light refraction gleam sweep
-                        val borderShimmerOffset = (elapsedTime * 360f) % 1800f - 400f
+                        val borderShimmerOffset = (clock.seconds * 360f) % 1800f - 400f
                         val highlightAlpha = 0.15f + 0.35f * gleamIntensity
                         val whiteAlpha = 0.10f + 0.70f * gleamIntensity
                         val shimmerBrush = Brush.linearGradient(
@@ -540,6 +512,7 @@ fun MiniPlayer(
                             .build(),
                         contentDescription = "Artwork for ${s.displayTitle}",
                         modifier = Modifier
+                            .sharedArtwork(s.id)
                             .size(48.dp)
                             .clip(RoundedCornerShape(10.dp)),
                         contentScale = ContentScale.Crop

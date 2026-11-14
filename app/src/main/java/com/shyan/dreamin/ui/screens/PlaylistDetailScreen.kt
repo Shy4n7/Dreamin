@@ -137,6 +137,10 @@ enum class PlaylistSortOrder(val label: String) {
     Duration("Duration")
 }
 
+
+private val ROW_SWIPE_REVEAL = 4.dp
+private val ROW_SWIPE_ACTION = 42.dp
+private val ROW_SWIPE_MAX = 56.dp
 @Composable
 fun PlaylistDetailScreen(
     playlist: com.shyan.dreamin.data.local.Playlist,
@@ -1940,6 +1944,9 @@ fun PlaylistSongRow(
     var showOptionsSheet by remember { mutableStateOf(false) }
 
     val swipeOffsetX = remember { Animatable(0f) }
+    val swipeRevealPx = with(LocalDensity.current) { ROW_SWIPE_REVEAL.toPx() }
+    val swipeActionPx = with(LocalDensity.current) { ROW_SWIPE_ACTION.toPx() }
+    val swipeMaxPx = with(LocalDensity.current) { ROW_SWIPE_MAX.toPx() }
 
     Box(
         modifier = modifier
@@ -1955,7 +1962,7 @@ fun PlaylistSongRow(
             .clip(RoundedCornerShape(18.dp))
     ) {
         // Swipe action background indicators
-        if (swipeOffsetX.value > 12f) {
+        if (swipeOffsetX.value > swipeRevealPx) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1977,7 +1984,7 @@ fun PlaylistSongRow(
                     Text("Queue", color = colors.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
-        } else if (swipeOffsetX.value < -12f) {
+        } else if (swipeOffsetX.value < -swipeRevealPx) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2060,9 +2067,9 @@ fun PlaylistSongRow(
                         detectHorizontalDragGestures(
                             onDragEnd = {
                                 coroutineScope.launch {
-                                    if (swipeOffsetX.value > 110f) {
+                                    if (swipeOffsetX.value > swipeActionPx) {
                                         onSwipeAddToQueue()
-                                    } else if (swipeOffsetX.value < -110f) {
+                                    } else if (swipeOffsetX.value < -swipeActionPx) {
                                         onSwipeRemove()
                                     }
                                     swipeOffsetX.animateTo(
@@ -2083,7 +2090,7 @@ fun PlaylistSongRow(
                                 change.consume()
                                 coroutineScope.launch {
                                     val current = swipeOffsetX.value
-                                    swipeOffsetX.snapTo((current + dragAmount * 0.75f).coerceIn(-150f, 150f))
+                                    swipeOffsetX.snapTo((current + dragAmount * 0.75f).coerceIn(-swipeMaxPx, swipeMaxPx))
                                 }
                             }
                         )

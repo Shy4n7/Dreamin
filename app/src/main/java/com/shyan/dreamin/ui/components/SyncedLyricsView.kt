@@ -1,6 +1,15 @@
 package com.shyan.dreamin.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -33,6 +42,10 @@ import com.shyan.dreamin.data.model.LyricsState
 import com.shyan.dreamin.data.model.PlaybackProgress
 import com.shyan.dreamin.ui.screens.LocalDreaminColors
 import kotlinx.coroutines.flow.StateFlow
+
+private val ACTIVE_LINE_OFFSET = 32.dp
+private const val AUTOSCROLL_RESUME_MS = 3_000L
+private const val INACTIVE_LINE_SCALE = 0.8f
 
 @Composable
 fun SyncedLyricsView(
@@ -165,13 +178,37 @@ fun SyncedLyricsView(
                     }
                 }
 
-                // Apple Music-Style fluid spring autoscroll
-                LaunchedEffect(activeIndex) {
+                val activeLineOffsetPx = with(LocalDensity.current) { ACTIVE_LINE_OFFSET.roundToPx() }
+                var isUserDragging by remember { mutableStateOf(false) }
+                var resumeToken by remember { mutableIntStateOf(0) }
+                var isAutoScrollPaused by remember { mutableStateOf(false) }
+
+                LaunchedEffect(listState) {
+                    listState.interactionSource.interactions.collect { interaction ->
+                        when (interaction) {
+                            is DragInteraction.Start -> {
+                                isUserDragging = true
+                                isAutoScrollPaused = true
+                            }
+                            is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                                isUserDragging = false
+                                resumeToken++
+                            }
+                        }
+                    }
+                }
+
+                LaunchedEffect(resumeToken, isUserDragging) {
+                    if (!isUserDragging && isAutoScrollPaused) {
+                        delay(AUTOSCROLL_RESUME_MS)
+                        isAutoScrollPaused = false
+                    }
+                }
+
+                LaunchedEffect(activeIndex, isAutoScrollPaused) {
+                    if (isAutoScrollPaused) return@LaunchedEffect
                     if (activeIndex in lines.indices) {
-                        listState.animateScrollToItem(
-                            index = activeIndex,
-                            scrollOffset = -80
-                        )
+                        listState.animateScrollToItem(index = activeIndex, scrollOffset = -activeLineOffsetPx)
                     } else if (activeIndex == -1) {
                         listState.animateScrollToItem(0, scrollOffset = 0)
                     }
@@ -202,7 +239,7 @@ fun SyncedLyricsView(
                         )
 
                         val animatedScale by animateFloatAsState(
-                            targetValue = if (isActive) 1.10f else 0.95f,
+                            targetValue = if (isActive) 1.0f else INACTIVE_LINE_SCALE,
                             animationSpec = spring(
                                 dampingRatio = Spring.DampingRatioMediumBouncy,
                                 stiffness = Spring.StiffnessMediumLow
@@ -253,11 +290,33 @@ fun SyncedLyricsView(
                             Text(
                                 text = line.text,
                                 color = if (isActive) Color.White else Color.White.copy(alpha = 0.5f),
-                                fontSize = if (isActive) 23.sp else 16.5.sp,
-                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center,
-                                lineHeight = if (isActive) 32.sp else 24.sp
+                                lineHeight = 30.sp
                             )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = isAutoScrollPaused,
+                    enter = fadeIn(tween(160)) + scaleIn(initialScale = 0.9f),
+                    exit = fadeOut(tween(160)) + scaleOut(targetScale = 0.9f),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
+                ) {
+                    Surface(
+                        onClick = { isAutoScrollPaused = false },
+                        shape = RoundedCornerShape(50),
+                        color = colors.primary
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Outlined.Sync, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sync", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

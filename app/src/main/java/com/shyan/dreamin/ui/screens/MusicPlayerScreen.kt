@@ -91,6 +91,7 @@ fun MusicPlayerScreen(vm: MusicPlayerViewModel = viewModel()) {
     }
 }
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MainAppScaffold(
     state: PlayerUiState,
@@ -152,6 +153,8 @@ private fun MainAppScaffold(
         isRecognizeMusicOpen = false
     }
 
+    androidx.compose.animation.SharedTransitionLayout {
+    CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalSharedTransitionScope provides this) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
@@ -180,6 +183,7 @@ private fun MainAppScaffold(
                         enter = slideInVertically(DreaminMotion.FluidSlide) { it } + fadeIn(tween(180)),
                         exit = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(140))
                     ) {
+                        CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalArtworkVisibilityScope provides this) {
                         MiniPlayer(
                             song              = state.currentSong,
                             playbackState     = state.playbackState,
@@ -191,6 +195,7 @@ private fun MainAppScaffold(
                             dominantColor     = Color(state.dominantColor),
                             hazeState         = hazeState
                         )
+                        }
                     }
                     AnimatedVisibility(
                         visible = !isRecognizeMusicOpen,
@@ -579,6 +584,7 @@ private fun MainAppScaffold(
             exit     = slideOutVertically(DreaminMotion.FluidSlide) { it } + fadeOut(tween(180, easing = FastOutLinearInEasing)),
             modifier = Modifier.fillMaxSize().zIndex(4f)
         ) {
+            CompositionLocalProvider(com.shyan.dreamin.ui.components.LocalArtworkVisibilityScope provides this) {
             NowPlayingScreen(
                 state              = state,
                 progressFlow       = vm.progressFlow,
@@ -611,8 +617,12 @@ private fun MainAppScaffold(
                 onDeleteDownload     = vm::deleteDownload,
                 onArtistClick        = vm::openArtistProfile,
                 onUpdateSongArtwork  = { song, poster -> vm.updateSongArtworkAcrossApp(song.id, poster) },
+                skipEvents           = vm.skipEvents,
                 onBack               = onCloseNowPlaying
             )
+            }
         }
+    }
+    }
     }
 }
