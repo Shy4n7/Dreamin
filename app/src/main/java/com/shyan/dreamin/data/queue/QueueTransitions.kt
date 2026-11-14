@@ -31,14 +31,25 @@ object QueueTransitions {
     fun onAutoEnd(
         snapshot: QueueSnapshot,
         shuffler: (List<Song>) -> List<Song> = { it.shuffled() }
+    ): AutoEndAction = advance(snapshot, isManual = false, shuffler = shuffler)
+
+    fun onUserNext(
+        snapshot: QueueSnapshot,
+        shuffler: (List<Song>) -> List<Song> = { it.shuffled() }
+    ): AutoEndAction = advance(snapshot, isManual = true, shuffler = shuffler)
+
+    private fun advance(
+        snapshot: QueueSnapshot,
+        isManual: Boolean,
+        shuffler: (List<Song>) -> List<Song>
     ): AutoEndAction {
         val current = snapshot.currentSong ?: return AutoEndAction.Stop
         val advance = QueueOps.next(
             snapshot.items,
             snapshot.currentIndex,
             snapshot.repeatMode,
-            snapshot.playlistActive,
             snapshot.isShuffle,
+            isManual,
             shuffler
         )
         return when (advance) {
@@ -60,8 +71,7 @@ object QueueTransitions {
             snapshot.items,
             snapshot.currentIndex,
             positionMs,
-            snapshot.repeatMode,
-            snapshot.playlistActive
+            snapshot.repeatMode
         )
         if (advance !is QueueAdvance.PlayIndex) return AutoEndAction.ReplayCurrent
         val song = snapshot.items.getOrNull(advance.index) ?: return AutoEndAction.ReplayCurrent
@@ -72,7 +82,7 @@ object QueueTransitions {
         val failed = snapshot.currentSong?.takeIf { it.id == failedId } ?: return AutoEndAction.Stop
         val idx = snapshot.currentIndex
         val remaining = QueueOps.removeAt(snapshot.items, idx)
-        val loops = snapshot.repeatMode == TrackRepeatMode.ALL || snapshot.playlistActive
+        val loops = snapshot.repeatMode == TrackRepeatMode.ALL
         val target = when {
             idx < remaining.size -> idx
             loops && remaining.isNotEmpty() -> 0
@@ -84,12 +94,53 @@ object QueueTransitions {
         return AutoEndAction.ContinueWithRadio(failed, pruned.copy(currentIndex = -1), idx)
     }
 
+    fun replaceQueue(
+        snapshot: QueueSnapshot,
+        items: List<Song>,
+        playlistActive: Boolean,
+        start: Song,
+        shuffler: (List<Song>) -> List<Song> = { it.shuffled() }
+    ): QueueSnapshot {
+        val startIndex = items.indexOfFirst { it.id == start.id }
+        val base = if (startIndex >= 0) items else listOf(start) + items
+        val index = startIndex.coerceAtLeast(0)
+        val ids = base.map { it.id }.toSet()
+        val userQueued = snapshot.userQueuedIds.filter { it in ids && it != start.id }
+        if (!snapshot.isShuffle) {
+            return snapshot.copy(items = base, currentIndex = index, playlistActive = playlistActive, userQueuedIds = userQueued, originalOrder = emptyList())
+        }
+        val others = base.filterIndexed { i, _ -> i != index }
+        return snapshot.copy(
+            items = listOf(base[index]) + shuffler(others),
+            currentIndex = 0,
+            playlistActive = playlistActive,
+            userQueuedIds = userQueued,
+            originalOrder = base
+        )
+    }
+
+    fun toggleShuffle(
+        snapshot: QueueSnapshot,
+        shuffler: (List<Song>) -> List<Song> = { it.shuffled() }
+    ): QueueSnapshot {
+        if (snapshot.isShuffle) {
+            val restored = QueueOps.unshuffleUpcoming(
+                snapshot.items,
+                snapshot.currentIndex,
+                snapshot.originalOrder,
+                snapshot.userQueuedIds
+            )
+            return snapshot.copy(items = restored, isShuffle = false, originalOrder = emptyList())
+        }
+        val shuffled = QueueOps.shuffleUpcoming(snapshot.items, snapshot.currentIndex, snapshot.userQueuedIds, shuffler)
+        return snapshot.copy(items = shuffled, isShuffle = true, originalOrder = snapshot.items)
+    }
+
     fun upcomingSong(snapshot: QueueSnapshot): Song? =
         QueueOps.upcomingIndex(
             snapshot.items,
             snapshot.currentIndex,
             snapshot.repeatMode,
-            snapshot.playlistActive,
             snapshot.isShuffle
         )?.let { snapshot.items.getOrNull(it) }
 

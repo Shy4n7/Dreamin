@@ -35,6 +35,7 @@ import com.shyan.dreamin.data.local.AppDatabase
 import com.shyan.dreamin.data.local.DownloadRepository
 import com.shyan.dreamin.data.local.UserPreferencesDataStore
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
+import com.shyan.dreamin.data.queue.QueueTransitions
 import com.shyan.dreamin.data.network.NetworkService
 import com.shyan.dreamin.data.repository.CatalogRepository
 import kotlinx.coroutines.CoroutineScope
@@ -100,7 +101,6 @@ class MusicService : MediaSessionService() {
 
     companion object {
         const val ACTION_TOGGLE_FAVORITE = "com.shyan.dreamin.ACTION_TOGGLE_FAVORITE"
-        const val ACTION_TOGGLE_SHUFFLE = "com.shyan.dreamin.ACTION_TOGGLE_SHUFFLE"
 
         const val CUSTOM_COMMAND_FAVORITE = "com.shyan.dreamin.COMMAND_FAVORITE"
         const val CUSTOM_COMMAND_SHUFFLE = "com.shyan.dreamin.COMMAND_SHUFFLE"
@@ -284,7 +284,7 @@ class MusicService : MediaSessionService() {
             ): ListenableFuture<SessionResult> {
                 when (customCommand.customAction) {
                     CUSTOM_COMMAND_FAVORITE -> sendBroadcast(Intent(ACTION_TOGGLE_FAVORITE).setPackage(packageName))
-                    CUSTOM_COMMAND_SHUFFLE -> sendBroadcast(Intent(ACTION_TOGGLE_SHUFFLE).setPackage(packageName))
+                    CUSTOM_COMMAND_SHUFFLE -> PlaybackQueueStore.update { QueueTransitions.toggleShuffle(it) }
                     CUSTOM_COMMAND_SET_SLEEP_TIMER -> {
                         val endEpochMs = args.getLong(EXTRA_SLEEP_TIMER_END_MS, 0L)
                         startServiceSleepTimer(endEpochMs)

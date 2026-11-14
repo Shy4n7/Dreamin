@@ -33,70 +33,77 @@ class QueueOpsTest {
 
     @Test
     fun `next moves to following index in the middle`() {
-        assertEquals(QueueAdvance.PlayIndex(2), QueueOps.next(abcd, 1, TrackRepeatMode.OFF, loopsQueue = false, isShuffle = false))
+        assertEquals(QueueAdvance.PlayIndex(2), QueueOps.next(abcd, 1, TrackRepeatMode.OFF, isShuffle = false))
     }
 
     @Test
     fun `next with duplicates uses index not id`() {
         val items = listOf(a, b, a, c)
-        assertEquals(QueueAdvance.PlayIndex(3), QueueOps.next(items, 2, TrackRepeatMode.OFF, loopsQueue = false, isShuffle = false))
+        assertEquals(QueueAdvance.PlayIndex(3), QueueOps.next(items, 2, TrackRepeatMode.OFF, isShuffle = false))
     }
 
     @Test
     fun `next at end without repeat ends queue`() {
-        assertEquals(QueueAdvance.EndOfQueue, QueueOps.next(abcd, 3, TrackRepeatMode.OFF, loopsQueue = false, isShuffle = false))
+        assertEquals(QueueAdvance.EndOfQueue, QueueOps.next(abcd, 3, TrackRepeatMode.OFF, isShuffle = false))
     }
 
     @Test
-    fun `next at end wraps for repeat all and playlists`() {
-        assertEquals(QueueAdvance.PlayIndex(0), QueueOps.next(abcd, 3, TrackRepeatMode.ALL, loopsQueue = false, isShuffle = false))
-        assertEquals(QueueAdvance.PlayIndex(0), QueueOps.next(abcd, 3, TrackRepeatMode.OFF, loopsQueue = true, isShuffle = false))
+    fun `next at end wraps only for repeat all`() {
+        assertEquals(QueueAdvance.PlayIndex(0), QueueOps.next(abcd, 3, TrackRepeatMode.ALL, isShuffle = false))
+        assertEquals(QueueAdvance.EndOfQueue, QueueOps.next(abcd, 3, TrackRepeatMode.ONE, isShuffle = false, isManual = true))
     }
 
     @Test
     fun `next at end with shuffle reshuffles keeping current first`() {
-        val result = QueueOps.next(abcd, 3, TrackRepeatMode.ALL, loopsQueue = false, isShuffle = true, shuffler = reverse)
+        val result = QueueOps.next(abcd, 3, TrackRepeatMode.ALL, isShuffle = true, shuffler = reverse)
         assertEquals(QueueAdvance.PlayIndex(1, listOf(d, c, b, a)), result)
     }
 
     @Test
-    fun `next with repeat one replays`() {
-        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.next(abcd, 1, TrackRepeatMode.ONE, loopsQueue = false, isShuffle = false))
+    fun `natural end with repeat one replays`() {
+        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.next(abcd, 1, TrackRepeatMode.ONE, isShuffle = false))
     }
 
     @Test
-    fun `next on single looping item replays`() {
-        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.next(listOf(a), 0, TrackRepeatMode.OFF, loopsQueue = true, isShuffle = false))
+    fun `manual next with repeat one changes track`() {
+        assertEquals(QueueAdvance.PlayIndex(2), QueueOps.next(abcd, 1, TrackRepeatMode.ONE, isShuffle = false, isManual = true))
+    }
+
+    @Test
+    fun `next on single item with repeat all replays`() {
+        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.next(listOf(a), 0, TrackRepeatMode.ALL, isShuffle = false))
     }
 
     @Test
     fun `previous restarts after three seconds`() {
-        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.previous(abcd, 2, 3_500L, TrackRepeatMode.OFF, loopsQueue = false))
+        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.previous(abcd, 2, 3_500L, TrackRepeatMode.OFF))
     }
 
     @Test
     fun `previous goes back one index early in the song`() {
-        assertEquals(QueueAdvance.PlayIndex(1), QueueOps.previous(abcd, 2, 1_000L, TrackRepeatMode.OFF, loopsQueue = false))
+        assertEquals(QueueAdvance.PlayIndex(1), QueueOps.previous(abcd, 2, 1_000L, TrackRepeatMode.OFF))
     }
 
     @Test
-    fun `previous at start restarts unless looping`() {
-        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.previous(abcd, 0, 0L, TrackRepeatMode.OFF, loopsQueue = false))
-        assertEquals(QueueAdvance.PlayIndex(3), QueueOps.previous(abcd, 0, 0L, TrackRepeatMode.ALL, loopsQueue = false))
+    fun `previous at start restarts unless repeat all`() {
+        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.previous(abcd, 0, 0L, TrackRepeatMode.OFF))
+        assertEquals(QueueAdvance.ReplayCurrent, QueueOps.previous(abcd, 0, 0L, TrackRepeatMode.ONE))
+        assertEquals(QueueAdvance.PlayIndex(3), QueueOps.previous(abcd, 0, 0L, TrackRepeatMode.ALL))
     }
 
     @Test
-    fun `upcomingIndex skips preload for repeat one`() {
-        assertNull(QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.ONE, loopsQueue = false))
-        assertEquals(2, QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.OFF, loopsQueue = false))
-        assertNull(QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.OFF, loopsQueue = false))
-        assertEquals(0, QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.ALL, loopsQueue = false))
+    fun `upcomingIndex preloads the next song even with repeat one`() {
+        assertEquals(2, QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.ONE))
+        assertEquals(2, QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.OFF))
+        assertNull(QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.OFF))
+        assertNull(QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.ONE))
+        assertEquals(0, QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.ALL))
     }
 
     @Test
     fun `upcomingIndex does not preload a shuffled wrap so the queue can reshuffle`() {
-        assertNull(QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.ALL, loopsQueue = false, isShuffle = true))
-        assertEquals(2, QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.ALL, loopsQueue = false, isShuffle = true))
+        assertNull(QueueOps.upcomingIndex(abcd, 3, TrackRepeatMode.ALL, isShuffle = true))
+        assertEquals(2, QueueOps.upcomingIndex(abcd, 1, TrackRepeatMode.ALL, isShuffle = true))
     }
 
     @Test
@@ -175,8 +182,41 @@ class QueueOpsTest {
 
     @Test
     fun `shuffleUpcoming only reorders songs after current`() {
-        assertEquals(listOf(a, b, d, c), QueueOps.shuffleUpcoming(abcd, 1, reverse))
-        assertEquals(abcd, QueueOps.shuffleUpcoming(abcd, 3, reverse))
+        assertEquals(listOf(a, b, d, c), QueueOps.shuffleUpcoming(abcd, 1, shuffler = reverse))
+        assertEquals(abcd, QueueOps.shuffleUpcoming(abcd, 3, shuffler = reverse))
+    }
+
+    @Test
+    fun `shuffleUpcoming keeps user-queued songs pinned right after current`() {
+        val e = song("e")
+        val items = listOf(a, b, c, d, e)
+        assertEquals(listOf(a, c, e, d, b), QueueOps.shuffleUpcoming(items, 0, pinnedIds = listOf("c"), shuffler = reverse))
+    }
+
+    @Test
+    fun `unshuffleUpcoming restores original order with pinned first and new songs last`() {
+        val x = song("x")
+        val shuffled = listOf(c, a, d, x, b)
+        val restored = QueueOps.unshuffleUpcoming(shuffled, 0, originalOrder = abcd, pinnedIds = listOf("d"))
+        assertEquals(listOf(c, d, a, b, x), restored)
+    }
+
+    @Test
+    fun `unshuffleUpcoming restores each duplicate to its own original slot`() {
+        val x = song("x")
+        val restored = QueueOps.unshuffleUpcoming(listOf(x, c, a, b, a), 0, originalOrder = listOf(a, b, a, c))
+        assertEquals(listOf(x, a, b, a, c), restored)
+    }
+
+    @Test
+    fun `pinning moves only one copy of a duplicated user-queued song`() {
+        val restored = QueueOps.unshuffleUpcoming(listOf(d, b, a, c, a), 0, originalOrder = listOf(a, b, c, a), pinnedIds = listOf("a"))
+        assertEquals(listOf(d, a, b, c, a), restored)
+    }
+
+    @Test
+    fun `unshuffleUpcoming leaves history and current untouched`() {
+        assertEquals(listOf(d, c, a, b), QueueOps.unshuffleUpcoming(listOf(d, c, b, a), 1, originalOrder = abcd))
     }
 
     @Test

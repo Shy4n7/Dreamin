@@ -9,6 +9,8 @@ import com.shyan.dreamin.data.model.Song
 import com.shyan.dreamin.data.queue.AutoEndAction
 import com.shyan.dreamin.data.queue.PlaybackQueueStore
 import com.shyan.dreamin.data.queue.QueueTransitions
+import com.shyan.dreamin.data.queue.SkipDirection
+import com.shyan.dreamin.data.queue.SkipEvent
 import com.shyan.dreamin.data.repository.CatalogRepository
 import com.shyan.dreamin.data.service.AudioStreamResolver
 import kotlinx.coroutines.CancellationException
@@ -60,10 +62,14 @@ class QueueController(
     }
 
     fun skipToNext() {
-        if (!acceptSkip()) return
+        if (!acceptSkip()) {
+            store.emitSkip(SkipEvent(SkipDirection.NEXT, changedTrack = false))
+            return
+        }
         consecutiveFailures = 0
         val snapshot = store.state.value
-        val action = QueueTransitions.onAutoEnd(snapshot)
+        val action = QueueTransitions.onUserNext(snapshot)
+        store.emitSkip(SkipEvent(SkipDirection.NEXT, changesTrack(action)))
         val isPreloaded = action is AutoEndAction.Play &&
             action.snapshot.items == snapshot.items &&
             preloadedIdAfterCurrent() == action.song.id
@@ -77,9 +83,19 @@ class QueueController(
     }
 
     fun skipToPrevious() {
-        if (!acceptSkip()) return
+        if (!acceptSkip()) {
+            store.emitSkip(SkipEvent(SkipDirection.PREVIOUS, changedTrack = false))
+            return
+        }
         consecutiveFailures = 0
-        perform(QueueTransitions.onUserPrevious(store.state.value, player.currentPosition))
+        val action = QueueTransitions.onUserPrevious(store.state.value, player.currentPosition)
+        store.emitSkip(SkipEvent(SkipDirection.PREVIOUS, changesTrack(action)))
+        perform(action)
+    }
+
+    private fun changesTrack(action: AutoEndAction): Boolean = when (action) {
+        is AutoEndAction.Play, is AutoEndAction.ContinueWithRadio -> true
+        AutoEndAction.ReplayCurrent, AutoEndAction.Stop -> false
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -181,7 +197,13 @@ class QueueController(
             store.halt(HALT_UNPLAYABLE)
             return
         }
-        perform(QueueTransitions.skipFailed(store.state.value, song.id))
+        val snapshot = store.state.value
+        val action = QueueTransitions.skipFailed(snapshot, song.id)
+        if (action == AutoEndAction.Stop && snapshot.currentSong?.id == song.id) {
+            store.halt(HALT_UNPLAYABLE)
+            return
+        }
+        perform(action)
     }
 
     private fun continueWithRadio(action: AutoEndAction.ContinueWithRadio) {

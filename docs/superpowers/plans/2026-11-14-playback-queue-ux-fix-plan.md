@@ -107,15 +107,17 @@ Larger refactor; makes background playback independent of the Activity.
 
 **Files:** `MusicPlayerViewModel.kt` (or `QueueController.kt` after Phase 2), `NowPlayingScreen.kt`
 
-- [ ] **#8 Instant manual skip.** If ExoPlayer index+1 holds the target song, call `seekToNextMediaItem()` instead of `setMediaItem`; fall back to resolve only when not preloaded. Same for tapping the next song in the queue.
-- [ ] **#11 Repeat ONE.** Manual next/previous always changes track; repeat ONE only applies to natural track end.
-- [ ] **#12 Repeat semantics for playlists.** Remove the implicit `|| playlistQueueActive` looping; playlist end with repeat OFF continues into radio (or stops, product decision). Previous at index 0 restarts the song instead of wrapping.
-- [ ] **#13 Shuffle off restores order.** Keep `originalOrder`; shuffle-off rebuilds upcoming from it. User-queued ("Play next") entries stay pinned right after current when shuffling.
-- [ ] Repeat cycle order to OFF → ALL → ONE (platform convention).
-- [ ] **#14 Resume position.** Use `setMediaItem(item, startPositionMs)` for last-session resume; delete `pendingResumePositionMs`.
-- [ ] Expose a one-shot `skipEvents: SharedFlow<SkipEvent(direction, changedTrack: Boolean)>` from the ViewModel for the UI (consumed in Phase 5).
+- [x] **#8 Instant manual skip.** If ExoPlayer index+1 holds the target song, call `seekToNextMediaItem()` instead of `setMediaItem`; fall back to resolve only when not preloaded. Same for tapping the next song in the queue.
+- [x] **#11 Repeat ONE.** Manual next/previous always changes track; repeat ONE only applies to natural track end.
+- [x] **#12 Repeat semantics for playlists.** Remove the implicit `|| playlistQueueActive` looping; playlist end with repeat OFF continues into radio (or stops, product decision). Previous at index 0 restarts the song instead of wrapping.
+- [x] **#13 Shuffle off restores order.** Keep `originalOrder`; shuffle-off rebuilds upcoming from it. User-queued ("Play next") entries stay pinned right after current when shuffling.
+- [x] Repeat cycle order to OFF → ALL → ONE (platform convention).
+- [x] **#14 Resume position.** Use `setMediaItem(item, startPositionMs)` for last-session resume; delete `pendingResumePositionMs`.
+- [x] Expose a one-shot `skipEvents: SharedFlow<SkipEvent(direction, changedTrack: Boolean)>` from the ViewModel for the UI (consumed in Phase 5).
 
 **Tests:** extend `QueueOpsTest` for repeat/shuffle-off/pinned items; device check that manual next on a preloaded song shows no spinner.
+
+> **Status (2026-11-15):** Phase 3 done; build + 177 unit tests green; not verified on a device. Decision: a playlist that ends with repeat OFF **stops** (no radio). Starting a new list while shuffle is on shuffles it behind the chosen song and remembers its order (`QueueTransitions.replaceQueue`); the shuffle order is not persisted, so after a cold-start resume, shuffle-off keeps the current order. `skipEvents` are emitted by `QueueController` through `PlaybackQueueStore.skipEvents` (also for lock-screen skips) and exposed as `MusicPlayerViewModel.skipEvents`; nothing consumes them until Phase 5. Queue taps go through `MusicPlayerViewModel.playFromQueue`.
 
 ---
 

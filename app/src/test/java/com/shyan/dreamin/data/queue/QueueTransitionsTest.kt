@@ -82,9 +82,27 @@ class QueueTransitionsTest {
     }
 
     @Test
-    fun `failed last song of a playlist wraps to the first song`() {
-        val action = QueueTransitions.skipFailed(snap(a, b, index = 1, playlist = true), "b")
-        assertEquals(AutoEndAction.Play(snap(a, index = 0, playlist = true), a), action)
+    fun `replacing the queue without shuffle starts at the chosen song and clears the original order`() {
+        val start = snap(a, index = 0, shuffle = false).copy(originalOrder = listOf(d))
+        val replaced = QueueTransitions.replaceQueue(start, listOf(b, c, d), playlistActive = true, start = c)
+        assertEquals(listOf(b, c, d), replaced.items)
+        assertEquals(1, replaced.currentIndex)
+        assertTrue(replaced.playlistActive)
+        assertEquals(emptyList<Song>(), replaced.originalOrder)
+    }
+
+    @Test
+    fun `replacing the queue while shuffled shuffles behind the chosen song and remembers the new order`() {
+        val start = snap(a, index = 0, shuffle = true).copy(originalOrder = listOf(a, d))
+        val replaced = QueueTransitions.replaceQueue(start, listOf(b, c, d), playlistActive = false, start = c, shuffler = { it.reversed() })
+        assertEquals(listOf(c, d, b), replaced.items)
+        assertEquals(0, replaced.currentIndex)
+        assertEquals(listOf(b, c, d), replaced.originalOrder)
+    }
+
+    @Test
+    fun `failed last song of a playlist stops without repeat`() {
+        assertEquals(AutoEndAction.Stop, QueueTransitions.skipFailed(snap(a, b, index = 1, playlist = true), "b"))
     }
 
     @Test
@@ -104,9 +122,14 @@ class QueueTransitionsTest {
     }
 
     @Test
-    fun `previous on the first song of a playlist wraps to the last`() {
-        val action = QueueTransitions.onUserPrevious(snap(a, b, c, index = 0, playlist = true), positionMs = 0L)
-        assertEquals(AutoEndAction.Play(snap(a, b, c, index = 2, playlist = true), c), action)
+    fun `previous on the first song of a playlist restarts it`() {
+        assertEquals(AutoEndAction.ReplayCurrent, QueueTransitions.onUserPrevious(snap(a, b, c, index = 0, playlist = true), positionMs = 0L))
+    }
+
+    @Test
+    fun `previous on the first song with repeat all wraps to the last`() {
+        val action = QueueTransitions.onUserPrevious(snap(a, b, c, index = 0, repeat = TrackRepeatMode.ALL), positionMs = 0L)
+        assertEquals(AutoEndAction.Play(snap(a, b, c, index = 2, repeat = TrackRepeatMode.ALL), c), action)
     }
 
     @Test
@@ -115,9 +138,40 @@ class QueueTransitionsTest {
     }
 
     @Test
-    fun `auto end at the end of a playlist loops back to the start`() {
-        val action = QueueTransitions.onAutoEnd(snap(a, b, index = 1, playlist = true, repeat = TrackRepeatMode.OFF))
-        assertEquals(AutoEndAction.Play(snap(a, b, index = 0, playlist = true), a), action)
+    fun `auto end at the end of a playlist without repeat stops`() {
+        assertEquals(AutoEndAction.Stop, QueueTransitions.onAutoEnd(snap(a, b, index = 1, playlist = true)))
+    }
+
+    @Test
+    fun `auto end at the end of a playlist with repeat all wraps`() {
+        val action = QueueTransitions.onAutoEnd(snap(a, b, index = 1, playlist = true, repeat = TrackRepeatMode.ALL))
+        assertEquals(AutoEndAction.Play(snap(a, b, index = 0, playlist = true, repeat = TrackRepeatMode.ALL), a), action)
+    }
+
+    @Test
+    fun `user next with repeat one moves to the following song`() {
+        val action = QueueTransitions.onUserNext(snap(a, b, index = 0, repeat = TrackRepeatMode.ONE))
+        assertEquals(AutoEndAction.Play(snap(a, b, index = 1, repeat = TrackRepeatMode.ONE), b), action)
+    }
+
+    @Test
+    fun `shuffle on pins user-queued songs and remembers the original order`() {
+        val start = snap(a, b, c, d, index = 0, userQueued = listOf("b"))
+        val shuffled = QueueTransitions.toggleShuffle(start, shuffler = { it.reversed() })
+        assertEquals(listOf(a, b, d, c), shuffled.items)
+        assertTrue(shuffled.isShuffle)
+        assertEquals(listOf(a, b, c, d), shuffled.originalOrder)
+    }
+
+    @Test
+    fun `shuffle off restores the original upcoming order`() {
+        val start = snap(a, b, c, d, index = 0)
+        val shuffled = QueueTransitions.toggleShuffle(start, shuffler = { it.reversed() })
+        val advanced = shuffled.copy(currentIndex = 1)
+        val restored = QueueTransitions.toggleShuffle(advanced)
+        assertEquals(listOf(a, d, b, c), restored.items)
+        assertFalse(restored.isShuffle)
+        assertEquals(emptyList<Song>(), restored.originalOrder)
     }
 
     @Test

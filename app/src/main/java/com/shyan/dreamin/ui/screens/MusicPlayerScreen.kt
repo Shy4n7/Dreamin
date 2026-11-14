@@ -591,7 +591,7 @@ private fun MainAppScaffold(
                 onToggleFavorite   = vm::toggleFavorite,
                 onSetSleepTimer    = vm::setSleepTimer,
                 onCancelSleepTimer = vm::cancelSleepTimer,
-                onSongSelect       = { song -> vm.playSong(song, fromPlaylist = state.playlistQueueActive, preserveQueue = true) },
+                onSongSelect       = vm::playFromQueue,
                 onAddToPlaylist    = { playlistId ->
                     state.currentSong?.let { vm.addSongToPlaylist(playlistId, it) }
                 },

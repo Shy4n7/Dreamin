@@ -113,9 +113,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun PlayerUiState.resolvedCurrentIndex(): Int =
         QueueOps.resolveCurrentIndex(queue, currentSong?.id, currentQueueIndex)
 
-    private fun updateQueueState(transform: (PlayerUiState) -> PlayerUiState) {
-        val updated = _uiState.updateAndGet { transform(it.withQueue(PlaybackQueueStore.state.value)) }
-        PlaybackQueueStore.publish(updated.toQueueSnapshot())
+    private fun updateQueueState(
+        keepOriginalOrder: Boolean = true,
+        transform: (PlayerUiState) -> PlayerUiState
+    ) {
+        val stored = PlaybackQueueStore.state.value
+        val updated = _uiState.updateAndGet { transform(it.withQueue(stored)) }
+        val originalOrder = if (keepOriginalOrder) stored.originalOrder else emptyList()
+        PlaybackQueueStore.publish(updated.toQueueSnapshot().copy(originalOrder = originalOrder))
+    }
+
+    private fun playWithQueue(song: Song, items: List<Song>, playlistActive: Boolean) {
+        PlaybackQueueStore.update { QueueTransitions.replaceQueue(it, items, playlistActive, song) }
+        val snapshot = PlaybackQueueStore.state.value
+        playSong(song, fromPlaylist = playlistActive, preserveQueue = true, queueIndex = snapshot.currentIndex)
     }
 
     private fun isFavorite(favorites: List<Song>, song: Song?): Boolean {
@@ -129,7 +140,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             when (intent?.action) {
                 MusicService.ACTION_TOGGLE_FAVORITE -> _uiState.value.currentSong?.let { toggleFavoriteFor(it) }
-                MusicService.ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
             }
         }
     }
@@ -195,7 +205,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val context = getApplication<Application>()
         val filter = android.content.IntentFilter().apply {
             addAction(MusicService.ACTION_TOGGLE_FAVORITE)
-            addAction(MusicService.ACTION_TOGGLE_SHUFFLE)
         }
         androidx.core.content.ContextCompat.registerReceiver(
             context,
@@ -1031,27 +1040,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val songs = playlistRepo.getSongs(playlistId)
             if (songs.isEmpty()) return@launch
-            updateQueueState { it.copy(queue = songs, playlistQueueActive = true) }
-            playSong(songs.first(), fromPlaylist = true, preserveQueue = true)
+            playWithQueue(songs.first(), songs, playlistActive = true)
         }
     }
 
     fun playSongFromPlaylist(song: Song, playlistSongs: List<Song>) {
-        updateQueueState { it.copy(queue = playlistSongs, playlistQueueActive = true) }
-        playSong(song, fromPlaylist = true, preserveQueue = true)
+        playWithQueue(song, playlistSongs, playlistActive = true)
     }
 
     fun shuffleAndPlayPlaylist(playlistSongs: List<Song>) {
         if (playlistSongs.isEmpty()) return
         val shuffled = playlistSongs.shuffled()
-        updateQueueState { it.copy(queue = shuffled, playlistQueueActive = true) }
-        playSong(shuffled.first(), fromPlaylist = true, preserveQueue = true)
+        playWithQueue(shuffled.first(), shuffled, playlistActive = true)
     }
 
     fun playSongFromList(song: Song, songs: List<Song>) {
         if (songs.isNotEmpty()) {
-            updateQueueState { it.copy(queue = songs, playlistQueueActive = false) }
-            playSong(song, fromPlaylist = false, preserveQueue = true)
+            playWithQueue(song, songs, playlistActive = false)
         } else {
             playSong(song)
         }
@@ -1060,8 +1065,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun shuffleAndPlayList(songs: List<Song>) {
         if (songs.isEmpty()) return
         val shuffled = songs.shuffled()
-        updateQueueState { it.copy(queue = shuffled, playlistQueueActive = false) }
-        playSong(shuffled.first(), fromPlaylist = false, preserveQueue = true)
+        playWithQueue(shuffled.first(), shuffled, playlistActive = false)
     }
 
     fun setSleepTimer(minutes: Int) {
@@ -1158,11 +1162,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
-            if (state == Player.STATE_READY && pendingResumePositionMs > 0L) {
-                val pos = pendingResumePositionMs
-                pendingResumePositionMs = 0L
-                controller?.seekTo(pos)
-            }
             if (state == Player.STATE_READY && listenSong == null) {
                 _uiState.value.currentSong?.let { beginListen(it) }
             }
@@ -1174,7 +1173,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 state == Player.STATE_READY -> if (playWhenReady || isPlaying) PlaybackState.Playing else PlaybackState.Paused
                 state == Player.STATE_ENDED -> {
                     finishListen()
-                    PlaybackState.Loading
+                    if (QueueTransitions.onAutoEnd(PlaybackQueueStore.state.value) == com.shyan.dreamin.data.queue.AutoEndAction.Stop) PlaybackState.Paused
+                    else PlaybackState.Loading
                 }
                 else -> PlaybackState.Idle
             }
@@ -1515,7 +1515,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         return streamResolver.resolve(song)
     }
 
-    fun playSong(song: Song, fromPlaylist: Boolean = false, preserveQueue: Boolean = false, queueIndex: Int? = null) {
+    fun playSong(
+        song: Song,
+        fromPlaylist: Boolean = false,
+        preserveQueue: Boolean = false,
+        queueIndex: Int? = null,
+        startPositionMs: Long = 0L
+    ) {
         currentPlayJob?.cancel()
         controller?.let { c ->
             if (c.isPlaying || c.playWhenReady) {
@@ -1527,8 +1533,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val queueState = PlaybackQueueStore.state.value
         val isPlaylistActive = fromPlaylist || (preserveQueue && queueState.playlistActive)
         val isAlreadyInQueue = queueState.items.any { it.id == song.id }
+        val replacesQueue = !(preserveQueue || (isAlreadyInQueue && isPlaylistActive) || fromPlaylist)
 
-        updateQueueState {
+        updateQueueState(keepOriginalOrder = !replacesQueue) {
             val currentIdx = it.resolvedCurrentIndex()
             val position = when {
                 preserveQueue || (isAlreadyInQueue && isPlaylistActive) ->
@@ -1600,7 +1607,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         removeMediaItems(1, mediaItemCount)
                     }
                     playWhenReady = true
-                    setMediaItem(mediaItem)
+                    setMediaItem(mediaItem, startPositionMs)
                     prepare()
                     play()
                 } ?: run {
@@ -1916,8 +1923,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun playAlbum(album: AlbumDetail, startSong: Song? = null) {
         if (album.songs.isNotEmpty()) {
             val songToPlay = startSong ?: album.songs.first()
-            updateQueueState { it.copy(queue = album.songs, playlistQueueActive = false) }
-            playSong(songToPlay, fromPlaylist = false, preserveQueue = true)
+            playWithQueue(songToPlay, album.songs, playlistActive = false)
         } else if (startSong != null) {
             playSong(startSong)
         }
@@ -1945,8 +1951,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         controller?.seekTo(positionMs)
     }
 
+    val skipEvents: kotlinx.coroutines.flow.SharedFlow<com.shyan.dreamin.data.queue.SkipEvent> = PlaybackQueueStore.skipEvents
+
     fun playNext() {
         controller?.seekToNext() ?: connectToService()
+    }
+
+    fun playFromQueue(song: Song) {
+        val snapshot = PlaybackQueueStore.state.value
+        val c = controller
+        val nextIndex = snapshot.currentIndex + 1
+        val preloadedNextId = c?.takeIf { it.currentMediaItemIndex + 1 < it.mediaItemCount }
+            ?.getMediaItemAt(c.currentMediaItemIndex + 1)?.mediaId
+        if (c != null && snapshot.items.getOrNull(nextIndex)?.id == song.id && preloadedNextId == song.id) {
+            c.seekTo(c.currentMediaItemIndex + 1, 0L)
+            c.play()
+            return
+        }
+        playSong(song, fromPlaylist = snapshot.playlistActive, preserveQueue = true)
     }
 
     fun playPrevious() {
@@ -2039,16 +2061,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun loadLastSession() { /* handled in init critical-path block */ }
 
-    private var pendingResumePositionMs: Long = 0L
-
     fun resumeLastSession() {
         val session = _uiState.value.lastSession ?: return
-        pendingResumePositionMs = session.positionMs
         viewModelScope.launch {
             val saved = userPrefs.loadSavedQueue()
             val idx = saved?.resumeIndexFor(session.song.id) ?: -1
             if (saved != null && idx >= 0) {
-                updateQueueState {
+                updateQueueState(keepOriginalOrder = false) {
                     it.copy(
                         currentSong = saved.items[idx],
                         queue = saved.items,
@@ -2057,9 +2076,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         userQueuedSongIds = saved.userQueuedIds
                     )
                 }
-                playSong(saved.items[idx], fromPlaylist = saved.playlistActive, preserveQueue = true, queueIndex = idx)
+                playSong(saved.items[idx], fromPlaylist = saved.playlistActive, preserveQueue = true, queueIndex = idx, startPositionMs = session.positionMs)
             } else {
-                playSong(session.song)
+                playSong(session.song, startPositionMs = session.positionMs)
             }
         }
     }
@@ -2432,20 +2451,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun toggleShuffle() {
-        val newShuffle = !PlaybackQueueStore.state.value.isShuffle
-        updateQueueState { state ->
-            val idx = state.resolvedCurrentIndex()
-            val reorderedQueue = if (newShuffle) QueueOps.shuffleUpcoming(state.queue, idx) else state.queue
-            state.copy(isShuffle = newShuffle, queue = reorderedQueue, currentQueueIndex = idx)
-        }
-        controller?.let { applyPlayerModes(it) }
+        PlaybackQueueStore.update { QueueTransitions.toggleShuffle(it) }
     }
 
     fun toggleRepeat() {
         val next = when (PlaybackQueueStore.state.value.repeatMode) {
-            TrackRepeatMode.OFF -> TrackRepeatMode.ONE
-            TrackRepeatMode.ONE -> TrackRepeatMode.ALL
-            TrackRepeatMode.ALL -> TrackRepeatMode.OFF
+            TrackRepeatMode.OFF -> TrackRepeatMode.ALL
+            TrackRepeatMode.ALL -> TrackRepeatMode.ONE
+            TrackRepeatMode.ONE -> TrackRepeatMode.OFF
         }
         updateQueueState { it.copy(repeatMode = next) }
         controller?.let { applyPlayerModes(it) }
