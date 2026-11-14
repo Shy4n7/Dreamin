@@ -133,7 +133,7 @@ fun SyncedLyricsView(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Search Again", color = colors.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("Search again", color = colors.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
                 }
             }

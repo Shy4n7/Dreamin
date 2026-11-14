@@ -330,7 +330,7 @@ fun RollingTimeText(
  *
  * Precisely matches design reference Screenshot 1:
  * - Full-screen fluid animated liquid mesh gradient background across entire display.
- * - Centered "Now Playing" and song title header.
+ * - Centered "Now playing" and song title header.
  * - Large 1:1 rounded artwork card (~315dp) with ambient dominant glow & horizontal skip gestures.
  * - Bold title, artist, circular 3-dots More and Heart Favorite buttons.
  * - Sleek progress slider with "0:00", dynamic "OPUS • 142 kbps" codec pill, and total duration.
@@ -592,7 +592,7 @@ fun NowPlayingScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Collapse Now Playing",
+                                contentDescription = "Collapse now playing",
                                 tint = Color.White.copy(alpha = 0.85f),
                                 modifier = Modifier.size(28.dp)
                             )
@@ -639,7 +639,7 @@ fun NowPlayingScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = song?.title ?: "Dreamin",
+                                text = song?.album?.takeIf { it.isNotBlank() } ?: "Now playing",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White,
@@ -683,7 +683,7 @@ fun NowPlayingScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Timer,
-                                    contentDescription = "Sleep Timer",
+                                    contentDescription = "Sleep timer",
                                     tint = if (isTimerActive) colors.primary else Color.White.copy(alpha = 0.85f),
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -941,7 +941,7 @@ fun NowPlayingScreen(
                                     ) { _ ->
                                         AsyncImage(
                                             model = song?.displayArtworkUrl,
-                                            contentDescription = song?.title,
+                                            contentDescription = song?.displayTitle,
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = ContentScale.Crop
                                         )
@@ -975,7 +975,7 @@ fun NowPlayingScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = song?.title ?: "No Track Playing",
+                                text = song?.displayTitle ?: "Nothing playing",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -1009,44 +1009,21 @@ fun NowPlayingScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = "More Options",
+                                    contentDescription = "More options",
                                     tint = Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            DropdownMenu(
+                            SongOptionsMenu(
                                 expanded = showOptionsMenu,
-                                onDismissRequest = { showOptionsMenu = false },
-                                containerColor = colors.surfaceContainer
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Stream Details", color = Color.White) },
-                                    onClick = {
-                                        showOptionsMenu = false
-                                        showAudioStreamDetailsSheet = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.Info, null, tint = colors.primary) }
+                                onDismiss = { showOptionsMenu = false },
+                                actions = listOfNotNull(
+                                    SongMenuActions.addToPlaylist { showPlaylistPicker = true },
+                                    if (onUpdateSongArtwork != null && song != null) SongMenuActions.changePoster { showPosterPicker = true } else null,
+                                    SongMenuActions.streamDetails { showAudioStreamDetailsSheet = true }
                                 )
-                                if (onUpdateSongArtwork != null && song != null) {
-                                    DropdownMenuItem(
-                                        text = { Text("Change Poster", color = Color.White) },
-                                        onClick = {
-                                            showOptionsMenu = false
-                                            showPosterPicker = true
-                                        },
-                                        leadingIcon = { Icon(Icons.Outlined.Image, null, tint = colors.primary) }
-                                    )
-                                }
-                                DropdownMenuItem(
-                                    text = { Text("Add to Playlist", color = Color.White) },
-                                    onClick = {
-                                        showOptionsMenu = false
-                                        showPlaylistPicker = true
-                                    },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add to Playlist", tint = colors.primary) }
-                                )
-                            }
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(10.dp))
@@ -1324,33 +1301,11 @@ fun NowPlayingScreen(
     }
 
     if (showPlaylistPicker && song != null) {
-        AlertDialog(
-            onDismissRequest = { showPlaylistPicker = false },
-            title = { Text("Add to Playlist", color = Color.White) },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    state.playlists.forEach { pl ->
-                        Text(
-                            text = pl.name,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onAddToPlaylist(pl.id)
-                                    showPlaylistPicker = false
-                                }
-                                .padding(vertical = 12.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPlaylistPicker = false }) {
-                    Text("Cancel", color = colors.primary)
-                }
-            },
-            containerColor = colors.surfaceContainer
+        AddToPlaylistSheet(
+            song = song,
+            playlists = state.playlists,
+            onDismiss = { showPlaylistPicker = false },
+            onSelect = onAddToPlaylist
         )
     }
 }

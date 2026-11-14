@@ -408,7 +408,7 @@ fun PlaylistDetailScreen(
                             }
                         ) {
                             Text(
-                                if (selectedSongIds.size == filteredSongs.size) "Deselect" else "Select All",
+                                if (selectedSongIds.size == filteredSongs.size) "Deselect" else "Select all",
                                 color = animatedDominant,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
@@ -614,7 +614,7 @@ fun PlaylistDetailScreen(
                                     IconButton(onClick = { showRenameDialog = true }, modifier = Modifier.size(44.dp)) {
                                         Icon(
                                             Icons.Outlined.Edit,
-                                            contentDescription = "Edit Playlist",
+                                            contentDescription = "Edit playlist",
                                             tint = colors.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
@@ -706,7 +706,7 @@ fun PlaylistDetailScreen(
                                         ) {
                                             Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Play All", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                            Text("Play all", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                         }
 
                                         Button(
@@ -791,7 +791,7 @@ fun PlaylistDetailScreen(
                                         ) {
                                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Add Songs", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                            Text("Add songs", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                                         }
 
                                         OutlinedButton(
@@ -814,7 +814,7 @@ fun PlaylistDetailScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Edit Cover", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
+                                            Text("Edit cover", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                                         }
                                     }
                                 }
@@ -1008,7 +1008,7 @@ fun PlaylistDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        "Quick Add Recommendations",
+                                        "Quick add recommendations",
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = colors.onSurface
@@ -1320,7 +1320,7 @@ fun PlaylistDetailScreen(
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Add More Songs", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("Add more songs", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
 
@@ -1523,7 +1523,7 @@ fun PlaylistDetailScreen(
         var newTitle by remember { mutableStateOf(playlist.name) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("Edit Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
+            title = { Text("Edit playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -1562,7 +1562,7 @@ fun PlaylistDetailScreen(
                         ) {
                             Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Change Photo", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Change photo", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
                         if (playlist.coverUrl != null) {
@@ -1583,7 +1583,7 @@ fun PlaylistDetailScreen(
                     OutlinedTextField(
                         value = newTitle,
                         onValueChange = { newTitle = it },
-                        label = { Text("Playlist Name", color = colors.onSurfaceVariant) },
+                        label = { Text("Playlist name", color = colors.onSurfaceVariant) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = animatedDominant,
@@ -1727,7 +1727,7 @@ fun AddSongsToPlaylistDialog(
                 ) {
                     Column {
                         Text(
-                            "Add Songs",
+                            "Add songs",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = colors.onSurface
@@ -2221,41 +2221,17 @@ fun PlaylistSongRow(
                     }
                 }
 
-                DropdownMenu(
+                SongOptionsMenu(
                     expanded = showOptionsSheet,
-                    onDismissRequest = { showOptionsSheet = false },
-                    modifier = Modifier
-                        .background(colors.surfaceHighest, DreaminShapes.medium)
-                        .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
-                        .width(210.dp)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play next", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
-                        leadingIcon = { Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
-                        onClick = { showOptionsSheet = false; onPlayNext() }
+                    onDismiss = { showOptionsSheet = false },
+                    actions = listOf(
+                        SongMenuActions.playNext(onPlayNext),
+                        SongMenuActions.addToQueue(onAddToQueue),
+                        SongMenuActions.download(isDownloaded, isDownloading, onDownload),
+                        SongMenuActions.changePoster(onChangePoster),
+                        SongMenuActions.removeFromPlaylist(onRemove)
                     )
-                    DropdownMenuItem(
-                        text = { Text("Add to queue", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp)) },
-                        onClick = { showOptionsSheet = false; onAddToQueue() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (isDownloaded) "Delete download" else "Download", color = if (isDownloaded) colors.error else colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
-                        leadingIcon = { Icon(if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download, contentDescription = null, tint = if (isDownloaded) colors.error else colors.onSurface, modifier = Modifier.size(20.dp)) },
-                        onClick = { showOptionsSheet = false; onDownload() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Change Poster", color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
-                        leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp)) },
-                        onClick = { showOptionsSheet = false; onChangePoster() }
-                    )
-                    HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-                    DropdownMenuItem(
-                        text = { Text("Remove from playlist", color = colors.error, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
-                        leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null, tint = colors.error, modifier = Modifier.size(20.dp)) },
-                        onClick = { showOptionsSheet = false; onRemove() }
-                    )
-                }
+                )
             }
         }
     }
@@ -2302,7 +2278,7 @@ fun RenamePlaylistDialog(currentName: String, onDismiss: () -> Unit, onRename: (
     var name by remember { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename Playlist") },
+        title = { Text("Rename playlist") },
         text = {
             OutlinedTextField(
                 value = name,

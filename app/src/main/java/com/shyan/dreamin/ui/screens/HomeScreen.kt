@@ -306,7 +306,7 @@ fun HomeScreen(
                         ) {
                             Icon(
                                 Icons.Filled.GraphicEq,
-                                contentDescription = "Recognize Music",
+                                contentDescription = "Recognize music",
                                 tint = colors.primary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -388,7 +388,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = detectedYouTubeTrack?.displayTitle ?: "YouTube Track Detected",
+                                text = detectedYouTubeTrack?.displayTitle ?: "YouTube track detected",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -524,7 +524,7 @@ fun HomeScreen(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Shuffle,
-                    contentDescription = "Play Random",
+                    contentDescription = "Play random",
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -938,7 +938,7 @@ fun SearchResults(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Movie Albums",
+                            text = "Movie albums",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -1159,7 +1159,7 @@ fun SearchAlbumCard(
                 if (isNotEmpty()) append(" • ")
                 append(album.language)
             }
-        }.ifBlank { "Movie Soundtrack" }
+        }.ifBlank { "Movie soundtrack" }
 
         Text(
             text = subtitle,
@@ -1936,7 +1936,7 @@ fun HomeFeedOnlyContent(
         }
 
         if (recentlyPlayed.isNotEmpty()) {
-            item(key = "section_recent") { SectionTitle("Recently Played") }
+            item(key = "section_recent") { SectionTitle("Recently played") }
             item(key = "row_recent") {
                 HorizontalSongCardsRow(
                     songs = recentlyPlayed,
@@ -1947,7 +1947,7 @@ fun HomeFeedOnlyContent(
         }
 
         if (topSongs.isNotEmpty()) {
-            item(key = "section_top") { SectionTitle("Your Top Songs") }
+            item(key = "section_top") { SectionTitle("Your top songs") }
             item(key = "row_top") {
                 HorizontalSongCardsRow(
                     songs = topSongs,
@@ -1961,7 +1961,7 @@ fun HomeFeedOnlyContent(
             item(key = "section_recs", contentType = "SectionHeader") {
                 SectionTitle(
                     if (recommendationSeedTitle != null) "More like $recommendationSeedTitle"
-                    else "Recommended For You"
+                    else "Recommended for you"
                 )
             }
             itemsIndexed(
@@ -1985,7 +1985,7 @@ fun HomeFeedOnlyContent(
 
         if (trending.isNotEmpty()) {
             item(key = "section_trending", contentType = "SectionHeader") {
-                SectionTitle("Trending Now")
+                SectionTitle("Trending now")
             }
             itemsIndexed(
                 items = trendingTop,

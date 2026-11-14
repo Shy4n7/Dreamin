@@ -200,7 +200,7 @@ internal fun QueueSongItemRow(
     )
     val durationMs = QueueSections.normalizedDurationMs(song.duration)
     val subtitle = if (durationMs > 0L) "${song.artist} • ${formatDuration(durationMs)}" else song.artist
-    val hasMenu = onPlayNext != null || onRemove != null || (onAddToPlaylist != null && playlists.isNotEmpty())
+    val hasMenu = onPlayNext != null || onRemove != null || onAddToPlaylist != null
 
     Box(
         modifier = modifier
@@ -226,7 +226,7 @@ internal fun QueueSongItemRow(
             ) {
                 AsyncImage(
                     model = song.displayArtworkUrl,
-                    contentDescription = song.title,
+                    contentDescription = song.displayTitle,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -248,7 +248,7 @@ internal fun QueueSongItemRow(
 
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
-                    text = song.title,
+                    text = song.displayTitle,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isCurrent) colors.primary else Color.White,
@@ -270,33 +270,15 @@ internal fun QueueSongItemRow(
                     IconButton(onClick = { showMenu = true }, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Filled.MoreVert, "More options", tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
                     }
-                    DropdownMenu(
+                    SongOptionsMenu(
                         expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        containerColor = colors.surfaceContainer
-                    ) {
-                        if (onPlayNext != null) {
-                            DropdownMenuItem(
-                                text = { Text("Play Next", color = Color.White) },
-                                onClick = { showMenu = false; onPlayNext() },
-                                leadingIcon = { Icon(Icons.Filled.SkipNext, null, tint = colors.primary) }
-                            )
-                        }
-                        if (onAddToPlaylist != null && playlists.isNotEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Add to Playlist", color = Color.White) },
-                                onClick = { showMenu = false; showPlaylistPicker = true },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null, tint = colors.primary) }
-                            )
-                        }
-                        if (onRemove != null) {
-                            DropdownMenuItem(
-                                text = { Text("Remove from Queue", color = colors.error) },
-                                onClick = { showMenu = false; onRemove() },
-                                leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = colors.error) }
-                            )
-                        }
-                    }
+                        onDismiss = { showMenu = false },
+                        actions = listOfNotNull(
+                            onPlayNext?.let { SongMenuActions.playNext(it) },
+                            onAddToPlaylist?.let { SongMenuActions.addToPlaylist { showPlaylistPicker = true } },
+                            onRemove?.let { SongMenuActions.removeFromQueue(it) }
+                        )
+                    )
                 }
             }
 
@@ -307,10 +289,11 @@ internal fun QueueSongItemRow(
     }
 
     if (showPlaylistPicker && onAddToPlaylist != null) {
-        PlaylistPickerDialog(
+        AddToPlaylistSheet(
+            song = song,
             playlists = playlists,
-            onPick = { id -> onAddToPlaylist(id); showPlaylistPicker = false },
-            onDismiss = { showPlaylistPicker = false }
+            onDismiss = { showPlaylistPicker = false },
+            onSelect = onAddToPlaylist
         )
     }
 }
@@ -355,27 +338,4 @@ private fun DragHandle(
             modifier = Modifier.size(22.dp).graphicsLayer { scaleX = handleScale; scaleY = handleScale }
         )
     }
-}
-
-@Composable
-private fun PlaylistPickerDialog(playlists: List<Playlist>, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
-    val colors = LocalDreaminColors.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Playlist", color = Color.White) },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                playlists.forEach { pl ->
-                    Text(
-                        text = pl.name,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth().clickable { onPick(pl.id) }.padding(vertical = 12.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = colors.primary) } },
-        containerColor = colors.surfaceContainer
-    )
 }

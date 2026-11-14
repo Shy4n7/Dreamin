@@ -113,7 +113,7 @@ fun PosterPickerBottomSheet(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Choose Theatrical Poster",
+                        text = "Choose theatrical poster",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

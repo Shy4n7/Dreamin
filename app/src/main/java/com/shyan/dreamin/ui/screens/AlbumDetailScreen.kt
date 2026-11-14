@@ -43,7 +43,7 @@ import com.shyan.dreamin.data.model.Song
 
 /**
  * Full-screen detail view for movie soundtrack albums.
- * Features ambient blurred artwork header, metadata overview, "Play All" / "Shuffle",
+ * Features ambient blurred artwork header, metadata overview, "Play all" / "Shuffle",
  * and glassmorphic pill track rows matching the Dreamin design aesthetic.
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -206,7 +206,7 @@ fun AlbumDetailScreen(
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                text = if (album.artist.isNotBlank()) album.artist else "Original Soundtrack",
+                                text = if (album.artist.isNotBlank()) album.artist else "Original soundtrack",
                                 color = Color.White.copy(alpha = 0.80f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
@@ -246,13 +246,13 @@ fun AlbumDetailScreen(
                     ) {
                         Icon(
                             Icons.Filled.PlayArrow,
-                            contentDescription = "Play All",
+                            contentDescription = "Play all",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Play All",
+                            "Play all",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodyMedium
@@ -487,32 +487,14 @@ private fun AlbumSongRow(
                 )
             }
 
-            DropdownMenu(
+            SongOptionsMenu(
                 expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-                modifier = Modifier.background(colors.surfaceHighest)
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Play Next", color = colors.onSurface) },
-                    leadingIcon = {
-                        Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, tint = colors.onSurface)
-                    },
-                    onClick = {
-                        showMenu = false
-                        onPlayNext()
-                    }
+                onDismiss = { showMenu = false },
+                actions = listOf(
+                    SongMenuActions.playNext(onPlayNext),
+                    SongMenuActions.addToQueue(onAddToQueue)
                 )
-                DropdownMenuItem(
-                    text = { Text("Add to queue", color = colors.onSurface) },
-                    leadingIcon = {
-                        Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = colors.onSurface)
-                    },
-                    onClick = {
-                        showMenu = false
-                        onAddToQueue()
-                    }
-                )
-            }
+            )
         }
     }
 }

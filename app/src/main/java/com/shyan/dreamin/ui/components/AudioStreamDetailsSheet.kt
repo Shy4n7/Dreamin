@@ -123,7 +123,7 @@ fun AudioStreamDetailsSheet(
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Audio Stream Specs",
+                        text = "Audio stream specs",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -212,7 +212,7 @@ fun AudioStreamDetailsSheet(
                 )
                 StreamSpecRow(
                     icon = Icons.Outlined.GraphicEq,
-                    label = "Sample Rate",
+                    label = "Sample rate",
                     value = "${(fmt?.sampleRateHz ?: if (isYt) 48000 else 44100) / 1000f} kHz"
                 )
                 StreamSpecRow(
@@ -264,7 +264,7 @@ fun AudioStreamDetailsSheet(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    "Loudness Normalizer",
+                                    "Loudness normalizer",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.White
@@ -296,7 +296,7 @@ fun AudioStreamDetailsSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Target Level",
+                                "Target level",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant
                             )

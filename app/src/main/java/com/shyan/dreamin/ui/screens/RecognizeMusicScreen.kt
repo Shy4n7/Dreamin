@@ -156,7 +156,7 @@ fun RecognizeMusicScreen(
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Recognize Music",
+                        text = "Recognize music",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -167,7 +167,7 @@ fun RecognizeMusicScreen(
                 IconButton(onClick = { showHistorySheet = true }) {
                     Icon(
                         imageVector = Icons.Outlined.History,
-                        contentDescription = "Recognition History",
+                        contentDescription = "Recognition history",
                         tint = Color.White.copy(alpha = 0.85f),
                         modifier = Modifier.size(24.dp)
                     )
@@ -323,7 +323,7 @@ fun RecognizeMusicScreen(
                             ) {
                                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Try Again")
+                                Text("Try again")
                             }
                         }
                     }
@@ -350,7 +350,7 @@ fun RecognizeMusicScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recognition History",
+                        text = "Recognition history",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -365,7 +365,7 @@ fun RecognizeMusicScreen(
                                 }
                             }
                         ) {
-                            Text("Clear All", color = colors.error, style = MaterialTheme.typography.bodyMedium)
+                            Text("Clear all", color = colors.error, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -491,7 +491,7 @@ private fun RecognizedMatchCard(
         // Artwork
         AsyncImage(
             model = song.displayArtworkUrl,
-            contentDescription = song.title,
+            contentDescription = song.displayTitle,
             modifier = Modifier
                 .size(160.dp)
                 .clip(DreaminShapes.medium),
@@ -502,7 +502,7 @@ private fun RecognizedMatchCard(
 
         // Title
         Text(
-            text = song.title,
+            text = song.displayTitle,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -541,7 +541,7 @@ private fun RecognizedMatchCard(
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Play Now", fontWeight = FontWeight.Bold)
+                Text("Play now", fontWeight = FontWeight.Bold)
             }
 
             OutlinedButton(
@@ -552,7 +552,7 @@ private fun RecognizedMatchCard(
                 shape = DreaminShapes.large,
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
             ) {
-                Text("Scan Again", color = Color.White)
+                Text("Scan again", color = Color.White)
             }
         }
     }

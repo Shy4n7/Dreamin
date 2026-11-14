@@ -99,7 +99,7 @@ fun EqualizerBottomSheet(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            "Studio Equalizer",
+                            "Studio equalizer",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
@@ -258,7 +258,7 @@ fun EqualizerBottomSheet(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = colors.primary, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bass Boost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text("Bass boost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
                             }
                             Text("${eqState.bassBoostStrength}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.primary)
                         }
@@ -345,7 +345,7 @@ fun EqualizerBottomSheet(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    "Loudness Normalization",
+                                    "Loudness normalization",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.White
@@ -377,7 +377,7 @@ fun EqualizerBottomSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Target Gain Level",
+                                "Target gain level",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant
                             )

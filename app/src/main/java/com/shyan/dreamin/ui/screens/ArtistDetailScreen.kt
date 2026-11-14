@@ -186,7 +186,7 @@ fun ArtistDetailScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Shuffle Play",
+                            "Shuffle play",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.bodyMedium
@@ -215,7 +215,7 @@ fun ArtistDetailScreen(
             // Popular Songs Header
             item {
                 Text(
-                    text = "Popular Releases",
+                    text = "Popular releases",
                     color = colors.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,

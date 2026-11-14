@@ -625,7 +625,6 @@ fun SongRow(
     val swipeOffset = remember { Animatable(0f) }
     val swipeThreshold = 110f
     var showPlaylistPicker by remember { mutableStateOf(false) }
-    var showCreatePlaylist by remember { mutableStateOf(false) }
     val createPlaylistWithSong = LocalCreatePlaylistWithSong.current
     val scope = rememberCoroutineScope()
     val haptic = rememberDreaminHaptics()
@@ -868,122 +867,17 @@ fun SongRow(
                             )
                         }
 
-                        DropdownMenu(
+                        SongOptionsMenu(
                             expanded = showOverflowMenu,
-                            onDismissRequest = { showOverflowMenu = false },
-                            modifier = Modifier
-                                .background(colors.surfaceHighest, DreaminShapes.medium)
-                                .border(1.dp, colors.outlineVariant, DreaminShapes.medium)
-                                .width(210.dp)
-                        ) {
-                            // 1. Add to playlist
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Add to playlist",
-                                        color = colors.onSurface,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.PlaylistAdd,
-                                        contentDescription = null,
-                                        tint = colors.onSurface,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    showPlaylistPicker = true
-                                }
+                            onDismiss = { showOverflowMenu = false },
+                            actions = listOfNotNull(
+                                SongMenuActions.playNext(onPlayNext),
+                                SongMenuActions.addToQueue(onAddToQueue),
+                                SongMenuActions.addToPlaylist { showPlaylistPicker = true },
+                                onGoToAlbum?.let { SongMenuActions.goToAlbum(it) },
+                                onDownload?.let { SongMenuActions.download(isDownloaded, isDownloading, it) }
                             )
-
-                            // 2. Add to queue
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Add to queue",
-                                        color = colors.onSurface,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.AutoMirrored.Outlined.QueueMusic,
-                                        contentDescription = null,
-                                        tint = colors.onSurface,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    onAddToQueue()
-                                }
-                            )
-
-                            // 3. Go to album
-                            if (onGoToAlbum != null) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Go to album",
-                                            color = colors.onSurface,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Filled.Album,
-                                            contentDescription = null,
-                                            tint = colors.onSurface,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    onClick = {
-                                        showOverflowMenu = false
-                                        onGoToAlbum()
-                                    }
-                                )
-                            }
-
-                            // 4. Download song
-                            if (onDownload != null) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (isDownloaded) "Delete download" else if (isDownloading) "Downloading..." else "Download",
-                                            color = if (isDownloaded) colors.error else colors.onSurface,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (isDownloading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
-                                                color = colors.secondary,
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = if (isDownloaded) Icons.Outlined.Delete else Icons.Outlined.Download,
-                                                contentDescription = null,
-                                                tint = if (isDownloaded) colors.error else colors.onSurface,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        showOverflowMenu = false
-                                        onDownload()
-                                    }
-                                )
-                            }
-                        }
+                        )
                     }
                 }
             }
@@ -1010,27 +904,11 @@ fun SongRow(
     }
 
     if (showPlaylistPicker) {
-        AddToPlaylistDialog(
+        AddToPlaylistSheet(
+            song = song,
             playlists = playlists,
             onDismiss = { showPlaylistPicker = false },
-            onSelect = { playlistId ->
-                onAddToPlaylist(playlistId)
-                showPlaylistPicker = false
-            },
-            onCreateNew = {
-                showPlaylistPicker = false
-                showCreatePlaylist = true
-            }
-        )
-    }
-
-    if (showCreatePlaylist) {
-        CreatePlaylistDialog(
-            onDismiss = { showCreatePlaylist = false },
-            onCreate = { name, coverUri ->
-                createPlaylistWithSong(name, coverUri, song)
-                showCreatePlaylist = false
-            }
+            onSelect = onAddToPlaylist
         )
     }
 }
@@ -1124,7 +1002,7 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.Filled.SkipNext, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Play Next", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("Play next", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
                     Text("Insert right after current song", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
@@ -1163,7 +1041,7 @@ fun SongQuickActionsBottomSheet(
                 Icon(Icons.Outlined.FolderSpecial, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("Add to Playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = colors.onSurface)
+                    Text("Add to playlist", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = colors.onSurface)
                     Text("Save to your personalized library", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
@@ -1171,53 +1049,6 @@ fun SongQuickActionsBottomSheet(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
-}
-
-@Composable
-fun AddToPlaylistDialog(
-    playlists: List<com.shyan.dreamin.data.local.Playlist>,
-    onDismiss: () -> Unit,
-    onSelect: (Long) -> Unit,
-    onCreateNew: () -> Unit = {}
-) {
-    val colors = LocalDreaminColors.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to Playlist", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = {
-                        onCreateNew()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(18.dp))
-                        Text("Create new playlist", color = colors.secondary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-                playlists.forEach { playlist ->
-                    TextButton(
-                        onClick = { onSelect(playlist.id) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(playlist.name, color = colors.primary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = colors.onSurfaceVariant) }
-        },
-        containerColor = colors.surfaceHigh,
-        titleContentColor = colors.onSurface
-    )
 }
 
 @Composable
@@ -1252,7 +1083,7 @@ fun CreatePlaylistDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "New Playlist",
+                    "New playlist",
                     color = colors.onSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
@@ -1295,7 +1126,7 @@ fun CreatePlaylistDialog(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                "Spotify Import",
+                                "Spotify import",
                                 fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (selectedTab == 1) Color.White else colors.onSurfaceVariant
@@ -1330,7 +1161,7 @@ fun CreatePlaylistDialog(
                                     .data(pickedCoverUri)
                                     .crossfade(true)
                                     .build(),
-                                contentDescription = "Playlist Cover",
+                                contentDescription = "Playlist cover",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -1341,7 +1172,7 @@ fun CreatePlaylistDialog(
                             ) {
                                 Icon(
                                     Icons.Outlined.PhotoCamera,
-                                    contentDescription = "Add Cover",
+                                    contentDescription = "Add cover",
                                     tint = colors.primary,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -1353,7 +1184,7 @@ fun CreatePlaylistDialog(
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Playlist Name") },
+                        label = { Text("Playlist name") },
                         singleLine = true,
                         shape = DreaminShapes.medium,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1371,7 +1202,7 @@ fun CreatePlaylistDialog(
                     OutlinedTextField(
                         value = spotifyUrl,
                         onValueChange = { spotifyUrl = it },
-                        label = { Text("Spotify Playlist URL") },
+                        label = { Text("Spotify playlist URL") },
                         placeholder = { Text("https://open.spotify.com/playlist/...") },
                         singleLine = true,
                         trailingIcon = {
@@ -1718,13 +1549,13 @@ fun CreatePlaylistDialog(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(15.dp), tint = colors.primary)
-                                Text("Download All Offline", color = colors.primary, fontWeight = FontWeight.Bold)
+                                Text("Download all offline", color = colors.primary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                     is SpotifyImportState.Error -> {
                         TextButton(onClick = onResetSpotifyImport) {
-                            Text("Try Again", color = colors.primary, fontWeight = FontWeight.Bold)
+                            Text("Try again", color = colors.primary, fontWeight = FontWeight.Bold)
                         }
                     }
                     else -> {}
@@ -1799,7 +1630,7 @@ fun EditNameDialog(currentName: String, onDismiss: () -> Unit, onSave: (String) 
     var name by remember { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Change Name", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
+        title = { Text("Change name", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -1841,7 +1672,7 @@ fun DreaminInfoSheet(onDismiss: () -> Unit) {
         containerColor = colors.surfaceHigh,
         titleContentColor = colors.onSurface,
         title = {
-            Text("Tips & Tricks", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+            Text("Tips & tricks", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1851,7 +1682,7 @@ fun DreaminInfoSheet(onDismiss: () -> Unit) {
                 InfoFeatureRow(Icons.Outlined.Favorite, "Double-tap artwork", "Instantly favourites the playing song")
                 InfoFeatureRow(Icons.Outlined.Timer, "Sleep timer", "In Now Playing — auto-pauses after set time")
                 InfoFeatureRow(Icons.Outlined.LockClock, "Auto-resume", "Starts exactly where you left off")
-                InfoFeatureRow(Icons.Outlined.KeyboardArrowDown, "Close Now Playing", "Tap the arrow at the top to go back")
+                InfoFeatureRow(Icons.Outlined.KeyboardArrowDown, "Close now playing", "Tap the arrow at the top to go back")
             }
         },
         confirmButton = {

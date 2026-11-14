@@ -311,7 +311,7 @@ fun LibraryScreen(
                         Icon(Icons.Filled.MusicNote, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Spotify Playlist Detected", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Spotify playlist detected", color = colors.onSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         Text("Tap to import into your library", color = colors.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                     }
                     IconButton(
@@ -389,7 +389,7 @@ fun DownloadsTab(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            "Ready Offline",
+                            "Ready offline",
                             color = colors.primary,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold
@@ -744,13 +744,13 @@ fun CreatePlaylistCard(
                 ) {
                     Icon(
                         Icons.Filled.Add,
-                        contentDescription = "New Playlist",
+                        contentDescription = "New playlist",
                         tint = colors.primary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
                 Text(
-                    "New Playlist",
+                    "New playlist",
                     color = colors.primary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium
@@ -768,7 +768,7 @@ fun CreatePlaylistCard(
             maxLines = 1
         )
         Text(
-            text = "Spotify & Local",
+            text = "Spotify & local",
             color = colors.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
             maxLines = 1
@@ -1066,7 +1066,7 @@ fun SpotifySyncAlertBanner(
                     shape = DreaminShapes.small,
                     modifier = Modifier.height(30.dp)
                 ) {
-                    Text("Keep Local", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Keep local", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                 }
             } else {
                 Button(
@@ -1087,7 +1087,7 @@ fun SpotifySyncAlertBanner(
                             strokeWidth = 1.5.dp
                         )
                     } else {
-                        Text("Sync Now", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("Sync now", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }

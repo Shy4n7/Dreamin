@@ -166,7 +166,7 @@ fun QueueScreen(
         onRemoveFromQueue(row.index, row.song, wasUserQueued)
         onShowMessage(
             com.shyan.dreamin.viewmodel.UiMessage(
-                text = "Removed “${row.song.title}”",
+                text = "Removed “${row.song.displayTitle}”",
                 actionLabel = "Undo",
                 onAction = { onRestoreToQueue(row.song, row.index, wasUserQueued, wasUpcoming) }
             )
@@ -467,7 +467,7 @@ private fun QueueNowPlayingBar(
     ) {
         AsyncImage(
             model = currentSong?.displayArtworkUrl,
-            contentDescription = currentSong?.title,
+            contentDescription = currentSong?.displayTitle,
             modifier = Modifier
                 .size(44.dp)
                 .clip(DreaminShapes.small)
@@ -480,7 +480,7 @@ private fun QueueNowPlayingBar(
                 .weight(1f)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
         ) {
-            Text(currentSong?.title ?: "No Track Playing", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(currentSong?.displayTitle ?: "Nothing playing", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(currentSong?.artist ?: "Dreamin", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(modifier = Modifier.width(8.dp))
